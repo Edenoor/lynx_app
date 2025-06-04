@@ -9,6 +9,7 @@ import { AdminScreen } from '../views/admin/Admin';
 import { ErrorScreen } from '../views/home/Error';
 import { RecuperarScreen } from '../views/recuperar/Recuperar';
 import { QrGeneratorScreen } from '../views/qr/QrGenerator';
+import { QrDisplayScreen } from '../views/qr/QrDisplayScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -20,7 +21,8 @@ export type RootStackParamList = {
     AdminScreen: undefined,
     ErrorScreen: undefined,
     RecuperarScreen: undefined,
-    QrGeneratorScreen: undefined
+    QrGeneratorScreen: {qr:any}
+    QrDisplayScreen: undefined
 }
 
 export const DriverStackNavigator = () => {
@@ -71,6 +73,10 @@ export const DriverStackNavigator = () => {
          <Stack.Screen
          name="QrGeneratorScreen"
          component={QrGeneratorScreen}
+         />
+         <Stack.Screen
+         name="QrDisplayScreen"
+         component={QrDisplayScreen}
          />
     </Stack.Navigator>
     </UserState>
