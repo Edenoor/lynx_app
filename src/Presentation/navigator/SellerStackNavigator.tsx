@@ -8,6 +8,9 @@ import { ClientScreen } from '../views/client/Client';
 import { AdminScreen } from '../views/admin/Admin';
 import { ErrorScreen } from '../views/home/Error';
 import { RecuperarScreen } from '../views/recuperar/Recuperar';
+import { EtiquetaScreen } from '../views/etiqueta/Etiqueta';
+import { MapScreen } from '../views/map/Map';
+import { DisplayEtiquetaScreen } from '../views/etiqueta/DisplayEtiqueta';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -18,7 +21,10 @@ export type RootStackParamList = {
     ClientScreen: undefined,
     AdminScreen: undefined,
     ErrorScreen: undefined,
-    RecuperarScreen: undefined
+    RecuperarScreen: undefined,
+    EtiquetaScreen: {refPoint: string, latitude: number, longitude: number , addressType?: 'origin' | 'delivery'} | undefined,
+    MapScreen: {addressType?: 'origin' | 'delivery'} | undefined,
+    DisplayEtiquetaScreen: {latOrg: number, longOrg: number, latDes: number, longDes: number, refPointOrg: string, refPointDes: string}
 }
 
 export const SellerStackNavigator = () => {
@@ -65,6 +71,18 @@ export const SellerStackNavigator = () => {
          <Stack.Screen
          name="ErrorScreen"
          component={ErrorScreen}
+         />
+         <Stack.Screen
+         name="EtiquetaScreen"
+         component={EtiquetaScreen}
+         />
+          <Stack.Screen
+         name="MapScreen"
+         component={MapScreen}
+         />
+         <Stack.Screen
+         name="DisplayEtiquetaScreen"
+         component={DisplayEtiquetaScreen}
          />
     </Stack.Navigator>
     </UserState>

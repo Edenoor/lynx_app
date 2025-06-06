@@ -23,7 +23,7 @@ export const HomeScreen = ({navigation, route}: Props) => {
     useEffect(() => {      
         if (user?.id !== null && user?.id !== undefined && user?.id !== '') {
             
-            if(user.rol === 'CLIENTE'){
+            if(user.rol === 'SELLER'){
                 navigation.replace('ClientScreen')
             }
             else if(user.rol === 'DRIVER'){
