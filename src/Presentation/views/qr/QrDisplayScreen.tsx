@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, Button } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { RootStackParamList } from '../../navigator/SellerStackNavigator';
+import { StackScreenProps } from '@react-navigation/stack';
 
-export const QrDisplayScreen = () => {
+interface Props extends StackScreenProps<RootStackParamList, 'QrDisplayScreen'>{};
+
+export const QrDisplayScreen = ({navigation, route}: Props) => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
 
@@ -18,7 +22,8 @@ export const QrDisplayScreen = () => {
   const handleBarCodeScanned = ({ data }: { data: string }) => {
     setScanned(true);
     console.log('QR Data:', data);
-    alert(`QR Code scanned: ${data}`);
+    navigation.navigate('QrHandleScreen',{data:data})
+    // alert(`QR Code scanned: ${data}`);
   };
 
   if (hasPermission === null) {

@@ -5,8 +5,10 @@ import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../navigator/DriverStackNavigator';
 interface Props extends StackScreenProps<RootStackParamList, 'DriverScreen'>{};
+
 export const DriverScreen = ({navigation, route}: Props) => {
   const { user,removeUserSession } = useViewModel();
+  console.log(navigation.getState());
   useEffect(() => {
       if(user?.rol !== 'DRIVER'){
         navigation.replace('HomeScreen',{rol:user.rol})
@@ -21,7 +23,7 @@ export const DriverScreen = ({navigation, route}: Props) => {
           </TouchableOpacity>
         </View>
         <View style={{top:100}}>
-          <TouchableOpacity onPress={ () => navigation.navigate('QrGeneratorScreen')}>
+          <TouchableOpacity onPress={ () => navigation.navigate('QrDisplayScreen')}>
             <Text>qr</Text>
           </TouchableOpacity>
         </View>  

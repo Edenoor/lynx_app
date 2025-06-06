@@ -23,6 +23,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
     if(route.params?.refPoint && route.params.addressType === 'origin'){
       latOrg = route.params.latitude
       longOrg = route.params.longitude
+      refPointOrg = route.params.refPoint
       onChange('refPointOrg', route.params.refPoint)
       
     }
@@ -33,6 +34,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
     if(route.params?.refPoint && route.params.addressType === 'delivery'){
       latDes = route.params.latitude
       longDes = route.params.longitude
+      refPointDes = route.params.refPoint
       onChange('refPointDes', route.params.refPoint)
       
     }

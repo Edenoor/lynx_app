@@ -11,6 +11,9 @@ import { RecuperarScreen } from '../views/recuperar/Recuperar';
 import { EtiquetaScreen } from '../views/etiqueta/Etiqueta';
 import { MapScreen } from '../views/map/Map';
 import { DisplayEtiquetaScreen } from '../views/etiqueta/DisplayEtiqueta';
+import { QrGeneratorScreen } from '../views/qr/QrGenerator';
+import { QrDisplayScreen } from '../views/qr/QrDisplayScreen';
+import { QrHandleScreen } from '../views/qr/QrHandleScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -25,6 +28,9 @@ export type RootStackParamList = {
     EtiquetaScreen: {refPoint: string, latitude: number, longitude: number , addressType?: 'origin' | 'delivery'} | undefined,
     MapScreen: {addressType?: 'origin' | 'delivery'} | undefined,
     DisplayEtiquetaScreen: {latOrg: number, longOrg: number, latDes: number, longDes: number, refPointOrg: string, refPointDes: string}
+    QrGeneratorScreen: undefined,
+    QrDisplayScreen: undefined,
+    QrHandleScreen: {data: string}
 }
 
 export const SellerStackNavigator = () => {
@@ -84,6 +90,18 @@ export const SellerStackNavigator = () => {
          name="DisplayEtiquetaScreen"
          component={DisplayEtiquetaScreen}
          />
+         <Stack.Screen
+          name="QrGeneratorScreen"
+          component={QrGeneratorScreen}
+          />
+          <Stack.Screen
+          name="QrDisplayScreen"
+          component={QrDisplayScreen}
+          />
+          <Stack.Screen
+          name="QrHandleScreen"
+          component={QrHandleScreen}
+          />
     </Stack.Navigator>
     </UserState>
   )
