@@ -15,7 +15,8 @@ import { EtiquetaScreen } from '../views/etiqueta/Etiqueta';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export type RootStackParamList = {
-  DriverScreen:undefined
+  DriverScreen:undefined,
+  HomeScreen: undefined
 }
 
 export const DriverStackNavigator = () => {
@@ -25,6 +26,10 @@ export const DriverStackNavigator = () => {
          <Stack.Screen
           name="DriverScreen"
           component={DriverScreen}
+          />
+          <Stack.Screen
+          name="HomeScreen"
+          component={HomeScreen}
           />
     </Stack.Navigator>
     </UserState>

@@ -13,7 +13,7 @@ const RegisterViewModel = () => {
     });
     const [loading, setLoading] = useState(false)
     const {user, getUserSession} = useUserLocal();
-
+    const [rol, setRol] = useState();
     const onChange = (property: string, value: any) => {
         setValues({ ...values, [property]: value })
     }
@@ -21,6 +21,7 @@ const RegisterViewModel = () => {
     const register = async () => {
         if (isValidForm()) {
             setLoading(true)
+            values.rol = rol!
             const response = await RegisterAuthUseCase(values);
             setLoading(false)
             console.log('RESULT: ' + JSON.stringify(response)); 
@@ -47,8 +48,8 @@ const RegisterViewModel = () => {
             setErrorMessage('Ingresa la confirmacion de la contraseña');
             return false;
         }
-        if (values.rol === '') {
-            setErrorMessage('Ingresa la confirmacion de la contraseña');
+        if (rol === '') {
+            setErrorMessage('SELECCIONE UN ROL');
             return false;
         }
         if (values.password !== values.confirmPassword) {
@@ -65,7 +66,9 @@ const RegisterViewModel = () => {
         errorMessage,
         user,
         loading,
-        getUserSession
+        getUserSession,
+        setRol,
+        rol
     }
 }
 

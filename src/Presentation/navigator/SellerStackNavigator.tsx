@@ -14,21 +14,43 @@ import { DisplayEtiquetaScreen } from '../views/etiqueta/DisplayEtiqueta';
 import { QrGeneratorScreen } from '../views/qr/QrGenerator';
 import { QrDisplayScreen } from '../views/qr/QrDisplayScreen';
 import { QrHandleScreen } from '../views/qr/QrHandleScreen';
+import { DrawerStackNavigator } from './DrawerNavigator';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export type RootStackParamList = {
-    ClientScreen: undefined
+    ClientScreen: undefined,
+    HomeScreen: undefined,
+    RegisterScreen: undefined,
+    RecuperarScreen: undefined,
+    DrawerStackNavigator: undefined
 }
 
 export const SellerStackNavigator = () => {
   return (
     <UserState>
     <Stack.Navigator screenOptions={{headerShown: false}}>
+      <Stack.Screen
+        name="DrawerStackNavigator"
+        component={DrawerStackNavigator}
+        />
         <Stack.Screen
         name="ClientScreen"
         component={ClientScreen}
         />
+        <Stack.Screen
+        name="HomeScreen"
+        component={HomeScreen}
+        />
+        <Stack.Screen
+        name="RegisterScreen"
+        component={RegisterScreen}
+        />
+        <Stack.Screen
+        name="RecuperarScreen"
+        component={RecuperarScreen}
+        />
+        
     </Stack.Navigator>
     </UserState>
   )

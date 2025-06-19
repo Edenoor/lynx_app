@@ -11,8 +11,8 @@ import { RootStackParamList } from '../../../navigator/MainStackNavigator';
 interface Props extends StackScreenProps<RootStackParamList, 'RegisterScreen'>{};
 
 export const RegisterScreen = ({navigation, route}: Props) => {
-  const { email, password, confirmPassword, errorMessage, onChange, register, user, loading } = useViewModel();
-  
+  const { email, password, confirmPassword, errorMessage, onChange, register, user, loading, rol, setRol } = useViewModel();
+  const name = ''
   useEffect(() => {
     if (errorMessage != '') {
       ToastAndroid.show(errorMessage, ToastAndroid.LONG);
@@ -25,7 +25,8 @@ export const RegisterScreen = ({navigation, route}: Props) => {
               navigation.replace('HomeScreen');
           }
       }, [user])
-      
+  
+
   return (
     <View >
           
@@ -36,7 +37,15 @@ export const RegisterScreen = ({navigation, route}: Props) => {
 
             <Text >REGISTRARSE</Text>
             
-            
+            <CustomTextInput 
+              placeholder='Nombre'
+              keyboardType='default'
+              image={ require('../../../../../assets/email.png') }
+              property='name'
+              onChangeText={ onChange }
+              value={ name }
+              />
+
             <CustomTextInput 
               placeholder='Correo electronico'
               keyboardType='email-address'
@@ -67,16 +76,26 @@ export const RegisterScreen = ({navigation, route}: Props) => {
               value={ confirmPassword }
               secureTextEntry={ true }
               />
-
+            <View>
+              <Picker
+              selectedValue={rol}
+              onValueChange={(itemValue, itemIndex) =>
+                setRol(itemValue)
+              }>
+              <Picker.Item label="SELECCIONE SU ROL" value='' />
+              <Picker.Item label="DRIVER" value="DRIVER" />
+              <Picker.Item label="SELLER" value="SELLER" />
+              </Picker>
+            </View>
             <View style={{ marginTop: 30 }}>
                 
-                <RoundedButton text='Log In With Google' onPress={ () => {}} foto={require('../../../../../assets/google.png')}/>
+                <RoundedButton text='Log In With Google' onPress={ () => ToastAndroid.show('EN CAMINO', ToastAndroid.LONG)} foto={require('../../../../../assets/google.png')}/>
 
             </View>
 
             <View style={{ marginTop: 30 }}>
                 
-                <RoundedButton text='Log In With Mercadolibre' onPress={ () => {}} foto={require('../../../../../assets/mercadolibre.png')}/>
+                <RoundedButton text='Log In With Mercadolibre' onPress={ () => ToastAndroid.show('EN CAMINO', ToastAndroid.LONG)} foto={require('../../../../../assets/mercadolibre.png')}/>
 
             </View>
             <View style={{ marginTop: 30 }}>

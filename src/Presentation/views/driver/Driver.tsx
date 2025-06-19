@@ -11,7 +11,7 @@ export const DriverScreen = ({navigation, route}: Props) => {
   console.log(navigation.getState());
   useEffect(() => {
       if(user?.rol !== 'DRIVER'){
-        navigation.replace('HomeScreen',{rol:user.rol})
+        navigation.replace('HomeScreen')
       }
     }, [user])
   return (
@@ -23,9 +23,9 @@ export const DriverScreen = ({navigation, route}: Props) => {
           </TouchableOpacity>
         </View>
         <View style={{top:100}}>
-          <TouchableOpacity onPress={ () => navigation.navigate('QrDisplayScreen')}>
+          {/* <TouchableOpacity onPress={ () => navigation.navigate('QrDisplayScreen')}>
             <Text>qr</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>  
     </View>
   )
