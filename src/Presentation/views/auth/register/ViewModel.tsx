@@ -3,12 +3,12 @@ import { useUserLocal } from '../../../hooks/useUserLocal';
 import { SaveUserLocalUseCase } from '../../../../Domain/useCases/userLocal/SaveUserLocal';
 import { RegisterAuthUseCase } from '../../../../Domain/useCases/auth/RegisterAuth';
 
-const RegisterViewModel = (rol:string) => {
+const RegisterViewModel = () => {
   const [errorMessage, setErrorMessage] = useState('');
     const [values, setValues] = useState({
         email: '',
         password: '',
-        rol: rol,
+        rol: '',
         confirmPassword: '',
     });
     const [loading, setLoading] = useState(false)

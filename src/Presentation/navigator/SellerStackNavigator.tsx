@@ -18,19 +18,7 @@ import { QrHandleScreen } from '../views/qr/QrHandleScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export type RootStackParamList = {
-    HomeScreen: {rol:string},
-    RegisterScreen: {rol:string}, 
-    DriverScreen: undefined,
-    ClientScreen: undefined,
-    AdminScreen: undefined,
-    ErrorScreen: undefined,
-    RecuperarScreen: undefined,
-    EtiquetaScreen: {refPoint: string, latitude: number, longitude: number , addressType?: 'origin' | 'delivery'} | undefined,
-    MapScreen: {addressType?: 'origin' | 'delivery'} | undefined,
-    DisplayEtiquetaScreen: {latOrg: number, longOrg: number, latDes: number, longDes: number, refPointOrg: string, refPointDes: string}
-    QrGeneratorScreen: undefined,
-    QrDisplayScreen: undefined,
-    QrHandleScreen: {data: string}
+    ClientScreen: undefined
 }
 
 export const SellerStackNavigator = () => {
@@ -38,70 +26,9 @@ export const SellerStackNavigator = () => {
     <UserState>
     <Stack.Navigator screenOptions={{headerShown: false}}>
         <Stack.Screen
-          name="HomeScreen"
-          component={HomeScreen}
-          options={{
-            headerShown: true,
-          }}
-          initialParams={{rol:'SELLER'}}
+        name="ClientScreen"
+        component={ClientScreen}
         />
-         <Stack.Screen 
-         name="RegisterScreen" 
-         component={RegisterScreen}
-         options={{
-          headerShown: true,
-          title: 'Nuevo Usuario'
-         }}
-         initialParams={{rol:'SELLER'}}
-         />
-         <Stack.Screen 
-         name="RecuperarScreen" 
-         component={RecuperarScreen}
-         options={{
-          headerShown: true,
-          title: 'Recuperar Contraseña'
-         }} 
-         />
-         <Stack.Screen
-         name="DriverScreen"
-         component={DriverScreen}
-         />
-         <Stack.Screen
-         name="ClientScreen"
-         component={ClientScreen}
-         />
-         <Stack.Screen
-         name="AdminScreen"
-         component={AdminScreen}
-         />
-         <Stack.Screen
-         name="ErrorScreen"
-         component={ErrorScreen}
-         />
-         <Stack.Screen
-         name="EtiquetaScreen"
-         component={EtiquetaScreen}
-         />
-          <Stack.Screen
-         name="MapScreen"
-         component={MapScreen}
-         />
-         <Stack.Screen
-         name="DisplayEtiquetaScreen"
-         component={DisplayEtiquetaScreen}
-         />
-         <Stack.Screen
-          name="QrGeneratorScreen"
-          component={QrGeneratorScreen}
-          />
-          <Stack.Screen
-          name="QrDisplayScreen"
-          component={QrDisplayScreen}
-          />
-          <Stack.Screen
-          name="QrHandleScreen"
-          component={QrHandleScreen}
-          />
     </Stack.Navigator>
     </UserState>
   )

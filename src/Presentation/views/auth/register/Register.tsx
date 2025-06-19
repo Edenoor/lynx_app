@@ -3,16 +3,15 @@ import { ActivityIndicator, ScrollView, Text, ToastAndroid, View } from 'react-n
 import { CustomTextInput } from '../../../components/CustomTextInput'
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList } from '../../../navigator/DriverStackNavigator';
 import { RoundedButton } from '../../../components/RoundedButton';
 import { Picker } from '@react-native-picker/picker';
+import { RootStackParamList } from '../../../navigator/MainStackNavigator';
 
 
 interface Props extends StackScreenProps<RootStackParamList, 'RegisterScreen'>{};
 
 export const RegisterScreen = ({navigation, route}: Props) => {
-  const {rol} = route.params
-  const { email, password, confirmPassword, errorMessage, onChange, register, user, loading } = useViewModel(rol);
+  const { email, password, confirmPassword, errorMessage, onChange, register, user, loading } = useViewModel();
   
   useEffect(() => {
     if (errorMessage != '') {
@@ -23,7 +22,7 @@ export const RegisterScreen = ({navigation, route}: Props) => {
 
   useEffect(() => {      
           if (user?.id !== null && user?.id !== undefined) {
-              navigation.replace('HomeScreen',{rol:rol});
+              navigation.replace('HomeScreen');
           }
       }, [user])
       
@@ -68,31 +67,6 @@ export const RegisterScreen = ({navigation, route}: Props) => {
               value={ confirmPassword }
               secureTextEntry={ true }
               />
-
-
-            <CustomTextInput
-              placeholder='ROL'
-              keyboardType='default'
-              image={ require('../../../../../assets/confirm_password.png') }
-              property='rol'
-              onChangeText={ onChange }
-              value= {rol}
-              readOnly = {true}
-            />
-
-            <View>
-              {rol==='DRIVER' &&
-              <CustomTextInput
-              placeholder='Confirmar pirulo'
-              keyboardType='default'
-              image={ require('../../../../../assets/confirm_password.png') }
-              property='confirmPassword'
-              onChangeText={ onChange }
-              value={ confirmPassword }
-              secureTextEntry={ true }
-              />
-              }
-            </View>
 
             <View style={{ marginTop: 30 }}>
                 

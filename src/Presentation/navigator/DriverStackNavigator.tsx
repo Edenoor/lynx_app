@@ -15,74 +15,16 @@ import { EtiquetaScreen } from '../views/etiqueta/Etiqueta';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export type RootStackParamList = {
-    HomeScreen: {rol:string},
-    RegisterScreen: {rol:string}, 
-    DriverScreen: undefined,
-    ClientScreen: undefined,
-    AdminScreen: undefined,
-    ErrorScreen: undefined,
-    RecuperarScreen: undefined,
-    QrGeneratorScreen: undefined,
-    QrDisplayScreen: undefined,
-    EtiquetaScreen: undefined
+  DriverScreen:undefined
 }
 
 export const DriverStackNavigator = () => {
   return (
     <UserState>
     <Stack.Navigator screenOptions={{headerShown: false}}>
-        <Stack.Screen
-          name="HomeScreen"
-          component={HomeScreen}
-          options={{
-            headerShown: true,
-          }}
-          initialParams={{rol:'DRIVER'}}
-        />
-         <Stack.Screen 
-         name="RegisterScreen" 
-         component={RegisterScreen}
-         options={{
-          headerShown: true,
-          title: 'Nuevo Usuario'
-         }}
-         initialParams={{rol:'DRIVER'}}
-         />
-         <Stack.Screen 
-         name="RecuperarScreen" 
-         component={RecuperarScreen}
-         options={{
-          headerShown: true,
-          title: 'Recuperar Contraseña'
-         }} 
-         />
          <Stack.Screen
-         name="DriverScreen"
-         component={DriverScreen}
-         />
-         <Stack.Screen
-         name="ClientScreen"
-         component={ClientScreen}
-         />
-         <Stack.Screen
-         name="AdminScreen"
-         component={AdminScreen}
-         />
-         <Stack.Screen
-         name="ErrorScreen"
-         component={ErrorScreen}
-         />
-         <Stack.Screen
-         name="QrGeneratorScreen"
-         component={QrGeneratorScreen}
-         />
-         <Stack.Screen
-         name="QrDisplayScreen"
-         component={QrDisplayScreen}
-         />
-         <Stack.Screen
-          name="EtiquetaScreen"
-          component={EtiquetaScreen}
+          name="DriverScreen"
+          component={DriverScreen}
           />
     </Stack.Navigator>
     </UserState>

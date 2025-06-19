@@ -2,16 +2,15 @@ import React, { useEffect } from 'react'
 import { useNavigation } from '@react-navigation/native'
 import { Image, View, Text, TextInput, ToastAndroid, StyleSheet, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigator/DriverStackNavigator';
 import { RoundedButton } from '../../components/RoundedButton';
 import { StackScreenProps } from '@react-navigation/stack';
 import useViewModel from './ViewModel';
 import { CustomTextInput } from '../../components/CustomTextInput';
+import { RootStackParamList } from '../../navigator/MainStackNavigator';
 
 interface Props extends StackScreenProps<RootStackParamList, 'HomeScreen'>{};
 
 export const HomeScreen = ({navigation, route}: Props) => {
-    const {rol} = route.params
     const { email, password, errorMessage, onChange, login, user, removeUserSession } = useViewModel();
 
     useEffect(() => {
@@ -24,16 +23,10 @@ export const HomeScreen = ({navigation, route}: Props) => {
         if (user?.id !== null && user?.id !== undefined && user?.id !== '') {
             
             if(user.rol === 'SELLER'){
-                navigation.replace('ClientScreen')
+                navigation.replace('SellerStackNavigator')
             }
             else if(user.rol === 'DRIVER'){
-                navigation.replace('DriverScreen')
-            }
-            else if(user.rol === 'ADMIN'){
-                navigation.replace('AdminScreen')
-            }
-            else{
-                navigation.replace('ErrorScreen')
+                navigation.replace('DriverStackNavigator')
             }
         }
     }, [user])
@@ -64,7 +57,7 @@ export const HomeScreen = ({navigation, route}: Props) => {
                 <TouchableOpacity onPress={ login }>
             <Text>entrada</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={ () => navigation.navigate('RegisterScreen', {rol:rol}) }>
+        <TouchableOpacity onPress={ () => navigation.navigate('RegisterScreen') }>
             <Text>Registrate</Text>
         </TouchableOpacity>
 
