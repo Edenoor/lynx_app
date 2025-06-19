@@ -14,6 +14,7 @@ import { DisplayEtiquetaScreen } from '../views/etiqueta/DisplayEtiqueta';
 import { QrGeneratorScreen } from '../views/qr/QrGenerator';
 import { QrDisplayScreen } from '../views/qr/QrDisplayScreen';
 import { QrHandleScreen } from '../views/qr/QrHandleScreen';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -23,6 +24,7 @@ export type RootStackParamList = {
     RegisterScreen: undefined,
     RecuperarScreen: undefined,
 }
+
 
 export const SellerStackNavigator = () => {
   return (
@@ -37,12 +39,12 @@ export const SellerStackNavigator = () => {
         component={HomeScreen}
         />
         <Stack.Screen
-        name="RegisterScreen"
-        component={RegisterScreen}
-        />
-        <Stack.Screen
         name="RecuperarScreen"
         component={RecuperarScreen}
+        options={{
+          headerShown: true,
+          title: 'RECUPERAR'
+         }}
         />
         
     </Stack.Navigator>

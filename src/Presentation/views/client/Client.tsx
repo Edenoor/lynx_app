@@ -10,26 +10,64 @@ import { RecuperarScreen } from '../recuperar/Recuperar';
 interface Props extends StackScreenProps<RootStackParamList, 'ClientScreen'>{};
 
 export const ClientScreen = ({navigation, route}: Props) => {
-  const { user,removeUserSession } = useViewModel();
-  useEffect(() => {
-      if(user?.rol !== 'SELLER'){
-        navigation.replace('HomeScreen')
-      }
-    }, [user])
+  const { user, removeUserSession } = useViewModel();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  const removeSession = () => {
+    removeUserSession()
+    navigation.replace('HomeScreen')
+  }
+
+  const navigateTo = (screenName: keyof RootStackParamList) => {
+    navigation.navigate(screenName);
+    setIsSidebarOpen(false);
+  };
 
   return (
-    <View style={{top:60}}>
-        <Text>client</Text>
-         <View style={{top:100}}>
-          <TouchableOpacity onPress={ () =>  removeUserSession()}>
-            <Text>remover sesion</Text>
+    <View style={styles.container}>
+      {isSidebarOpen && (
+        <View style={styles.sidebar}>
+          <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
+            <Text style={styles.sidebarItem}>Client Screen</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigateTo('RecuperarScreen')}>
+            <Text style={styles.sidebarItem}>RECUPERAR</Text>
           </TouchableOpacity>
         </View>
-        {/* <View style={{top:100}}>
-          <TouchableOpacity onPress={ () =>  navigation.navigate('EtiquetaScreen')}>
-            <Text>GENERAR ETIQUETA</Text>
-          </TouchableOpacity>
-        </View>   */}
-    </View> 
-  )
-}
+      )}
+      
+      {/* Main Content */}
+      <View style={styles.content}>
+        <TouchableOpacity onPress={() => setIsSidebarOpen(!isSidebarOpen)}>
+          <Text>Menu</Text>
+        </TouchableOpacity>
+        <Text>TEXTO</Text>
+        <TouchableOpacity onPress={() => removeSession()}>
+          <Text>CERRAR SESION</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  sidebar: {
+    width: 250,
+    backgroundColor: '#f8f8f8',
+    padding: 20,
+  },
+  sidebarItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+    top:100
+  },
+});
