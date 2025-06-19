@@ -11,30 +11,25 @@ interface Props extends StackScreenProps<RootStackParamList, 'ClientScreen'>{};
 
 export const ClientScreen = ({navigation, route}: Props) => {
   const { user,removeUserSession } = useViewModel();
-  // useEffect(() => {
-  //     if(user?.rol !== 'SELLER'){
-  //       navigation.replace('HomeScreen')
-  //     }
-  //   }, [user])
+  useEffect(() => {
+      if(user?.rol !== 'SELLER'){
+        navigation.replace('HomeScreen')
+      }
+    }, [user])
 
   return (
-    <View>
-      <Text>CLIENTE</Text>
-    </View>
-  )
-}
-
-
-{/* <View style={{top:60}}>
+    <View style={{top:60}}>
         <Text>client</Text>
          <View style={{top:100}}>
           <TouchableOpacity onPress={ () =>  removeUserSession()}>
             <Text>remover sesion</Text>
           </TouchableOpacity>
         </View>
-        <View style={{top:100}}>
+        {/* <View style={{top:100}}>
           <TouchableOpacity onPress={ () =>  navigation.navigate('EtiquetaScreen')}>
             <Text>GENERAR ETIQUETA</Text>
           </TouchableOpacity>
-        </View>  
-    </View> */}
+        </View>   */}
+    </View> 
+  )
+}
