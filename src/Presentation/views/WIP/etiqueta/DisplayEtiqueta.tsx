@@ -1,7 +1,6 @@
 import React from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { MapScreen } from '../map/Map';
-import { RootStackParamList } from '../../navigator/SellerStackNavigator';
+import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
 import { StackScreenProps } from '@react-navigation/stack';
 import QRCode from 'react-native-qrcode-svg';
 

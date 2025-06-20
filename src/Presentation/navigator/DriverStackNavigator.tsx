@@ -1,16 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react'
-import { HomeScreen } from '../views/home/Home';
-import { RegisterScreen } from '../views/auth/register/Register';
+import { HomeScreen } from '../views/auth/home/Home';
 import { UserProvider } from '../context/UserContext';
-import { DriverScreen } from '../views/driver/Driver';
-import { ClientScreen } from '../views/client/Client';
-import { AdminScreen } from '../views/admin/Admin';
-import { ErrorScreen } from '../views/home/Error';
-import { RecuperarScreen } from '../views/recuperar/Recuperar';
-import { QrGeneratorScreen } from '../views/qr/QrGenerator';
-import { QrDisplayScreen } from '../views/qr/QrDisplayScreen';
-import { EtiquetaScreen } from '../views/etiqueta/Etiqueta';
+import { DriverScreen } from '../views/driver/landing/Driver';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 

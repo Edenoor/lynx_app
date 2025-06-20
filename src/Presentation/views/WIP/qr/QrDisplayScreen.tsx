@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, Button } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { RootStackParamList } from '../../navigator/SellerStackNavigator';
+import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
 import { StackScreenProps } from '@react-navigation/stack';
 
 interface Props extends StackScreenProps<RootStackParamList, 'QrDisplayScreen'>{};

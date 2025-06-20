@@ -1,7 +1,5 @@
 import React, { useState } from 'react'
-import { useUserLocal } from '../../hooks/useUserLocal';
-import { SaveUserLocalUseCase } from '../../../Domain/useCases/userLocal/SaveUserLocal';
-import { RegisterAuthUseCase } from '../../../Domain/useCases/auth/RegisterAuth';
+import { useUserLocal } from '../../../hooks/useUserLocal';
 
 const EtiquetaViewModel = () => {
   const [errorMessage, setErrorMessage] = useState('');

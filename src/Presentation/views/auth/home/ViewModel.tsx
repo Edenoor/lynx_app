@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
-import { UserContext } from "../../context/UserContext";
-import { LoginAuthUseCase } from "../../../Domain/useCases/auth/LoginAuth";
+import { UserContext } from "../../../context/UserContext";
+import { LoginAuthUseCase } from "../../../../Domain/useCases/auth/LoginAuth";
 
 const HomeViewModel = () => {
     const [errorMessage, setErrorMessage] = useState('');

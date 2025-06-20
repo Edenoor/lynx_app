@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { Button, Text, ToastAndroid, View, StyleSheet } from 'react-native'
 import MapView from 'react-native-maps'
 import useViewModel from './ViewModel';
-import { RootStackParamList } from '../../navigator/SellerStackNavigator';
+import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
 import { StackScreenProps } from '@react-navigation/stack';
 
 interface Props extends StackScreenProps<RootStackParamList, 'MapScreen'>{};

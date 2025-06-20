@@ -1,12 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react'
-import { HomeScreen } from '../views/home/Home';
+import { HomeScreen } from '../views/auth/home/Home';
 import { UserProvider } from '../context/UserContext';
-import { DriverScreen } from '../views/driver/Driver';
-import { ClientScreen } from '../views/client/Client';
-import { AdminScreen } from '../views/admin/Admin';
-import { ErrorScreen } from '../views/home/Error';
-import { RecuperarScreen } from '../views/recuperar/Recuperar';
+import { RecuperarScreen } from '../views/auth/recuperar/Recuperar';
 import { RegisterScreen } from '../views/auth/register/Register';
 import { DriverStackNavigator } from './DriverStackNavigator';
 import { SellerStackNavigator } from './SellerStackNavigator';

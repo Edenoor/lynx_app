@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, ScrollView, Text, ToastAndroid, TouchableOpacity, View } from 'react-native'
-import { CustomTextInput } from '../../components/CustomTextInput'
+import { CustomTextInput } from '../../../components/CustomTextInput'
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList } from '../../navigator/SellerStackNavigator';
-import { RoundedButton } from '../../components/RoundedButton';
-import { Picker } from '@react-native-picker/picker';
+import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
+import { RoundedButton } from '../../../components/RoundedButton';
 
 
 interface Props extends StackScreenProps<RootStackParamList, 'EtiquetaScreen'>{};

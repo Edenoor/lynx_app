@@ -1,12 +1,8 @@
-import React, { useEffect, useState }  from 'react'
+import React, { useState }  from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { useUserLocal } from '../../hooks/useUserLocal';
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList } from '../../navigator/SellerStackNavigator';
-import { NavigationContainer } from '@react-navigation/native';
-import { createDrawerNavigator } from '@react-navigation/drawer';
-import { RecuperarScreen } from '../recuperar/Recuperar';
+import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
 interface Props extends StackScreenProps<RootStackParamList, 'ClientScreen'>{};
 
 export const ClientScreen = ({navigation, route}: Props) => {

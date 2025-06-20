@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
-import { useUserLocal } from '../../hooks/useUserLocal';
-import { recoveryAuthUseCase } from '../../../Domain/useCases/auth/RecoveryAuth';
+import { recoveryAuthUseCase } from '../../../../Domain/useCases/auth/RecoveryAuth';
 
 const RecuperarViewModel = () => {
 

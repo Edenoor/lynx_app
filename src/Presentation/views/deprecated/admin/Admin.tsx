@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
-import { useUserLocal } from '../../hooks/useUserLocal';
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList } from '../../navigator/MainStackNavigator';
+import { RootStackParamList } from '../../../navigator/MainStackNavigator';
 
-interface Props extends StackScreenProps<RootStackParamList, 'AdminScreen'>{};
+
+interface Props extends StackScreenProps<RootStackParamList>{};
 
 export const AdminScreen = ({navigation, route}: Props) => {
   const { user, removeUserSession } = useViewModel();

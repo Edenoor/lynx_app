@@ -1,12 +1,10 @@
 import React, { useEffect } from 'react'
-import { useNavigation } from '@react-navigation/native'
-import { Image, View, Text, TextInput, ToastAndroid, StyleSheet, TouchableOpacity } from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RoundedButton } from '../../components/RoundedButton';
+import { View, Text, ToastAndroid, TouchableOpacity } from 'react-native';
+import { RoundedButton } from '../../../components/RoundedButton';
 import { StackScreenProps } from '@react-navigation/stack';
 import useViewModel from './ViewModel';
-import { CustomTextInput } from '../../components/CustomTextInput';
-import { RootStackParamList } from '../../navigator/MainStackNavigator';
+import { CustomTextInput } from '../../../components/CustomTextInput';
+import { RootStackParamList } from '../../../navigator/MainStackNavigator';
 
 interface Props extends StackScreenProps<RootStackParamList, 'HomeScreen'>{};
 

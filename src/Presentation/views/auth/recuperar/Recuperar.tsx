@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react'
 import { Text, ToastAndroid, TouchableOpacity, View, Image, ScrollView } from 'react-native';
-import { CustomTextInput } from '../../components/CustomTextInput'
+import { CustomTextInput } from '../../../components/CustomTextInput'
 import useViewModel from './ViewModel';
-import { RoundedButton } from '../../components/RoundedButton';
+import { RoundedButton } from '../../../components/RoundedButton';
 
 export const RecuperarScreen = () => {
 
