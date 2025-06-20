@@ -61,7 +61,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
             <CustomTextInput 
               placeholder='Nombre Direccion'
               keyboardType='email-address'
-              image={ require('../../../../assets/email.png') }
+              image={ require('../../../../../assets/email.png') }
               property='address'
               onChangeText={ onChange }
               value={ address }
@@ -72,7 +72,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
             <CustomTextInput 
               placeholder='barrio'
               keyboardType='default'
-              image={ require('../../../../assets/password.png') }
+              image={ require('../../../../../assets/password.png') }
               property='neighbourhood'
               onChangeText={ onChange }
               value={ neighbourhood }
@@ -83,7 +83,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
             <CustomTextInput 
               placeholder='Punto de referencia origen'
               keyboardType='default'
-              image={ require('../../../../assets/confirm_password.png') }
+              image={ require('../../../../../assets/confirm_password.png') }
               property='refPointOrg'
               onChangeText={ onChange }
               value={ refPointOrg }
@@ -97,7 +97,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
             <CustomTextInput 
               placeholder='Punto de referencia envio'
               keyboardType='default'
-              image={ require('../../../../assets/confirm_password.png') }
+              image={ require('../../../../../assets/confirm_password.png') }
               property='refPointDes'
               onChangeText={ onChange }
               value={ refPointDes }

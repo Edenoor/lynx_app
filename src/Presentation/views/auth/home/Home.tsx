@@ -33,7 +33,7 @@ export const HomeScreen = ({navigation, route}: Props) => {
     <View style={{top:60}}>
         <Text >HOME</Text>
         <CustomTextInput 
-                image={ require('../../../../assets/email.png') }
+                image={ require('../../../../../assets/email.png') }
                 placeholder='Correo electronico'
                 keyboardType='email-address'
                 property='email'
@@ -42,7 +42,7 @@ export const HomeScreen = ({navigation, route}: Props) => {
             />
         
             <CustomTextInput 
-                image={ require('../../../../assets/password.png') }
+                image={ require('../../../../../assets/password.png') }
                 placeholder='Contraseña'
                 keyboardType='default'
                 property='password'

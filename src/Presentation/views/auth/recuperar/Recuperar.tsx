@@ -27,7 +27,7 @@ export const RecuperarScreen = () => {
                 <CustomTextInput 
                   placeholder='Correo electronico'
                   keyboardType='email-address'
-                  image={ require('../../../../assets/email.png') }
+                  image={ require('../../../../../assets/email.png') }
                   property='email'
                   onChangeText={ onChange }
                   value={ email }
