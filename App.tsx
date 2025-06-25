@@ -1,17 +1,17 @@
-
 import * as React from 'react';
-import {useState} from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { View} from 'react-native';
-import { UserTypeSelectionScreen } from './src/Presentation/views/auth/userSelect/UserSelect';
-import { RemoveUserLocalUseCase } from './src/Domain/useCases/userLocal/RemoveUserLocal';
+import { View, StatusBar } from 'react-native';
 import { MainStackNavigator } from './src/Presentation/navigator/MainStackNavigator';
+import global from './src/Presentation/theme/global';
 
 const App = () => {
   return (
-    <NavigationContainer >
-      <MainStackNavigator/>
-    </NavigationContainer>
+    <View style={{ flex: 1, backgroundColor: global.COLORS.background, padding: global.SPACING.md }}>
+      <StatusBar backgroundColor={global.COLORS.primary} barStyle="dark-content" />
+      <NavigationContainer>
+        <MainStackNavigator />
+      </NavigationContainer>
+    </View>
   );
 };
 

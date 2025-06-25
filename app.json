@@ -8,21 +8,21 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFE600"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beltrameme.wynflexfe",
-      "config":{
-        "googleMapsApiKey":"AIzaSyDU6WdF2MDI-zRym8Um4PctN5U_tjBmoeM"
+      "config": {
+        "googleMapsApiKey": "AIzaSyDU6WdF2MDI-zRym8Um4PctN5U_tjBmoeM"
       },
       "infoPlist": {
         "UIBackgroundModes": [
           "location",
           "fetch"
-      ]
+        ]
       }
     },
     "android": {
@@ -31,8 +31,8 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.beltrameme.wynflexfe",
-      "config":{
-        "googleMaps":{
+      "config": {
+        "googleMaps": {
           "apiKey": "AIzaSyDU6WdF2MDI-zRym8Um4PctN5U_tjBmoeM"
         }
       },
@@ -42,7 +42,6 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "FOREGROUND_SERVICE"
-
       ]
     },
     "web": {
@@ -53,3 +52,4 @@
     ]
   }
 }
+
