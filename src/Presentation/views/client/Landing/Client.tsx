@@ -11,6 +11,7 @@ import MapView, { Marker } from 'react-native-maps';
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
+
 import global from '../../../theme/global';
 
 interface Props extends StackScreenProps<RootStackParamList, 'ClientScreen'> {}
@@ -30,10 +31,9 @@ export const ClientScreen = ({ navigation }: Props) => {
     setIsSidebarOpen(false);
   };
 
-  const handleOption = (type: string) => {
+  const handleOptionPress = (type: 'EnvioTradicionalScreen' | 'EnvioTurboScreen') => {
     setModalVisible(false);
-    console.log(`Seleccionaste envío: ${type}`);
-    // Aquí podrías navegar a una pantalla según el tipo
+    navigation.navigate(type);
   };
 
   return (
@@ -60,10 +60,7 @@ export const ClientScreen = ({ navigation }: Props) => {
       <View style={styles.panel}>
         <Image source={require('../../../../../assets/logo_envio.png')} style={styles.panelIcon} />
         <Text style={styles.panelText}>Hola {user?.name || 'usuario'}, todo listo para tu envío</Text>
-        <TouchableOpacity
-          onPress={() => setModalVisible(true)}
-          style={styles.sendButton}
-        >
+        <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.sendButton}>
           <Text style={styles.sendButtonText}>Solicitar envío</Text>
         </TouchableOpacity>
       </View>
@@ -78,10 +75,10 @@ export const ClientScreen = ({ navigation }: Props) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>¿Qué tipo de envío querés hacer?</Text>
-            <TouchableOpacity style={styles.modalOption} onPress={() => handleOption('Tradicional')}>
+            <TouchableOpacity style={styles.modalOption} onPress={() => handleOptionPress('EnvioTradicionalScreen')}>
               <Text style={styles.modalOptionText}>🚚 Envío tradicional</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOption} onPress={() => handleOption('Turbo')}>
+            <TouchableOpacity style={styles.modalOption} onPress={() => handleOptionPress('EnvioTurboScreen')}>
               <Text style={styles.modalOptionText}>⚡ Envío Turbo</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -105,7 +102,20 @@ export const ClientScreen = ({ navigation }: Props) => {
           </View>
 
           <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
-            <Text style={styles.sidebarItem}>Mi cuenta</Text>
+            <Text style={styles.sidebarItem}>Perfil</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
+            <Text style={styles.sidebarItem}>Viajes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigateTo('TiendasScreen')}>
+            <Text style={styles.sidebarItem}>Tiendas</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
+            <Text style={styles.sidebarItem}>Configuración</Text>
+          </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
+            <Text style={styles.sidebarItem}>Medios de pago</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigateTo('RecuperarScreen')}>
             <Text style={styles.sidebarItem}>Códigos descuento</Text>
@@ -121,6 +131,7 @@ export const ClientScreen = ({ navigation }: Props) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
