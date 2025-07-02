@@ -6,6 +6,7 @@ import { RegisterAuthUseCase } from '../../../../Domain/useCases/auth/RegisterAu
 const RegisterViewModel = () => {
   const [errorMessage, setErrorMessage] = useState('');
     const [values, setValues] = useState({
+        name: '',
         email: '',
         password: '',
         rol: '',
@@ -38,6 +39,10 @@ const RegisterViewModel = () => {
     const isValidForm = (): boolean => {
         if (values.email === '') {
             setErrorMessage('Ingresa tu correo electronico');
+            return false;
+        }
+        if (values.name === '') {
+            setErrorMessage('Ingresa tu nombre');
             return false;
         }
         if (values.password === '') {

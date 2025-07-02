@@ -11,8 +11,7 @@ import { RootStackParamList } from '../../../navigator/MainStackNavigator';
 interface Props extends StackScreenProps<RootStackParamList, 'RegisterScreen'>{};
 
 export const RegisterScreen = ({navigation, route}: Props) => {
-  const { email, password, confirmPassword, errorMessage, onChange, register, user, loading, rol, setRol } = useViewModel();
-  const name = ''
+  const { name, email, password, confirmPassword, errorMessage, onChange, register, user, loading, rol, setRol } = useViewModel();
   useEffect(() => {
     if (errorMessage != '') {
       ToastAndroid.show(errorMessage, ToastAndroid.LONG);

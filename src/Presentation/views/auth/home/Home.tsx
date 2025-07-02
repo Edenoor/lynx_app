@@ -28,6 +28,7 @@ export const HomeScreen = ({ navigation }: Props) => {
     removeUserSession,
   } = useViewModel();
 
+  removeUserSession()
   useEffect(() => {
     if (errorMessage !== '') {
       ToastAndroid.show(errorMessage, ToastAndroid.LONG);

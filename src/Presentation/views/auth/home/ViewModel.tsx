@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
 import { UserContext } from "../../../context/UserContext";
-// import { LoginAuthUseCase } from "../../../../Domain/useCases/auth/LoginAuth";
+import { LoginAuthUseCase } from "../../../../Domain/useCases/auth/LoginAuth";
 
 const HomeViewModel = () => {
     const [errorMessage, setErrorMessage] = useState('');
@@ -15,26 +15,26 @@ const HomeViewModel = () => {
         setValues({ ...values, [property]: value });
     };
 
-    // ✅ Login HARDCODEADO para pruebas
-    const login = async () => {
-        if (!isValidForm()) return;
+    // // ✅ Login HARDCODEADO para pruebas
+    // const login = async () => {
+    //     if (!isValidForm()) return;
 
-        const { email, password } = values;
+    //     const { email, password } = values;
 
-        if (email === 'seller@test.com' && password === '1234') {
-            saveUserSession({ id: '1', email, rol: 'SELLER' });
-            return;
-        }
+    //     if (email === 'seller@test.com' && password === '1234') {
+    //         saveUserSession({ id: '1', email, rol: 'SELLER' });
+    //         return;
+    //     }
 
-        if (email === 'driver@test.com' && password === '1234') {
-            saveUserSession({ id: '2', email, rol: 'DRIVER' });
-            return;
-        }
+    //     if (email === 'driver@test.com' && password === '1234') {
+    //         saveUserSession({ id: '2', email, rol: 'DRIVER' });
+    //         return;
+    //     }
 
-        setErrorMessage('Credenciales incorrectas');
-    };
+    //     setErrorMessage('Credenciales incorrectas');
+    // };
 
-    /*
+    
     // 🔁 Método original con LoginAuthUseCase
     const login = async () => {
         if (isValidForm()) {
@@ -47,7 +47,7 @@ const HomeViewModel = () => {
             }
         }
     };
-    */
+    
 
     const isValidForm = (): boolean => {
         if (values.email === '') {
