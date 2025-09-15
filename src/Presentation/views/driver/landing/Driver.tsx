@@ -1,31 +1,33 @@
-import React, { useEffect } from 'react'
-import { Text, TouchableOpacity, View } from 'react-native'
+import React, { useEffect } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../../navigator/DriverStackNavigator';
-interface Props extends StackScreenProps<RootStackParamList, 'DriverScreen'>{};
 
-export const DriverScreen = ({navigation, route}: Props) => {
-  const { user,removeUserSession } = useViewModel();
-  console.log(navigation.getState());
+type Props = StackScreenProps<RootStackParamList, 'DriverScreen'>;
+
+export const DriverScreen: React.FC<Props> = ({ navigation }) => {
+  const { user, removeUserSession } = useViewModel();
+
   useEffect(() => {
-      if(user?.rol !== 'DRIVER'){
-        navigation.replace('HomeScreen')
-      }
-    }, [user])
+    if (user && user.rol !== 'DRIVER') {
+      navigation.getParent()?.reset({
+        index: 0,
+        routes: [{ name: 'HomeScreen' as never }],
+      });
+    }
+  }, [user]);
+
   return (
-    <View style={{top:60}}>
-        <Text>driver</Text>
-         <View style={{top:100}}>
-          <TouchableOpacity onPress={ () =>  removeUserSession()}>
-            <Text>remover sesion</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={{top:100}}>
-          {/* <TouchableOpacity onPress={ () => navigation.navigate('QrDisplayScreen')}>
-            <Text>qr</Text>
-          </TouchableOpacity> */}
-        </View>  
+    <View style={{ flex: 1, paddingTop: 60 }}>
+      <Text>Driver</Text>
+
+      <View style={{ marginTop: 100 }}>
+        <TouchableOpacity onPress={removeUserSession}>
+          <Text>Remover sesión</Text>
+        </TouchableOpacity>
+      </View>
     </View>
-  )
-}
+  );
+};
+

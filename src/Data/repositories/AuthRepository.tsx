@@ -5,11 +5,11 @@ import { ApiDelivery } from "../sources/remote/api/ApiDelivery";
 import { User } from "../../Domain/entities/User";
 
 export class AuthRepositoryImpl implements AuthRepository {
-    async login(email: string, password: string): Promise<ResponseApiDelivery> {
+    async login(username: string, password: string): Promise<ResponseApiDelivery> {
         try {
             
-            const response = await ApiDelivery.post<ResponseApiDelivery>('/users/login', {
-                email: email,
+            const response = await ApiDelivery.post<ResponseApiDelivery>('/login', {
+                username: username,
                 password: password                
             });
             
@@ -37,9 +37,9 @@ export class AuthRepositoryImpl implements AuthRepository {
         }
     }
 
-    async recovery(email: string): Promise<ResponseApiDelivery> {
+    async recovery(username: string): Promise<ResponseApiDelivery> {
         try {
-            const response = await ApiDelivery.post<ResponseApiDelivery>('/users/recovery', {email:email})
+            const response = await ApiDelivery.post<ResponseApiDelivery>('/users/recovery', {username:username})
             return Promise.resolve(response.data)
         } catch (error) {
             let e = (error as AxiosError);

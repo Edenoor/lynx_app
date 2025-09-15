@@ -21,9 +21,13 @@ export const ClientScreen = ({ navigation }: Props) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const removeSession = () => {
-    removeUserSession();
-    navigation.replace('HomeScreen');
+  const removeSession = async () => {
+    await removeUserSession();
+    // Volvemos al stack padre donde existe HomeScreen
+    navigation.getParent()?.reset({
+      index: 0,
+      routes: [{ name: 'HomeScreen' as never }],
+    });
   };
 
   const navigateTo = (screenName: keyof RootStackParamList) => {
@@ -104,7 +108,8 @@ export const ClientScreen = ({ navigation }: Props) => {
           <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
             <Text style={styles.sidebarItem}>Perfil</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
+          {/* Viajes ahora va a EnviosScreen */}
+          <TouchableOpacity onPress={() => navigateTo('EnviosScreen')}>
             <Text style={styles.sidebarItem}>Viajes</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigateTo('TiendasScreen')}>
@@ -114,10 +119,16 @@ export const ClientScreen = ({ navigation }: Props) => {
           <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
             <Text style={styles.sidebarItem}>Configuración</Text>
           </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
+          <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
             <Text style={styles.sidebarItem}>Medios de pago</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigateTo('RecuperarScreen')}>
+          {/* Esta ruta vive en el stack padre; navegamos por el padre */}
+          <TouchableOpacity
+            onPress={() => {
+              setIsSidebarOpen(false);
+              navigation.getParent()?.navigate('RecuperarScreen' as never);
+            }}
+          >
             <Text style={styles.sidebarItem}>Códigos descuento</Text>
           </TouchableOpacity>
           <TouchableOpacity>
@@ -270,5 +281,3 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
 });
-
-

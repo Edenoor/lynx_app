@@ -1,3 +1,4 @@
+// src/Presentation/views/auth/home/Home.tsx
 import React, { useEffect } from 'react';
 import {
   View,
@@ -15,141 +16,81 @@ import { CustomTextInput } from '../../../components/CustomTextInput';
 import { RoundedButton } from '../../../components/RoundedButton';
 import global from '../../../theme/global';
 
-interface Props extends StackScreenProps<RootStackParamList, 'HomeScreen'> {}
+type Props = StackScreenProps<RootStackParamList, 'HomeScreen'>;
 
-export const HomeScreen = ({ navigation }: Props) => {
-  const {
-    email,
-    password,
-    errorMessage,
-    onChange,
-    login,
-    user,
-    removeUserSession,
-  } = useViewModel();
+export const HomeScreen: React.FC<Props> = ({ navigation }) => {
+  const { values, onChange, login, errorMessage, clearError } = useViewModel();
 
-  removeUserSession()
   useEffect(() => {
-    if (errorMessage !== '') {
+    if (errorMessage) {
       ToastAndroid.show(errorMessage, ToastAndroid.LONG);
+      clearError();
     }
   }, [errorMessage]);
 
-  useEffect(() => {
-    if (user?.id) {
-      if (user.rol === 'SELLER') navigation.replace('SellerStackNavigator');
-      else if (user.rol === 'DRIVER') navigation.replace('DriverStackNavigator');
+  const onPressLogin = async () => {
+    const res = await login();
+    if (!res.ok) return;
+
+    if (res.rol === 'DRIVER') {
+      navigation.reset({ index: 0, routes: [{ name: 'DriverStackNavigator' }] });
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: 'SellerStackNavigator' }] });
     }
-  }, [user]);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Image
-          source={require('../../../../../assets/logo.png')}
+          source={require('../../../../../assets/icon.png')}
           style={styles.logo}
         />
-        <Text style={styles.title}>Lynx</Text>
+        <Text style={styles.title}>Bienvenido</Text>
+        <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
       </View>
 
       <View style={styles.form}>
         <CustomTextInput
-          image={require('../../../../../assets/email.png')}
-          placeholder="Correo electrónico"
-          keyboardType="email-address"
-          property="email"
+          image={require('../../../../../assets/user.png')}
+          placeholder="Usuario"
+          value={values.username}
+          keyboardType="default"
+          property="username"
           onChangeText={onChange}
-          value={email}
         />
-
         <CustomTextInput
           image={require('../../../../../assets/password.png')}
           placeholder="Contraseña"
+          value={values.password}
           keyboardType="default"
+          secureTextEntry
           property="password"
           onChangeText={onChange}
-          value={password}
-          secureTextEntry={true}
         />
 
-        <View style={styles.buttonWrapper}>
-          <RoundedButton
-            text="Entrar"
-            onPress={login}
-            backgroundColor={global.COLORS.blue}
-          />
-        </View>
-
-        <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
-          <Text style={styles.link}>Registrate</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => navigation.navigate('RecuperarScreen')}>
-          <Text style={styles.link}>Recuperar contraseña</Text>
-        </TouchableOpacity>
+        <RoundedButton text="Ingresar" onPress={onPressLogin} />
       </View>
 
-      <TouchableOpacity onPress={removeUserSession}>
-        <Text style={styles.devLink}>Remover sesión</Text>
-      </TouchableOpacity>
-
       <View style={styles.footer}>
-        <Text style={styles.footerText}>© Lynx 2025</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('RecuperarScreen')}>
+          <Text style={styles.link}>¿Olvidaste tu contraseña?</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
+          <Text style={styles.link}>Crear cuenta</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: global.COLORS.background,
-    paddingHorizontal: global.SPACING.lg,
-    justifyContent: 'space-between',
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: global.SPACING.xxxl, // ← Ajustado
-  },
-  logo: {
-    width: 60,
-    height: 60,
-    marginBottom: global.SPACING.sm,
-    resizeMode: 'contain',
-  },
-  title: {
-    fontSize: global.FONT.size.xl,
-    fontWeight: 'bold',
-    color: global.COLORS.text,
-  },
-  form: {
-    gap: global.SPACING.md,
-    alignItems: 'center',
-  },
-  buttonWrapper: {
-    marginTop: global.SPACING.md,
-    width: '100%',
-  },
-  link: {
-    color: global.COLORS.blue,
-    fontSize: global.FONT.size.md,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-    marginTop: global.SPACING.sm,
-  },
-  devLink: {
-    color: global.COLORS.gray,
-    fontSize: global.FONT.size.sm,
-    textAlign: 'center',
-    marginVertical: global.SPACING.lg,
-  },
-  footer: {
-    alignItems: 'center',
-    paddingBottom: global.SPACING.md,
-  },
-  footerText: {
-    color: global.COLORS.gray,
-    fontSize: global.FONT.size.sm,
-  },
+  container: { flex: 1, backgroundColor: global.COLORS.background, padding: global.SPACING.lg, justifyContent: 'center' },
+  header: { alignItems: 'center', marginBottom: global.SPACING.xl },
+  logo: { width: 72, height: 72, marginBottom: global.SPACING.md },
+  title: { fontSize: global.SIZES.h1, color: global.COLORS.text, fontWeight: '600' },
+  subtitle: { fontSize: global.FONT.size.md, color: global.COLORS.gray, marginTop: 4 },
+  form: { gap: 16 },
+  footer: { marginTop: global.SPACING.xl, alignItems: 'center', gap: 8 },
+  link: { color: global.COLORS.blue, fontSize: global.FONT.size.md },
 });
-

@@ -1,12 +1,13 @@
-import React, { useContext } from 'react'
-import { UserContext } from '../../../context/UserContext'
+import { useContext } from 'react';
+import { UserContext } from '../../../context/UserContext';
 
-const ClientViewModel = () => {
-  const {user, removeUserSession} = useContext(UserContext)
+const useViewModel = () => {
+  const { user, removeUserSession } = useContext(UserContext);
+
   return {
     user,
-    removeUserSession
-  }
-}
+    removeUserSession,
+  };
+};
 
-export default ClientViewModel
+export default useViewModel;
