@@ -1,5 +1,5 @@
 export const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? "http://192.168.1.39:5000"; // cambiá la IP si hace falta
+  process.env.EXPO_PUBLIC_API_URL ?? "http://192.168.1.117:5000"; // cambiá la IP si hace falta
 
 export const postJson = async (path: string, body: any) => {
   const res = await fetch(`${API_URL}${path}`, {

@@ -49,7 +49,11 @@
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "MLI_APP_ID": "4868503143760383",
+      "MLI_REDIRECT_URI": "https://oauth.pstmn.io/v1/callback"
+    }
   }
 }
 

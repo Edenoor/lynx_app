@@ -30,6 +30,9 @@ type Envio = {
   zona: string | null;
   precio_cliente: string | null;
   descuento: number;
+  metodo_envio?: string | null;
+  localidad?: string | null;
+  provincia?: string | null;
 };
 
 /** ===== Helpers ===== */
@@ -53,14 +56,25 @@ const tryParseDate = (s?: string | null): Date | null => {
 };
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-const statusColor = (estado?: string | null) => {
+
+const statusColor = (estado?: string | null, cadete?: string | null) => {
+  if (!cadete) return '#c62828';
   const s = (estado || '').toLowerCase();
   if (s.includes('entregado')) return '#16a34a';
-  if (s.includes('en camino') || s.includes('transit')) return '#0ea5e9';
-  if (s.includes('pendiente') || s.includes('creado')) return '#f59e0b';
+  if (s.includes('retirado') || s.includes('en camino') || s.includes('transit')) return '#0ea5e9';
+  if (s.includes('solicitado') || s.includes('creado') || s.includes('pendiente')) return '#f59e0b';
   if (s.includes('cancel')) return '#ef4444';
   return '#64748b';
 };
+const statusLabel = (estado?: string | null, cadete?: string | null) => {
+  if (!cadete) return 'Sin asignar';
+  const s = (estado || '').toLowerCase();
+  if (s.includes('entregado')) return 'Entregado';
+  if (s.includes('retirado') || s.includes('en camino') || s.includes('transit')) return 'En camino';
+  if (s.includes('solicitado') || s.includes('creado') || s.includes('pendiente')) return 'A retirar';
+  return estado || 'Estado';
+};
+
 const fmtDate = (d?: Date | null) => {
   if (!d) return '—';
   const dd = String(d.getDate()).padStart(2, '0');
@@ -68,6 +82,30 @@ const fmtDate = (d?: Date | null) => {
   const yy = d.getFullYear();
   return `${dd}/${mm}/${yy}`;
 };
+const metodoLabel = (m?: string | null) => {
+  const s = (m || '').toLowerCase();
+  if (s === 'tradicional') return 'Tradicional';
+  if (s === 'turbo') return 'Turbo';
+  return s ? s[0].toUpperCase() + s.slice(1) : '—';
+};
+
+/** Zona “inteligente”: tolera null/undefined */
+const zoneText = (it?: Envio | null) => {
+  if (!it) return '—';
+  const loc = (it.localidad || '').toLowerCase();
+  const isCaba =
+    loc.includes('ciudad autónoma') ||
+    loc.includes('caba') ||
+    loc.includes('cdad. autónoma');
+  if (isCaba) return 'CABA';
+  if (it.localidad) return it.localidad;
+  if (it.provincia) return it.provincia;
+  return it.zona ? `Zona ${it.zona}` : '—';
+};
+
+/** On demand vs Flex */
+const isOnDemand = (m?: string | null) =>
+  ['tradicional', 'turbo'].includes((m || '').toLowerCase());
 
 /** ===== Screen ===== */
 export const EnviosScreen = () => {
@@ -83,6 +121,9 @@ export const EnviosScreen = () => {
   const [to, setTo] = useState<Date | null>(null);
   const [picker, setPicker] = useState<null | 'FROM' | 'TO'>(null);
 
+  // tabs: On demand / Flex
+  const [tab, setTab] = useState<'ondemand' | 'flex'>('ondemand');
+
   // modales
   const [selected, setSelected] = useState<Envio | null>(null);
   const [showTotals, setShowTotals] = useState(false);
@@ -93,9 +134,9 @@ export const EnviosScreen = () => {
     setRefreshing(false);
   }, [reload]);
 
-  // aplicar filtros (prioridad: rango de fechas > hoy)
   const filtered = useMemo(() => {
-    return rows.filter(r => {
+    // por fecha
+    const base = rows.filter(r => {
       const d = tryParseDate(r.fecha_estado) || tryParseDate(r.fecha_colecta);
       if (from && to) {
         if (!d) return false;
@@ -109,9 +150,12 @@ export const EnviosScreen = () => {
       }
       return true;
     });
-  }, [rows, quickToday, from, to]);
 
-  // totales visibles
+    // por tab
+    if (tab === 'ondemand') return base.filter(r => isOnDemand(r.metodo_envio));
+    return base.filter(r => !isOnDemand(r.metodo_envio));
+  }, [rows, quickToday, from, to, tab]);
+
   const visibleTotals = useMemo(() => {
     const monto = filtered.reduce((acc, it) => acc + Number(it.precio_cliente || 0), 0);
     const desc = filtered.reduce((acc, it) => acc + Number(it.precio_cliente || 0) * Number(it.descuento || 0), 0);
@@ -128,17 +172,35 @@ export const EnviosScreen = () => {
 
   return (
     <View style={styles.screen}>
-      {/* Header minimal */}
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Detalle</Text>
 
-        {/* Tarjeta Total (abre modal) */}
+        {/* Tabs On demand / Flex */}
+        <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 8 }}>
+          <Pressable
+            onPress={() => setTab('ondemand')}
+            style={[styles.tabBtn, tab === 'ondemand' && styles.tabBtnActive]}
+          >
+            <Text style={[styles.tabText, tab === 'ondemand' && styles.tabTextActive]}>
+              On demand
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setTab('flex')}
+            style={[styles.tabBtn, tab === 'flex' && styles.tabBtnActive]}
+          >
+            <Text style={[styles.tabText, tab === 'flex' && styles.tabTextActive]}>
+              Flex
+            </Text>
+          </Pressable>
+        </View>
+
         <Pressable style={styles.totalCard} onPress={() => setShowTotals(true)}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>{fmtMoney(visibleTotals.netoFinal)}</Text>
         </Pressable>
 
-        {/* Filtros: Hoy y Fecha (rango) */}
         <View style={styles.filtersBox}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             <Pressable
@@ -171,28 +233,47 @@ export const EnviosScreen = () => {
       {/* Lista */}
       <FlatList
         data={filtered}
-        keyExtractor={(item, i) => item.numero_tracking ?? String(i)}
+        keyExtractor={(item, i) => `${item.numero_tracking ?? 'nt'}-${i}`}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => setSelected(item)} activeOpacity={0.85}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.tracking}>{item.numero_tracking ?? '—'}</Text>
+        renderItem={({ item }) => {
+          const color = statusColor(item.estado, item.cadete);
+          const label = statusLabel(item.estado, item.cadete);
 
-              {/* Columna derecha: estado + precio chiquito debajo */}
-              <View style={{ alignItems: 'flex-end' }}>
-                <View style={[styles.statusPill, { backgroundColor: statusColor(item.estado) }]}>
-                  <Text style={styles.statusPillText}>{item.estado || 'Sin estado'}</Text>
+          return (
+            <TouchableOpacity style={styles.card} onPress={() => setSelected(item)} activeOpacity={0.9}>
+              <View style={styles.cardRow}>
+                {/* Columna izquierda */}
+                <View style={styles.leftCol}>
+                  <Text style={styles.clientTiny} numberOfLines={1}>
+                    {(item.nombre_fantasia && item.nombre_fantasia.trim()) ? item.nombre_fantasia : 'Cliente'}
+                  </Text>
+                  <Text style={styles.tracking}>{item.numero_tracking ?? '—'}</Text>
+                  <Text style={styles.address} numberOfLines={2}>
+                    {item.direccion ? item.direccion : '—'}
+                    {item.cp ? ` (${item.cp})` : ''}
+                  </Text>
+                  {(item.localidad || item.provincia || item.zona) && (
+                    <Text style={styles.zone} numberOfLines={1}>{zoneText(item)}</Text>
+                  )}
                 </View>
-                <Text style={styles.priceTiny}>{fmtMoney(item.precio_cliente)}</Text>
-              </View>
-            </View>
 
-            <Text style={styles.rowPrimary}>
-              {item.nombre_fantasia || 'Cliente'} {item.zona ? `• Zona ${item.zona}` : ''}
-            </Text>
-          </TouchableOpacity>
-        )}
+                {/* Columna derecha */}
+                <View style={styles.rightCol}>
+                  <View style={[styles.statusPill, { backgroundColor: color }]}>
+                    <Text style={styles.statusPillText}>{label}</Text>
+                  </View>
+                  <Text style={styles.priceBig}>{fmtMoney(item.precio_cliente)}</Text>
+                  {!!item.metodo_envio && (
+                    <View style={styles.methodBadge}>
+                      <Text style={styles.methodBadgeText}>{metodoLabel(item.metodo_envio)}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.centerPad}>
             <Text style={styles.emptyText}>No hay envíos para mostrar</Text>
@@ -200,7 +281,7 @@ export const EnviosScreen = () => {
         }
       />
 
-      {/* Modal detalle de envío */}
+      {/* Modal detalle */}
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
         <Pressable style={styles.backdrop} onPress={() => setSelected(null)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -209,15 +290,16 @@ export const EnviosScreen = () => {
               <Pressable onPress={() => setSelected(null)}><Text style={styles.close}>✕</Text></Pressable>
             </View>
             <View style={styles.modalBody}>
-              <Row label="Tracking" value={selected?.numero_tracking} />
-              <Row label="Cliente" value={selected?.nombre_fantasia} />
-              <Row label="Estado" value={selected?.estado} />
+              <Row label="Tracking" value={selected?.numero_tracking ?? '—'} />
+              <Row label="Cliente" value={selected?.nombre_fantasia ?? '—'} />
+              <Row label="Tipo" value={metodoLabel(selected?.metodo_envio)} />
+              <Row label="Estado" value={statusLabel(selected?.estado, selected?.cadete)} />
               <Row label="Dirección" value={`${selected?.direccion || ''}${selected?.cp ? ` (${selected?.cp})` : ''}`} />
-              <Row label="Cadete" value={selected?.cadete} />
-              <Row label="Zona" value={selected?.zona} />
+              <Row label="Zona" value={zoneText(selected)} />
+              <Row label="Cadete" value={selected?.cadete ?? '—'} />
               <Row label="Precio cliente" value={fmtMoney(selected?.precio_cliente)} />
-              <Row label="Colecta" value={selected?.fecha_colecta} />
-              <Row label="Últ. estado" value={selected?.fecha_estado} />
+              <Row label="Colecta" value={selected?.fecha_colecta ?? '—'} />
+              <Row label="Últ. estado" value={selected?.fecha_estado ?? '—'} />
             </View>
             <Pressable style={styles.primaryBtn} onPress={() => setSelected(null)}>
               <Text style={styles.primaryBtnText}>Cerrar</Text>
@@ -246,7 +328,7 @@ export const EnviosScreen = () => {
         </Pressable>
       </Modal>
 
-      {/* Modal calendario (rango) */}
+      {/* Modal calendario */}
       <Modal visible={calendarOpen} transparent animationType="fade" onRequestClose={() => setCalendarOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setCalendarOpen(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -305,11 +387,11 @@ export const EnviosScreen = () => {
 const Row = ({ label, value }: { label: string; value?: string | null }) => (
   <View style={styles.rowLine}>
     <Text style={styles.rowLabel}>{label}</Text>
-    <Text style={styles.rowValue} numberOfLines={2}>{value ?? '—'}</Text>
+    <Text style={styles.rowValue} numberOfLines={3}>{value ?? '—'}</Text>
   </View>
 );
 
-/** ===== Styles (paleta global, sin SIZES.h2/h3) ===== */
+/** ===== Styles ===== */
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: global.COLORS.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -317,6 +399,23 @@ const styles = StyleSheet.create({
 
   header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   title: { color: global.COLORS.text, fontSize: global.FONT?.size?.lg ?? 20, fontWeight: '800', marginBottom: 10 },
+
+  // Tabs
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: global.COLORS.white,
+  },
+  tabBtnActive: {
+    backgroundColor: global.COLORS.blue,
+    borderColor: global.COLORS.blue,
+  },
+  tabText: { color: global.COLORS.text, fontWeight: '700' },
+  tabTextActive: { color: global.COLORS.white, fontWeight: '800' },
 
   totalCard: {
     backgroundColor: global.COLORS.white,
@@ -358,13 +457,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  tracking: { color: global.COLORS.text, fontWeight: '800', fontSize: 15 },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999, alignSelf: 'flex-end' },
-  statusPillText: { color: global.COLORS.white, fontWeight: '800', fontSize: 11 },
-  priceTiny: { color: global.COLORS.gray, fontSize: global.FONT?.size?.xs ?? 11, marginTop: 4 },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  leftCol: { flex: 1, paddingRight: 12 },
+  rightCol: { alignItems: 'flex-end', gap: 6, minWidth: 110 },
 
-  rowPrimary: { color: global.COLORS.text, fontSize: global.FONT?.size?.md ?? 13, marginTop: 10 },
+  clientTiny: { color: global.COLORS.gray, fontSize: global.FONT?.size?.xs ?? 11, marginBottom: 2 },
+  tracking: { color: global.COLORS.text, fontWeight: '800', fontSize: 15, marginBottom: 6 },
+  address: { color: global.COLORS.text, fontSize: global.FONT?.size?.md ?? 13, lineHeight: 18 },
+  zone: { color: global.COLORS.gray, marginTop: 6, fontSize: global.FONT?.size?.sm ?? 12 },
+
+  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999 },
+  statusPillText: { color: global.COLORS.white, fontWeight: '800', fontSize: 11 },
+  priceBig: { color: global.COLORS.text, fontSize: global.FONT?.size?.md ?? 14, fontWeight: '800' },
+
+  methodBadge: { marginTop: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#EEE' },
+  methodBadgeText: { fontSize: 11, fontWeight: '700', color: global.COLORS.text },
 
   backdrop: { flex: 1, backgroundColor: '#00000055', padding: 20, justifyContent: 'center' },
   modalCard: { backgroundColor: global.COLORS.white, borderRadius: 16, padding: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: '#E6E6E6' },
@@ -377,12 +484,7 @@ const styles = StyleSheet.create({
   rowLabel: { width: 120, color: global.COLORS.gray, fontSize: global.FONT?.size?.sm ?? 12, textTransform: 'uppercase' },
   rowValue: { flex: 1, color: global.COLORS.text, fontSize: global.FONT?.size?.md ?? 13 },
 
-  primaryBtn: {
-    backgroundColor: global.COLORS.blue,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
+  primaryBtn: { backgroundColor: global.COLORS.blue, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   primaryBtnText: { color: global.COLORS.white, fontWeight: '800' },
 
   secondaryBtnFull: {
@@ -405,8 +507,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  dateBtnText: {
-    color: global.COLORS.text,
-    fontWeight: '600',
-  },
+  dateBtnText: { color: global.COLORS.text, fontWeight: '600' },
+
+  emptyText: { color: global.COLORS.gray },
 });
