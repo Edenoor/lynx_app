@@ -34,7 +34,10 @@
     "react-native-permissions": "^5.4.1",
     "react-native-qrcode-scanner": "^1.5.5",
     "react-native-qrcode-svg": "^6.3.15",
-    "react-native-reanimated": "~4.1.0"
+    "react-native-reanimated": "~4.1.0",
+    "expo-notifications": "~0.32.12",
+    "expo-device": "~8.0.9",
+    "@expo/vector-icons": "^15.0.3"
   },
   "private": true,
   "devDependencies": {

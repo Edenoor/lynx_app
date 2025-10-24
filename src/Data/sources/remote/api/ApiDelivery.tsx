@@ -8,3 +8,14 @@ const ApiDelivery = axios.create({
 })
 
 export { ApiDelivery}
+
+// import axios from "axios";
+
+// const ApiDelivery = axios.create({
+//     baseURL: 'https://api.wynflex.com.ar',
+//     headers: {
+//         'Content-type': 'application/json'
+//     }
+// })
+
+// export { ApiDelivery}

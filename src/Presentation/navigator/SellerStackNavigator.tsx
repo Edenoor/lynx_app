@@ -5,7 +5,8 @@ import { EnvioTurboScreen } from '../views/client/Landing/EnvioTurboScreen';
 import { EnvioTradicionalScreen } from '../views/client/Landing/EnvioTradicionalScreen';
 import { TiendasScreen } from '../views/client/Tiendas/Tiendas';
 import { MercadoLibreLink } from '../views/client/Tiendas/MercadoLibreLink';
-import { EnviosScreen } from '../views/client/Envios/EnviosScreen'; // 👈 NUEVO
+import { EnviosScreen } from '../views/client/Envios/EnviosScreen';
+import NotificationsScreen from '../views/common/NotificationScreen'; // 👈 nuevo import
 
 export type RootStackParamList = {
   ClientScreen: undefined;
@@ -13,14 +14,18 @@ export type RootStackParamList = {
   EnvioTradicionalScreen: undefined;
   TiendasScreen: undefined;
   MercadoLibreLink: undefined;
-  EnviosScreen: undefined; // 👈 NUEVO
+  EnviosScreen: undefined;
+  NotificationsScreen: undefined; // 👈 nuevo
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const SellerStackNavigator = () => {
   return (
-    <Stack.Navigator initialRouteName="ClientScreen" screenOptions={{ headerShown: true }}>
+    <Stack.Navigator
+      initialRouteName="ClientScreen"
+      screenOptions={{ headerShown: true }}
+    >
       <Stack.Screen
         name="ClientScreen"
         component={ClientScreen}
@@ -50,6 +55,11 @@ export const SellerStackNavigator = () => {
         name="EnviosScreen"
         component={EnviosScreen}
         options={{ title: 'Mis envíos' }}
+      />
+      <Stack.Screen
+        name="NotificationsScreen"
+        component={NotificationsScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

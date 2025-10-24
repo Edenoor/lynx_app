@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,6 +6,7 @@ import {
   View,
   Image,
   Modal,
+  Alert,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import useViewModel from './ViewModel';
@@ -14,16 +15,64 @@ import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
 
 import global from '../../../theme/global';
 
+// ✅ helpers de push
+import { setupPushAndRegisterDevice, attachNotificationListeners } from '../../../config/Push';
+
+// 🔔 campanita visual + contexto
+import Bell from '../../../components/Bell';
+import { useNotifications } from '../../../context/NotificationContext';
+
 interface Props extends StackScreenProps<RootStackParamList, 'ClientScreen'> {}
 
 export const ClientScreen = ({ navigation }: Props) => {
   const { user, removeUserSession } = useViewModel();
+  const { add } = useNotifications();
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
 
+  // nombre/username para registrar el device
+  const username = (user as any)?.username || user?.email || user?.name || '';
+
+  // 🔔 registro de push + listeners para seller
+  useEffect(() => {
+    if (!username) return;
+    let detach: (() => void) | null = null;
+
+    (async () => {
+      try {
+        // 1) registrar token/device del seller
+        await setupPushAndRegisterDevice({
+          username,
+          rol: 'seller',
+        });
+
+        // 2) listeners: cuando el driver acepta, mostramos aviso y guardamos en centro
+        detach = attachNotificationListeners({
+          currentUser: { username, rol: 'seller' },
+          onAccepted: (tracking) => {
+            if (!tracking) return;
+            Alert.alert(
+              'Envío aceptado',
+              `Tu envío ${tracking} fue tomado y está en camino 🚚`
+            );
+          },
+          onAny: ({ kind, title, body, data }) => {
+            add({ title, body, kind, data });
+          },
+        });
+      } catch {
+        // silencioso
+      }
+    })();
+
+    return () => {
+      detach?.();
+    };
+  }, [username, add]);
+
   const removeSession = async () => {
     await removeUserSession();
-    // Volvemos al stack padre donde existe HomeScreen
     navigation.getParent()?.reset({
       index: 0,
       routes: [{ name: 'HomeScreen' as never }],
@@ -60,10 +109,17 @@ export const ClientScreen = ({ navigation }: Props) => {
         <Image source={require('../../../../../assets/user.png')} style={styles.icon} />
       </TouchableOpacity>
 
+      {/* Campanita (alineada al menú) */}
+      <View style={styles.bellWrapper}>
+        <Bell />
+      </View>
+
       {/* Mensaje flotante y botón */}
       <View style={styles.panel}>
         <Image source={require('../../../../../assets/logo_envio.png')} style={styles.panelIcon} />
-        <Text style={styles.panelText}>Hola {user?.name || 'usuario'}, todo listo para tu envío</Text>
+        <Text style={styles.panelText}>
+          Hola {user?.name || 'usuario'}, todo listo para tu envío
+        </Text>
         <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.sendButton}>
           <Text style={styles.sendButtonText}>Solicitar envío</Text>
         </TouchableOpacity>
@@ -79,10 +135,16 @@ export const ClientScreen = ({ navigation }: Props) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>¿Qué tipo de envío querés hacer?</Text>
-            <TouchableOpacity style={styles.modalOption} onPress={() => handleOptionPress('EnvioTradicionalScreen')}>
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => handleOptionPress('EnvioTradicionalScreen')}
+            >
               <Text style={styles.modalOptionText}>🚚 Envío tradicional</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOption} onPress={() => handleOptionPress('EnvioTurboScreen')}>
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => handleOptionPress('EnvioTurboScreen')}
+            >
               <Text style={styles.modalOptionText}>⚡ Envío Turbo</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -108,7 +170,6 @@ export const ClientScreen = ({ navigation }: Props) => {
           <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
             <Text style={styles.sidebarItem}>Perfil</Text>
           </TouchableOpacity>
-          {/* Viajes ahora va a EnviosScreen */}
           <TouchableOpacity onPress={() => navigateTo('EnviosScreen')}>
             <Text style={styles.sidebarItem}>Viajes</Text>
           </TouchableOpacity>
@@ -122,7 +183,7 @@ export const ClientScreen = ({ navigation }: Props) => {
           <TouchableOpacity onPress={() => navigateTo('ClientScreen')}>
             <Text style={styles.sidebarItem}>Medios de pago</Text>
           </TouchableOpacity>
-          {/* Esta ruta vive en el stack padre; navegamos por el padre */}
+
           <TouchableOpacity
             onPress={() => {
               setIsSidebarOpen(false);
@@ -131,6 +192,7 @@ export const ClientScreen = ({ navigation }: Props) => {
           >
             <Text style={styles.sidebarItem}>Códigos descuento</Text>
           </TouchableOpacity>
+
           <TouchableOpacity>
             <Text style={styles.sidebarItem}>Ayuda</Text>
           </TouchableOpacity>
@@ -142,7 +204,6 @@ export const ClientScreen = ({ navigation }: Props) => {
     </View>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
@@ -160,6 +221,13 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     padding: 10,
     elevation: 3,
+    zIndex: 20,
+  },
+  bellWrapper: {
+    position: 'absolute',
+    top: global.SIZES.statusBarHeight + 10,
+    right: 20,
+    zIndex: 20,
   },
   icon: {
     width: 24,

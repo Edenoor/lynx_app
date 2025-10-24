@@ -4,6 +4,9 @@ import { GetUserLocalUseCase } from '../../Domain/useCases/userLocal/GetUserLoca
 import { SaveUserLocalUseCase } from '../../Domain/useCases/userLocal/SaveUserLocal';
 import { RemoveUserLocalUseCase } from '../../Domain/useCases/userLocal/RemoveUserLocal';
 
+// 👇 Centro de notificaciones (provider global)
+import { NotificationsProvider } from './NotificationContext';
+
 type Ctx = {
   user: User | null;
   saveUserSession: (u: User) => Promise<void>;
@@ -30,6 +33,7 @@ export const userInitialState: User = {
 export const UserProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
+  // Rehidratación inicial de la sesión
   useEffect(() => {
     (async () => {
       try {
@@ -60,9 +64,12 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     setUser(null);
   };
 
+  // 👇 Envolvemos con NotificationsProvider para que Bell/centro esté disponible en toda la app
   return (
     <UserContext.Provider value={{ user, saveUserSession, getUserSession, removeUserSession }}>
-      {children}
+      <NotificationsProvider>
+        {children}
+      </NotificationsProvider>
     </UserContext.Provider>
   );
 };

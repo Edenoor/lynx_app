@@ -48,7 +48,11 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        { "color": "#ffffff" }
+      ]
     ],
     "extra": {
       "MLI_APP_ID": "4868503143760383",
