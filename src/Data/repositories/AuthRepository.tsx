@@ -8,7 +8,7 @@ export class AuthRepositoryImpl implements AuthRepository {
     async login(username: string, password: string): Promise<ResponseApiDelivery> {
         try {
             
-            const response = await ApiDelivery.post<ResponseApiDelivery>('/login', {
+            const response = await ApiDelivery.post<ResponseApiDelivery>('/v2/auth/login', {
                 username: username,
                 password: password                
             });

@@ -1,21 +1,19 @@
-import axios from "axios";
-
-const ApiDelivery = axios.create({
-    baseURL: 'http://192.168.1.117:5000',
-    headers: {
-        'Content-type': 'application/json'
-    }
-})
-
-export { ApiDelivery}
-
 // import axios from "axios";
 
 // const ApiDelivery = axios.create({
-//     baseURL: 'https://api.wynflex.com.ar',
+//     baseURL: 'http://192.168.1.117:5000',
 //     headers: {
 //         'Content-type': 'application/json'
 //     }
 // })
 
 // export { ApiDelivery}
+
+import axios from "axios";
+
+export const ApiDelivery = axios.create({
+  baseURL: process.env.EXPO_PUBLIC_API_URL, // <- tiene que ser esta
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
