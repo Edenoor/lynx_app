@@ -1,26 +1,27 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.wynflex.com.ar';
+// src/Presentation/config/Api.tsx
+export const API_URL =
+  (process.env.EXPO_PUBLIC_API_URL ?? "https://api.wynflex.com.ar").replace(/\/+$/, "");
 
 export const postJson = async (path: string, body: any) => {
-  const res = await fetch(`${API_URL}${path}`, {
+  const finalPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${API_URL}${finalPath}`;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
   let json: any;
-  try { json = await res.json(); } catch { json = { ok: res.ok, status: res.status }; }
+  try {
+    json = await res.json();
+  } catch {
+    json = { ok: res.ok, status: res.status };
+  }
+
+  // opcional: normalizar ok si el backend no lo trae
+  if (typeof json?.ok !== "boolean") json.ok = res.ok;
+  if (typeof json?.status !== "number") json.status = res.status;
+
   return json;
 };
-
-// export const API_URL =
-//   process.env.EXPO_PUBLIC_API_URL ?? 'https://api.wynflex.com.ar'; // cambiá la IP si hace falta
-
-// export const postJson = async (path: string, body: any) => {
-//   const res = await fetch(`${API_URL}${path}`, {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify(body),
-//   });
-//   let json: any;
-//   try { json = await res.json(); } catch { json = { ok: res.ok, status: res.status }; }
-//   return json;
-// };

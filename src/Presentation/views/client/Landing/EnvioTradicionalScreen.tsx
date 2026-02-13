@@ -201,7 +201,7 @@ export const EnvioTradicionalScreen = () => {
     }
     setLoading(true);
     try {
-      const res = await postJson('/envios/tradicional', {
+      const res = await postJson('/v1/delivery/envios/tradicional', {
         username,
         clienteNombre: user?.nombre_fantasia || user?.username || user?.email || username, // nombre visible del cliente
         origin,                         // address corta/full + lat/lng
