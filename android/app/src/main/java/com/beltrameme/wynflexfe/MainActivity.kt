@@ -1,4 +1,4 @@
-package com.wynflex.lynx
+package com.beltrameme.wynflexfe
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

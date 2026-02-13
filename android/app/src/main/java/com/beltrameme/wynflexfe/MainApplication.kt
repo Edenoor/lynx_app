@@ -1,4 +1,4 @@
-package com.wynflex.lynx
+package com.beltrameme.wynflexfe
 
 import android.app.Application
 import android.content.res.Configuration
