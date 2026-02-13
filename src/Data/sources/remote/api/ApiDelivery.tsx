@@ -1,19 +1,14 @@
-// import axios from "axios";
-
-// const ApiDelivery = axios.create({
-//     baseURL: 'http://192.168.1.117:5000',
-//     headers: {
-//         'Content-type': 'application/json'
-//     }
-// })
-
-// export { ApiDelivery}
-
+// src/Data/sources/remote/api/ApiDelivery.tsx
 import axios from "axios";
+import { ENV } from "../../../../Config/env";
+import { attachInterceptors } from "./ApiInterceptors";
 
 export const ApiDelivery = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL, // <- tiene que ser esta
+  baseURL: ENV.API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 15000,
 });
+
+attachInterceptors(ApiDelivery);
