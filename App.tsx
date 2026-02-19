@@ -1,18 +1,19 @@
-import * as React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { View, StatusBar } from 'react-native';
-import { MainStackNavigator } from './src/Presentation/navigator/MainStackNavigator';
-import global from './src/Presentation/theme/global';
+import React from "react";
+import { NavigationContainer } from "@react-navigation/native";
 
-const App = () => {
+import { MainStackNavigator } from "./src/Presentation/navigator/MainStackNavigator";
+
+import { UserProvider } from "./src/Presentation/context/UserContext";
+import { OnboardingProvider } from "./src/Presentation/onboarding/OnboardingContext";
+
+export default function App() {
   return (
-    <View style={{ flex: 1, backgroundColor: global.COLORS.background, padding: global.SPACING.md }}>
-      <StatusBar backgroundColor={global.COLORS.primary} barStyle="dark-content" />
-      <NavigationContainer>
-        <MainStackNavigator />
-      </NavigationContainer>
-    </View>
+    <UserProvider>
+      <OnboardingProvider>
+        <NavigationContainer>
+          <MainStackNavigator />
+        </NavigationContainer>
+      </OnboardingProvider>
+    </UserProvider>
   );
-};
-
-export default App;
+}

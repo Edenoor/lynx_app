@@ -9,6 +9,7 @@ import {
   Switch,
   Alert,
   AppState,
+  Pressable
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import useViewModel from './ViewModel';
@@ -16,6 +17,7 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../../navigator/DriverStackNavigator';
 import global from '../../../theme/global';
 import { postJson } from '../../../config/Api';
+import { useOnboarding } from "./../../../onboarding/OnboardingContext"; 
 
 // 🔔 helpers de notificaciones/heartbeat
 import { setupPushAndRegisterDevice, attachNotificationListeners } from '../../../config/Push';
@@ -38,6 +40,8 @@ const getVehicleEmoji = (user: any): string => {
 };
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+
 
 async function acceptShipmentInline(tracking: string, driverUsername: string) {
   const res = await fetch(`${API_BASE}/envios/${tracking}/accept`, {
@@ -189,7 +193,7 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   const vehicleEmoji = useMemo(() => getVehicleEmoji(user), [user]);
   const turboColor = turboOn ? '#16a34a' : '#ef4444';
-
+const { resetForCurrentUser } = useOnboarding();
   return (
     <View style={styles.container}>
       {/* Mapa */}
@@ -253,6 +257,23 @@ export const DriverScreen = ({ navigation }: Props) => {
             <TouchableOpacity style={styles.modalOption} onPress={handleOptionPress}>
               <Text style={styles.modalOptionText}>📋 Ver mis viajes</Text>
             </TouchableOpacity>
+            {__DEV__ && (
+  <Pressable
+    onPress={resetForCurrentUser}
+    style={{
+      marginTop: 12,
+      backgroundColor: "black",
+      padding: 12,
+      borderRadius: 10,
+      alignItems: "center",
+    }}
+  >
+    <Text style={{ color: "white", fontWeight: "700" }}>
+      Rehacer onboarding (test)
+    </Text>
+  </Pressable>
+)}
+
             <TouchableOpacity style={styles.modalOption} onPress={() => setModalVisible(false)}>
               <Text style={styles.modalOptionText}>📍 Ver pendientes cerca</Text>
             </TouchableOpacity>

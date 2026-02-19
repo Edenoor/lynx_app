@@ -1,27 +1,58 @@
-import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { DriverScreen } from '../views/driver/landing/Driver';
-import { EnviosScreen } from '../views/driver/Envios/EnviosScreen';
-import NotificationsScreen from '../views/common/NotificationScreen'; // corregido: ruta plural y consistente
+import React from "react";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-export type RootStackParamList = {
+import { DriverScreen } from "../views/driver/landing/Driver";
+import { EnviosScreen } from "../views/driver/Envios/EnviosScreen";
+import NotificationsScreen from "../views/common/NotificationScreen";
+
+import { OnboardingStackNavigator } from "../navigator/OnboardingStackNavigator";
+import { useOnboarding } from "../onboarding/OnboardingContext";
+
+export type DriverStackParamList = {
+  Onboarding: undefined;
   DriverScreen: undefined;
   EnviosScreen: undefined;
-  NotificationsScreen: undefined; // corregido: plural
+  NotificationsScreen: undefined;
 };
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+const Stack = createNativeStackNavigator<DriverStackParamList>();
 
 export const DriverStackNavigator = () => {
+  const { state } = useOnboarding();
+
+  const onboardingCompleted = state.completedLocal;
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="DriverScreen" component={DriverScreen} />
-      <Stack.Screen name="EnviosScreen" component={EnviosScreen} />
-      <Stack.Screen
-        name="NotificationsScreen"
-        component={NotificationsScreen}
-        options={{ headerShown: false }}
-      />
+
+      {/* si NO completó onboarding → mostrar onboarding */}
+      {!onboardingCompleted && (
+        <Stack.Screen
+          name="Onboarding"
+          component={OnboardingStackNavigator}
+        />
+      )}
+
+      {/* si completó onboarding → mostrar app normal */}
+      {onboardingCompleted && (
+        <>
+          <Stack.Screen
+            name="DriverScreen"
+            component={DriverScreen}
+          />
+
+          <Stack.Screen
+            name="EnviosScreen"
+            component={EnviosScreen}
+          />
+
+          <Stack.Screen
+            name="NotificationsScreen"
+            component={NotificationsScreen}
+          />
+        </>
+      )}
+
     </Stack.Navigator>
   );
 };
