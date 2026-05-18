@@ -1,10 +1,34 @@
 // src/Presentation/views/driver/Envios/ViewModel.tsx
-import { useContext, useEffect, useState } from "react";
+
+import { useContext, useEffect, useMemo, useState } from "react";
 import { UserContext } from "../../../context/UserContext";
-import { postJson } from "../../../config/Api";
+import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
+
+const buildLegacyDriverName = (sessionUser: any) => {
+  const legacyDriverName = sessionUser?.legacyDriverName?.trim();
+
+  if (legacyDriverName) {
+    return legacyDriverName;
+  }
+
+  const fullName = [sessionUser?.first_name, sessionUser?.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  if (fullName) {
+    return fullName;
+  }
+
+  return sessionUser?.name?.trim() || "";
+};
+
+const normalizeLegacyDriverName = (value: string) => {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+};
 
 const useEnviosViewModel = () => {
-  const { user } = useContext(UserContext);
+  const { user, getUserSession } = useContext(UserContext);
 
   const [loading, setLoading] = useState(false);
   const [list, setList] = useState<any[]>([]);
@@ -12,34 +36,75 @@ const useEnviosViewModel = () => {
   const [discount, setDiscount] = useState<any>(null);
   const [error, setError] = useState("");
 
-  const username = (user as any)?.username || user?.email || user?.name || "";
+  const legacyDriverName = useMemo(() => {
+    return buildLegacyDriverName(user);
+  }, [user]);
 
   const load = async () => {
     setError("");
 
-    if (!username) {
-      setError("No hay username en sesión");
+    let sessionUser = user;
+
+    if (!sessionUser?.token || !buildLegacyDriverName(sessionUser)) {
+      sessionUser = await getUserSession();
+    }
+
+    const driverName = buildLegacyDriverName(sessionUser);
+
+    if (!driverName) {
+      setError("No hay nombre de chofer en sesión");
       setList([]);
       setTotales(null);
       setDiscount(null);
       return;
     }
 
+    if (!sessionUser?.token) {
+      setError("Token no disponible en sesión");
+      setList([]);
+      setTotales(null);
+      setDiscount(null);
+      return;
+    }
+
+    const normalizedDriverName = normalizeLegacyDriverName(driverName);
+
     setLoading(true);
+
     try {
-      // ✅ FIX: tu server lo sirve bajo /v1/data
-      const r = await postJson("/v1/data/driver/me", { username });
+
+
+      const response = await ApiDelivery.post("/v1/data/driver/me", {
+        // Legacy espera este campo, aunque realmente filtra por cadete.
+        username: normalizedDriverName,
+      });
+
+
+      const r = response.data;
 
       const ok =
-        r?.ok === true || r?.success === true || r?.status === "ok" || r?.statusCode === 200;
+        r?.ok === true ||
+        r?.success === true ||
+        r?.status === "ok" ||
+        r?.statusCode === 200;
 
-      if (!ok) throw new Error(r?.message || r?.error || "No se pudo obtener envíos");
+      if (!ok) {
+        throw new Error(
+          r?.message || r?.error || "No se pudo obtener envíos"
+        );
+      }
 
       setList(r?.result ?? r?.data ?? []);
       setTotales(r?.totales ?? null);
       setDiscount(r?.discount ?? null);
     } catch (e: any) {
-      setError(e?.message ?? "Error cargando envíos");
+      const message =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Error cargando envíos";
+
+      setError(message);
       setList([]);
       setTotales(null);
       setDiscount(null);
@@ -51,9 +116,21 @@ const useEnviosViewModel = () => {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username]);
+  }, [legacyDriverName]);
 
-  return { loading, list, totales, discount, error, reload: load, username };
+  return {
+    loading,
+    list,
+    totales,
+    discount,
+    error,
+    reload: load,
+
+    // Conservamos username para no romper componentes existentes,
+    // pero ahora representa el nombre legacy del chofer.
+    username: legacyDriverName,
+    legacyDriverName,
+  };
 };
 
 export default useEnviosViewModel;

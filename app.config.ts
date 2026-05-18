@@ -3,8 +3,8 @@ import type { ExpoConfig, ConfigContext } from "expo/config";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "WynFlex",
-  slug: "wynflex",
+  name: "Lynx",
+  slug: "lynx",
 
   android: {
     ...(config.android ?? {}),

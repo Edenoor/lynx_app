@@ -22,6 +22,7 @@ const initialState: OnboardingState = {
   acceptedTerms: false,
   files: {},
   completedLocal: false,
+  vehicle: { type: null, brand: null, model: null, plate: null },
 };
 
 function reducer(state: OnboardingState, action: OnboardingAction): OnboardingState {
@@ -39,6 +40,9 @@ function reducer(state: OnboardingState, action: OnboardingAction): OnboardingSt
       // Limpia solo memoria + fotos (la key por usuario se limpia desde resetForCurrentUser)
       void clearOnboardingDir();
       return { ...initialState };
+
+      case "SET_VEHICLE":
+  return { ...state, vehicle: action.value };
 
     default:
       return state;

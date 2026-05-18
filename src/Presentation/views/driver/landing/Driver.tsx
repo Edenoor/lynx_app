@@ -245,44 +245,92 @@ const { resetForCurrentUser } = useOnboarding();
       </View>
 
       {/* Modal */}
-      <Modal
-        animationType="slide"
-        transparent
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>¿Qué querés hacer?</Text>
-            <TouchableOpacity style={styles.modalOption} onPress={handleOptionPress}>
-              <Text style={styles.modalOptionText}>📋 Ver mis viajes</Text>
-            </TouchableOpacity>
-            {__DEV__ && (
-  <Pressable
-    onPress={resetForCurrentUser}
-    style={{
-      marginTop: 12,
-      backgroundColor: "black",
-      padding: 12,
-      borderRadius: 10,
-      alignItems: "center",
-    }}
-  >
-    <Text style={{ color: "white", fontWeight: "700" }}>
-      Rehacer onboarding (test)
-    </Text>
-  </Pressable>
-)}
+    <Modal
+  animationType="slide"
+  transparent
+  visible={modalVisible}
+  onRequestClose={() => setModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContent}>
 
-            <TouchableOpacity style={styles.modalOption} onPress={() => setModalVisible(false)}>
-              <Text style={styles.modalOptionText}>📍 Ver pendientes cerca</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <Text style={styles.modalCancel}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <Text style={styles.modalTitle}>¿Qué querés hacer?</Text>
+
+      {/* Ver mis viajes */}
+      <TouchableOpacity
+        style={styles.modalOption}
+        onPress={handleOptionPress}
+      >
+        <Text style={styles.modalOptionText}>📋 Ver mis viajes</Text>
+      </TouchableOpacity>
+
+      {/* NUEVO — COLECTA */}
+      <TouchableOpacity
+        style={styles.modalOption}
+        onPress={() => {
+          setModalVisible(false);
+          navigation.navigate("DriverScanScreen", { mode: "colecta" });
+        }}
+      >
+        <Text style={styles.modalOptionText}>📦 Colectar envíos (retiro)</Text>
+      </TouchableOpacity>
+
+      {/* NUEVO — EN PLANTA */}
+      <TouchableOpacity
+        style={styles.modalOption}
+        onPress={() => {
+          setModalVisible(false);
+          navigation.navigate("DriverScanScreen", { mode: "planta" });
+        }}
+      >
+        <Text style={styles.modalOptionText}>🏭 Descargar en depósito</Text>
+      </TouchableOpacity>
+
+      {/* NUEVO — ASIGNARME */}
+      <TouchableOpacity
+        style={styles.modalOption}
+        onPress={() => {
+          setModalVisible(false);
+          navigation.navigate("DriverScanScreen", { mode: "asignarme" });
+        }}
+      >
+        <Text style={styles.modalOptionText}>✅ Asignarme envíos</Text>
+      </TouchableOpacity>
+
+
+      {/* Pendientes cerca */}
+      <TouchableOpacity
+        style={styles.modalOption}
+        onPress={() => setModalVisible(false)}
+        >
+        <Text style={styles.modalOptionText}>📍 Ver pendientes cerca</Text>
+      </TouchableOpacity>
+        {/* Debug onboarding */}
+        {__DEV__ && (
+          <Pressable
+            onPress={resetForCurrentUser}
+            style={{
+              marginTop: 12,
+              backgroundColor: "black",
+              padding: 12,
+              borderRadius: 10,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>
+              Rehacer onboarding (test)
+            </Text>
+          </Pressable>
+        )}
+
+      {/* Cancelar */}
+      <TouchableOpacity onPress={() => setModalVisible(false)}>
+        <Text style={styles.modalCancel}>Cancelar</Text>
+      </TouchableOpacity>
+
+    </View>
+  </View>
+</Modal>
 
       {/* Sidebar */}
       {isSidebarOpen && (

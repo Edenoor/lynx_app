@@ -11,7 +11,7 @@ export function TermsScreen({ navigation }: Props) {
 
   const accept = () => {
     dispatch({ type: "ACCEPT_TERMS", value: true });
-    navigation.navigate("Selfie");
+    navigation.navigate("Vehicle");
   };
 
   return (

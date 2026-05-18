@@ -1,5 +1,6 @@
 // src/Presentation/views/auth/home/Home.tsx
-import React, { useEffect } from 'react';
+
+import React, { useEffect } from "react";
 import {
   View,
   Text,
@@ -8,15 +9,20 @@ import {
   StyleSheet,
   SafeAreaView,
   Image,
-} from 'react-native';
-import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList } from '../../../navigator/MainStackNavigator';
-import useViewModel from './ViewModel';
-import { CustomTextInput } from '../../../components/CustomTextInput';
-import { RoundedButton } from '../../../components/RoundedButton';
-import global from '../../../theme/global';
+} from "react-native";
 
-type Props = StackScreenProps<RootStackParamList, 'HomeScreen'>;
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+
+import { RootStackParamList } from "../../../navigator/MainStackNavigator";
+
+import useViewModel from "./ViewModel";
+
+import { CustomTextInput } from "../../../components/CustomTextInput";
+import { RoundedButton } from "../../../components/RoundedButton";
+
+import global from "../../../theme/global";
+
+type Props = NativeStackScreenProps<RootStackParamList, "HomeScreen">;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { values, onChange, login, errorMessage, clearError } = useViewModel();
@@ -29,38 +35,54 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }, [errorMessage]);
 
   const onPressLogin = async () => {
-    const res = await login();
-    if (!res.ok) return;
+    const result = await login();
 
-    if (res.rol === 'DRIVER') {
-      navigation.reset({ index: 0, routes: [{ name: 'DriverStackNavigator' }] });
-    } else {
-      navigation.reset({ index: 0, routes: [{ name: 'SellerStackNavigator' }] });
+    if (!result.ok) {
+      return;
     }
+
+    if (result.rol === "DRIVER") {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "DriverStackNavigator" }],
+      });
+
+      return;
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "SellerStackNavigator" }],
+    });
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Image
-          source={require('../../../../../assets/icon.png')}
+          source={require("../../../../../assets/icon.png")}
           style={styles.logo}
         />
+
         <Text style={styles.title}>Bienvenido</Text>
-        <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
+
+        <Text style={styles.subtitle}>
+          Inicia sesión para continuar
+        </Text>
       </View>
 
       <View style={styles.form}>
         <CustomTextInput
-          image={require('../../../../../assets/user.png')}
+          image={require("../../../../../assets/user.png")}
           placeholder="Usuario"
           value={values.username}
           keyboardType="default"
           property="username"
           onChangeText={onChange}
         />
+
         <CustomTextInput
-          image={require('../../../../../assets/password.png')}
+          image={require("../../../../../assets/password.png")}
           placeholder="Contraseña"
           value={values.password}
           keyboardType="default"
@@ -69,15 +91,27 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           onChangeText={onChange}
         />
 
-        <RoundedButton text="Ingresar" onPress={onPressLogin} />
+        <RoundedButton
+          text="Ingresar"
+          onPress={onPressLogin}
+        />
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity onPress={() => navigation.navigate('RecuperarScreen')}>
-          <Text style={styles.link}>¿Olvidaste tu contraseña?</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("RecuperarScreen")}
+        >
+          <Text style={styles.link}>
+            ¿Olvidaste tu contraseña?
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
-          <Text style={styles.link}>Crear cuenta</Text>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate("RegisterScreen")}
+        >
+          <Text style={styles.link}>
+            Crear cuenta
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -85,12 +119,48 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: global.COLORS.background, padding: global.SPACING.lg, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: global.SPACING.xl },
-  logo: { width: 72, height: 72, marginBottom: global.SPACING.md },
-  title: { fontSize: global.SIZES.h1, color: global.COLORS.text, fontWeight: '600' },
-  subtitle: { fontSize: global.FONT.size.md, color: global.COLORS.gray, marginTop: 4 },
-  form: { gap: 16 },
-  footer: { marginTop: global.SPACING.xl, alignItems: 'center', gap: 8 },
-  link: { color: global.COLORS.blue, fontSize: global.FONT.size.md },
+  container: {
+    flex: 1,
+    backgroundColor: global.COLORS.background,
+    padding: global.SPACING.lg,
+    justifyContent: "center",
+  },
+
+  header: {
+    alignItems: "center",
+    marginBottom: global.SPACING.xl,
+  },
+
+  logo: {
+    width: 72,
+    height: 72,
+    marginBottom: global.SPACING.md,
+  },
+
+  title: {
+    fontSize: global.SIZES.h1,
+    color: global.COLORS.text,
+    fontWeight: "600",
+  },
+
+  subtitle: {
+    fontSize: global.FONT.size.md,
+    color: global.COLORS.gray,
+    marginTop: 4,
+  },
+
+  form: {
+    gap: 16,
+  },
+
+  footer: {
+    marginTop: global.SPACING.xl,
+    alignItems: "center",
+    gap: 8,
+  },
+
+  link: {
+    color: global.COLORS.blue,
+    fontSize: global.FONT.size.md,
+  },
 });

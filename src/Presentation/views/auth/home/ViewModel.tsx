@@ -1,16 +1,41 @@
 import { useContext, useState } from "react";
 import { UserContext } from "../../../context/UserContext";
 import { LoginAuthUseCase } from "../../../../Domain/useCases/auth/LoginAuth";
+import { User } from "../../../../Domain/entities/User";
+import {
+  ApiDelivery,
+  setAuthToken,
+} from "../../../../Data/sources/remote/api/ApiDelivery";
+
+type LoginResult = {
+  ok: boolean;
+  rol?: string;
+  message?: string;
+};
+
+const buildFullName = (firstName?: string, lastName?: string, fallback?: string) => {
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return fullName || fallback || "";
+};
 
 const HomeViewModel = () => {
   const [errorMessage, setErrorMessage] = useState("");
-  const [values, setValues] = useState({ username: "", password: "" });
+  const [values, setValues] = useState({
+    username: "",
+    password: "",
+  });
 
   const { user, saveUserSession, removeUserSession } = useContext(UserContext);
-  console.log("USUARIO DE SESION: " + JSON.stringify(user));
 
-  const onChange = (property: string, value: any) => {
-    setValues((v) => ({ ...v, [property]: value }));
+  const onChange = (property: string, value: string) => {
+    setValues((currentValues) => ({
+      ...currentValues,
+      [property]: value,
+    }));
+
+    if (errorMessage) {
+      setErrorMessage("");
+    }
   };
 
   const isValidForm = (): boolean => {
@@ -18,61 +43,116 @@ const HomeViewModel = () => {
       setErrorMessage("Ingresa el usuario");
       return false;
     }
+
     if (!values.password.trim()) {
       setErrorMessage("Ingresa la contraseña");
       return false;
     }
+
     return true;
   };
 
   const clearError = () => setErrorMessage("");
 
-  const login = async (): Promise<{ ok: boolean; rol?: string; message?: string }> => {
-    if (!isValidForm()) return { ok: false, message: errorMessage };
+  const login = async (): Promise<LoginResult> => {
+    if (!isValidForm()) {
+      return {
+        ok: false,
+        message: "Completá usuario y contraseña",
+      };
+    }
 
     try {
-      const resp = await LoginAuthUseCase(values.username, values.password);
+      const response: any = await LoginAuthUseCase(
+        values.username.trim(),
+        values.password
+      );
 
-      let r: any = resp;
-      if (r && typeof r.json === "function") {
-        try { r = await r.json(); } catch {}
-      }
+      console.log("LOGIN RESPONSE:", JSON.stringify(response));
 
-      console.log("RESPONSE NORMALIZADA:", JSON.stringify(r));
+      const success = response?.ok === true;
+      const token = response?.token;
+      const authUser = response?.user;
 
-      const httpOk =
-        typeof r?.status === "number" ? r.status >= 200 && r.status < 300 : false;
-      const reportedOk = r?.ok === true || r?.success === true || r?.status === "ok";
-      const success = httpOk || reportedOk;
+      if (!success || !token || !authUser?.id) {
+        const msg =
+          response?.message ||
+          response?.error ||
+          "Usuario o contraseña incorrectos";
 
-      if (!success) {
-        const msg = r?.message || r?.error || "Error de autenticación";
         setErrorMessage(msg);
-        return { ok: false, message: msg };
+
+        return {
+          ok: false,
+          message: msg,
+        };
       }
 
-      const payload = r?.data ?? r?.result ?? r;
-      const rawUser = payload?.user ?? payload?.usuario ?? payload?.data ?? payload;
+      setAuthToken(token);
 
-      const rawRole = rawUser?.rol ?? rawUser?.role ?? payload?.rol ?? payload?.role;
-      const rol = typeof rawRole === "string" ? rawRole.toUpperCase() : "SELLER";
+      let currentUser: any = null;
 
-      const userToSave: any = {
-        id: String(rawUser?.id ?? rawUser?._id ?? ""),
-        name: rawUser?.name ?? rawUser?.fullName ?? rawUser?.username ?? "",
-        email: rawUser?.email ?? rawUser?.mail ?? "",
-        password: "",
-        confirmPassword: "",
+      try {
+        const currentUserResponse = await ApiDelivery.get(`/v2/users/${authUser.id}`);
+        currentUser = currentUserResponse?.data?.user ?? null;
+
+        console.log("CURRENT USER RESPONSE:", JSON.stringify(currentUserResponse.data));
+      } catch (error: any) {
+        console.log(
+          "CURRENT USER ERROR:",
+          JSON.stringify(error?.response?.data ?? error?.message)
+        );
+      }
+
+      const rawUser = currentUser ?? authUser;
+
+      const rol =
+        typeof rawUser?.rol === "string"
+          ? rawUser.rol.toUpperCase()
+          : typeof authUser?.rol === "string"
+          ? authUser.rol.toUpperCase()
+          : "SELLER";
+
+      const firstName = rawUser?.first_name ?? "";
+      const lastName = rawUser?.last_name ?? "";
+      const fullName = buildFullName(
+        firstName,
+        lastName,
+        rawUser?.name ?? rawUser?.fullName ?? rawUser?.username ?? values.username.trim()
+      );
+
+      const userToSave: User = {
+        id: String(rawUser?.id ?? authUser.id ?? ""),
+        username: rawUser?.username ?? authUser?.username ?? values.username.trim(),
+        first_name: firstName,
+        last_name: lastName,
+        name: fullName,
+        email: rawUser?.email ?? "",
+        phone: rawUser?.phone ?? "",
         rol,
-        username: values.username, // 👈 lo guardamos para /client/me
+        token,
+        legacyDriverName: buildFullName(firstName, lastName),
       };
 
-      await saveUserSession(userToSave as any);
-      return { ok: true, rol: userToSave.rol };
-    } catch (e: any) {
-      const msg = e?.message ?? "Error de autenticación";
+      await saveUserSession(userToSave);
+
+      return {
+        ok: true,
+        rol,
+      };
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Error de autenticación";
+
       setErrorMessage(msg);
-      return { ok: false, message: msg };
+
+      return {
+        ok: false,
+        message: msg,
+      };
     }
   };
 
