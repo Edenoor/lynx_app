@@ -9,7 +9,7 @@ import {
   Switch,
   Alert,
   AppState,
-  Pressable
+  Pressable,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import useViewModel from './ViewModel';
@@ -17,31 +17,63 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../../navigator/DriverStackNavigator';
 import global from '../../../theme/global';
 import { postJson } from '../../../config/Api';
-import { useOnboarding } from "./../../../onboarding/OnboardingContext"; 
+import { useOnboarding } from '../../../onboarding/OnboardingContext';
 
-// 🔔 helpers de notificaciones/heartbeat
-import { setupPushAndRegisterDevice, attachNotificationListeners } from '../../../config/Push';
-import { startDriverHeartbeat, stopDriverHeartbeat } from '../../../config/HeartBeat';
+import {
+  setupPushAndRegisterDevice,
+  attachNotificationListeners,
+} from '../../../config/Push';
+import {
+  startDriverHeartbeat,
+  stopDriverHeartbeat,
+} from '../../../config/HeartBeat';
 
-// 🔔 campanita visual
 import Bell from '../../../components/Bell';
 import { useNotifications } from '../../../context/NotificationContext';
 
 interface Props extends StackScreenProps<RootStackParamList, 'DriverScreen'> {}
 
-const VEHICLE_KEYS_GUESS = ['vehicle', 'vehiculo', 'vehicleType', 'tipo_vehiculo', 'vehicle_type'];
-
-const getVehicleEmoji = (user: any): string => {
-  const raw =
-    VEHICLE_KEYS_GUESS.map((k) => (user && user[k] ? String(user[k]) : '')).find(Boolean) || '';
-  const s = raw.toLowerCase();
-  if (s.includes('moto') || s.includes('moped') || s.includes('bike')) return '🏍️';
-  return '🚚'; // default
-};
+const VEHICLE_KEYS_GUESS = [
+  'vehicle',
+  'vehiculo',
+  'vehicleType',
+  'tipo_vehiculo',
+  'vehicle_type',
+];
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+const getFirstWord = (value?: string | null): string => {
+  if (!value || typeof value !== 'string') return '';
 
+  return value.trim().split(/\s+/)[0] || '';
+};
+
+const getDriverDisplayName = (user: any): string => {
+  const firstName =
+    getFirstWord(user?.first_name) ||
+    getFirstWord(user?.firstName) ||
+    getFirstWord(user?.name) ||
+    getFirstWord(user?.username) ||
+    getFirstWord(user?.email);
+
+  return firstName || 'driver';
+};
+
+const getVehicleEmoji = (user: any): string => {
+  const raw =
+    VEHICLE_KEYS_GUESS.map((k) =>
+      user && user[k] ? String(user[k]) : ''
+    ).find(Boolean) || '';
+
+  const s = raw.toLowerCase();
+
+  if (s.includes('moto') || s.includes('moped') || s.includes('bike')) {
+    return '🏍️';
+  }
+
+  return '🚚';
+};
 
 async function acceptShipmentInline(tracking: string, driverUsername: string) {
   const res = await fetch(`${API_BASE}/envios/${tracking}/accept`, {
@@ -49,6 +81,7 @@ async function acceptShipmentInline(tracking: string, driverUsername: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ driverUsername }),
   });
+
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     throw new Error(t || 'Error al aceptar envío');
@@ -58,6 +91,7 @@ async function acceptShipmentInline(tracking: string, driverUsername: string) {
 export const DriverScreen = ({ navigation }: Props) => {
   const { user, removeUserSession } = useViewModel();
   const { add } = useNotifications();
+  const { resetForCurrentUser } = useOnboarding();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -67,23 +101,33 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   const username = (user as any)?.username || user?.email || user?.name || '';
 
+  const driverDisplayName = useMemo(() => {
+    return getDriverDisplayName(user);
+  }, [user]);
+
   const defaultVehicleType = useMemo(() => {
     const raw =
-      VEHICLE_KEYS_GUESS.map((k) => (user && (user as any)[k] ? String((user as any)[k]) : '')).find(
-        Boolean
-      ) || '';
+      VEHICLE_KEYS_GUESS.map((k) =>
+        user && (user as any)[k] ? String((user as any)[k]) : ''
+      ).find(Boolean) || '';
+
     const s = raw.toLowerCase();
-    if (s.includes('moto') || s.includes('bike') || s.includes('moped')) return 'moto';
-    if (s.includes('auto') || s.includes('car')) return 'auto';
+
+    if (s.includes('moto') || s.includes('bike') || s.includes('moped')) {
+      return 'moto';
+    }
+
+    if (s.includes('auto') || s.includes('car')) {
+      return 'auto';
+    }
+
     return 'camioneta';
   }, [user]);
 
-  // 🧲 setup push + listeners + heartbeat
   const detachNotiRef = useRef<null | (() => void)>(null);
+
   useEffect(() => {
     if (!username) return;
-
-    let mounted = true;
 
     (async () => {
       try {
@@ -97,6 +141,7 @@ export const DriverScreen = ({ navigation }: Props) => {
           currentUser: { username, rol: 'driver' },
           onNewTrad: (tracking) => {
             if (!tracking) return;
+
             Alert.alert(
               'Nuevo envío cercano',
               `Tracking: ${tracking}`,
@@ -123,9 +168,7 @@ export const DriverScreen = ({ navigation }: Props) => {
         });
 
         startDriverHeartbeat(username, available, defaultVehicleType);
-      } catch (e) {
-        // silencioso
-      }
+      } catch (_e) {}
     })();
 
     const sub = AppState.addEventListener('change', (state) => {
@@ -137,24 +180,30 @@ export const DriverScreen = ({ navigation }: Props) => {
     });
 
     return () => {
-      mounted = false;
       sub.remove();
       stopDriverHeartbeat();
-      if (detachNotiRef.current) detachNotiRef.current();
+
+      if (detachNotiRef.current) {
+        detachNotiRef.current();
+      }
     };
-  }, [username, available, defaultVehicleType]);
+  }, [username, available, defaultVehicleType, add]);
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       if (!username) return;
+
       try {
         const r = await postJson('/driver/availability/get', { username });
+
         if (mounted && r?.ok !== false) {
           setTurboOn(Boolean(r?.turbo_active ?? false));
         }
       } catch (_e) {}
     })();
+
     return () => {
       mounted = false;
     };
@@ -162,10 +211,15 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   const toggleTurbo = async (val: boolean) => {
     if (!username) return;
+
     setTurboOn(val);
     setSaving(true);
+
     try {
-      await postJson('/driver/availability/set', { username, turbo_active: val });
+      await postJson('/driver/availability/set', {
+        username,
+        turbo_active: val,
+      });
     } catch (_e) {
       setTurboOn(!val);
     } finally {
@@ -175,6 +229,7 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   const removeSession = async () => {
     await removeUserSession();
+
     navigation.getParent()?.reset({
       index: 0,
       routes: [{ name: 'HomeScreen' as never }],
@@ -193,10 +248,9 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   const vehicleEmoji = useMemo(() => getVehicleEmoji(user), [user]);
   const turboColor = turboOn ? '#16a34a' : '#ef4444';
-const { resetForCurrentUser } = useOnboarding();
+
   return (
     <View style={styles.container}>
-      {/* Mapa */}
       <MapView
         style={styles.map}
         initialRegion={{
@@ -209,17 +263,20 @@ const { resetForCurrentUser } = useOnboarding();
         <Marker coordinate={{ latitude: -34.6037, longitude: -58.3816 }} />
       </MapView>
 
-      {/* Botón de menú */}
-      <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={styles.menuIcon}>
-        <Image source={require('../../../../../assets/user.png')} style={styles.icon} />
+      <TouchableOpacity
+        onPress={() => setIsSidebarOpen(true)}
+        style={styles.menuIcon}
+      >
+        <Image
+          source={require('../../../../../assets/user.png')}
+          style={styles.icon}
+        />
       </TouchableOpacity>
 
-      {/* Campanita (alineada al menú) */}
       <View style={styles.bellWrapper}>
         <Bell />
       </View>
 
-      {/* Panel inferior */}
       <View style={styles.panel}>
         <View style={styles.panelHeaderRow}>
           <View style={styles.vehicleBadge}>
@@ -228,144 +285,147 @@ const { resetForCurrentUser } = useOnboarding();
 
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.panelText}>
-              Hola {user?.name || 'driver'}, todo listo para tus viajes
+              Hola {driverDisplayName}, todo listo para tus viajes
             </Text>
           </View>
 
           <View style={styles.turboWrap}>
             <View style={[styles.turboDot, { backgroundColor: turboColor }]} />
-            <Text style={[styles.turboLabel, { color: turboColor }]}>Turbo</Text>
-            <Switch value={turboOn} onValueChange={toggleTurbo} disabled={saving} />
+            <Text style={[styles.turboLabel, { color: turboColor }]}>
+              Turbo
+            </Text>
+            <Switch
+              value={turboOn}
+              onValueChange={toggleTurbo}
+              disabled={saving}
+            />
           </View>
         </View>
 
-        <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.sendButton}>
+        <TouchableOpacity
+          onPress={() => setModalVisible(true)}
+          style={styles.sendButton}
+        >
           <Text style={styles.sendButtonText}>Ver opciones</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Modal */}
-    <Modal
-  animationType="slide"
-  transparent
-  visible={modalVisible}
-  onRequestClose={() => setModalVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalContent}>
-
-      <Text style={styles.modalTitle}>¿Qué querés hacer?</Text>
-
-      {/* Ver mis viajes */}
-      <TouchableOpacity
-        style={styles.modalOption}
-        onPress={handleOptionPress}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
       >
-        <Text style={styles.modalOptionText}>📋 Ver mis viajes</Text>
-      </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>¿Qué querés hacer?</Text>
 
-      {/* NUEVO — COLECTA */}
-      <TouchableOpacity
-        style={styles.modalOption}
-        onPress={() => {
-          setModalVisible(false);
-          navigation.navigate("DriverScanScreen", { mode: "colecta" });
-        }}
-      >
-        <Text style={styles.modalOptionText}>📦 Colectar envíos (retiro)</Text>
-      </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={handleOptionPress}>
+              <Text style={styles.modalOptionText}>📋 Ver mis viajes</Text>
+            </TouchableOpacity>
 
-      {/* NUEVO — EN PLANTA */}
-      <TouchableOpacity
-        style={styles.modalOption}
-        onPress={() => {
-          setModalVisible(false);
-          navigation.navigate("DriverScanScreen", { mode: "planta" });
-        }}
-      >
-        <Text style={styles.modalOptionText}>🏭 Descargar en depósito</Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setModalVisible(false);
+                navigation.navigate('DriverScanScreen', { mode: 'colecta' });
+              }}
+            >
+              <Text style={styles.modalOptionText}>
+                📦 Colectar envíos (retiro)
+              </Text>
+            </TouchableOpacity>
 
-      {/* NUEVO — ASIGNARME */}
-      <TouchableOpacity
-        style={styles.modalOption}
-        onPress={() => {
-          setModalVisible(false);
-          navigation.navigate("DriverScanScreen", { mode: "asignarme" });
-        }}
-      >
-        <Text style={styles.modalOptionText}>✅ Asignarme envíos</Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setModalVisible(false);
+                navigation.navigate('DriverScanScreen', { mode: 'planta' });
+              }}
+            >
+              <Text style={styles.modalOptionText}>
+                🏭 Descargar en depósito
+              </Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => {
+                setModalVisible(false);
+                navigation.navigate('DriverScanScreen', { mode: 'asignarme' });
+              }}
+            >
+              <Text style={styles.modalOptionText}>✅ Asignarme envíos</Text>
+            </TouchableOpacity>
 
-      {/* Pendientes cerca */}
-      <TouchableOpacity
-        style={styles.modalOption}
-        onPress={() => setModalVisible(false)}
-        >
-        <Text style={styles.modalOptionText}>📍 Ver pendientes cerca</Text>
-      </TouchableOpacity>
-        {/* Debug onboarding */}
-        {__DEV__ && (
-          <Pressable
-            onPress={resetForCurrentUser}
-            style={{
-              marginTop: 12,
-              backgroundColor: "black",
-              padding: 12,
-              borderRadius: 10,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ color: "white", fontWeight: "700" }}>
-              Rehacer onboarding (test)
-            </Text>
-          </Pressable>
-        )}
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.modalOptionText}>📍 Ver pendientes cerca</Text>
+            </TouchableOpacity>
 
-      {/* Cancelar */}
-      <TouchableOpacity onPress={() => setModalVisible(false)}>
-        <Text style={styles.modalCancel}>Cancelar</Text>
-      </TouchableOpacity>
+            {__DEV__ && (
+              <Pressable
+                onPress={resetForCurrentUser}
+                style={styles.debugButton}
+              >
+                <Text style={styles.debugButtonText}>
+                  Rehacer onboarding (test)
+                </Text>
+              </Pressable>
+            )}
 
-    </View>
-  </View>
-</Modal>
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalCancel}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
-      {/* Sidebar */}
       {isSidebarOpen && (
         <View style={styles.sidebar}>
-          <TouchableOpacity onPress={() => setIsSidebarOpen(false)} style={styles.closeButton}>
+          <TouchableOpacity
+            onPress={() => setIsSidebarOpen(false)}
+            style={styles.closeButton}
+          >
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
 
           <View style={styles.profile}>
-            <Image source={require('../../../../../assets/user.png')} style={styles.avatar} />
-            <Text style={styles.name}>{user?.name || 'Nombre del driver'}</Text>
-            <Text style={styles.email}>{user?.email || 'correo@email.com'}</Text>
+            <Image
+              source={require('../../../../../assets/user.png')}
+              style={styles.avatar}
+            />
+            <Text style={styles.name}>{driverDisplayName}</Text>
+            <Text style={styles.email}>{user?.email || username}</Text>
           </View>
 
           <TouchableOpacity onPress={() => navigateTo('DriverScreen')}>
             <Text style={styles.sidebarItem}>Perfil</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
-            style={styles.modalOption}
             onPress={() => {
-              setModalVisible(false);
+              setIsSidebarOpen(false);
               navigation.navigate('EnviosScreen');
             }}
           >
-            <Text style={styles.modalOptionText}>Viajes</Text>
+            <Text style={styles.sidebarItem}>Viajes</Text>
           </TouchableOpacity>
+
           <TouchableOpacity onPress={() => navigateTo('DriverScreen')}>
             <Text style={styles.sidebarItem}>Configuración</Text>
           </TouchableOpacity>
+
           <TouchableOpacity onPress={() => navigateTo('DriverScreen')}>
             <Text style={styles.sidebarItem}>Medios de pago</Text>
           </TouchableOpacity>
+
           <TouchableOpacity>
             <Text style={styles.sidebarItem}>Ayuda</Text>
           </TouchableOpacity>
+
           <TouchableOpacity onPress={removeSession}>
             <Text style={styles.logout}>Cerrar sesión</Text>
           </TouchableOpacity>
@@ -430,7 +490,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E6E6E6',
   },
-  vehicleEmoji: { fontSize: 22 },
+  vehicleEmoji: {
+    fontSize: 22,
+  },
   panelText: {
     fontSize: global.FONT.size.md,
     color: global.COLORS.text,
@@ -487,7 +549,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: global.SPACING.md,
   },
-  modalOption: { paddingVertical: global.SPACING.md },
+  modalOption: {
+    paddingVertical: global.SPACING.md,
+  },
   modalOptionText: {
     fontSize: global.FONT.size.md,
     color: global.COLORS.text,
@@ -497,6 +561,17 @@ const styles = StyleSheet.create({
     color: global.COLORS.blue,
     marginTop: global.SPACING.lg,
     textAlign: 'center',
+  },
+  debugButton: {
+    marginTop: 12,
+    backgroundColor: 'black',
+    padding: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    color: 'white',
+    fontWeight: '700',
   },
   sidebar: {
     position: 'absolute',
@@ -509,8 +584,13 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 30,
   },
-  closeButton: { alignSelf: 'flex-end' },
-  closeText: { fontSize: 22, color: global.COLORS.text },
+  closeButton: {
+    alignSelf: 'flex-end',
+  },
+  closeText: {
+    fontSize: 22,
+    color: global.COLORS.text,
+  },
   profile: {
     alignItems: 'center',
     marginVertical: global.SPACING.lg,
@@ -527,7 +607,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: global.COLORS.text,
   },
-  email: { fontSize: global.FONT.size.sm, color: global.COLORS.gray },
+  email: {
+    fontSize: global.FONT.size.sm,
+    color: global.COLORS.gray,
+  },
   sidebarItem: {
     fontSize: global.FONT.size.md,
     paddingVertical: global.SPACING.sm,

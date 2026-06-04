@@ -1,3 +1,8 @@
+import {
+  DriverDocumentType,
+  UploadedDriverDocument,
+  uploadDriverDocument,
+} from "../../Infrastructure/firebase/uploadDriverDocument";
 import { CapturedFile, DocKey } from "./types";
 
 type Input = {
@@ -7,42 +12,75 @@ type Input = {
   mode: "mock" | "real";
 };
 
-type Result = { ok: true } | { ok: false; error: string };
+type Result =
+  | { ok: true; documents: UploadedDriverDocument[] }
+  | { ok: false; error: string };
 
-function buildFormData(input: Input) {
-  const form = new FormData();
-  form.append("driverId", input.driverId);
-  form.append("acceptedTerms", String(input.acceptedTerms));
+const REQUIRED_DOCS: DocKey[] = [
+  "selfie",
+  "dni_front",
+  "dni_back",
+  "registro_front",
+  "registro_back",
+  "cedula_front",
+  "cedula_back",
+];
 
-  for (const [key, file] of Object.entries(input.files)) {
-    if (!file) continue;
-    form.append(key, {
-      uri: file.uri,
-      name: file.fileName,
-      type: file.mimeType,
-    } as any);
+async function mockUpload(): Promise<Result> {
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  return { ok: true, documents: [] };
+}
+
+function validateInput(input: Input): string | null {
+  if (!input.acceptedTerms) {
+    return "Falta aceptar términos y condiciones.";
   }
-  return form;
+
+  if (!input.driverId) {
+    return "No se pudo identificar el driver.";
+  }
+
+  const missing = REQUIRED_DOCS.filter((key) => !input.files[key]);
+
+  if (missing.length > 0) {
+    return `Faltan documentos: ${missing.join(", ")}`;
+  }
+
+  return null;
 }
 
-async function mockUpload(_form: FormData): Promise<Result> {
-  await new Promise((r) => setTimeout(r, 800));
-  return { ok: true };
-}
+async function firebaseUpload(input: Input): Promise<Result> {
+  const validationError = validateInput(input);
 
-async function realUpload(form: FormData): Promise<Result> {
-  // TODO: ajustar cuando exista endpoint real
-  // Ejemplo:
-  // const url = `${process.env.EXPO_PUBLIC_API_URL}/v1/drivers/onboarding/documents`;
-  // const res = await fetch(url, { method: "POST", body: form });
-  // if (!res.ok) return { ok: false, error: await res.text() };
-  // return { ok: true };
+  if (validationError) {
+    return { ok: false, error: validationError };
+  }
 
-  return { ok: false, error: "Endpoint real no configurado" };
+  const documents: UploadedDriverDocument[] = [];
+
+  for (const documentType of REQUIRED_DOCS) {
+    const file = input.files[documentType];
+
+    if (!file) continue;
+
+    const uploaded = await uploadDriverDocument({
+      driverId: input.driverId,
+      documentType: documentType as DriverDocumentType,
+      uri: file.uri,
+      mimeType: file.mimeType || "image/jpeg",
+    });
+
+    documents.push(uploaded);
+  }
+
+  return {
+    ok: true,
+    documents,
+  };
 }
 
 export async function uploadDriverDocuments(input: Input): Promise<Result> {
-  const form = buildFormData(input);
-  if (input.mode === "mock") return mockUpload(form);
-  return realUpload(form);
+  if (input.mode === "mock") return mockUpload();
+
+  return firebaseUpload(input);
 }
