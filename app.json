@@ -7,11 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-"splash": {
-  "image": "./assets/splash.png",
-  "resizeMode": "cover",
-  "backgroundColor": "#080A10"
-},
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#080A10"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beltrameme.wynflexfe",
@@ -51,13 +51,19 @@
       "expo-secure-store",
       [
         "expo-notifications",
-        { "color": "#ffffff" }
+        {
+          "color": "#ffffff"
+        }
       ]
     ],
     "extra": {
       "MLI_APP_ID": "4868503143760383",
-      "MLI_REDIRECT_URI": "https://oauth.pstmn.io/v1/callback"
+      "MLI_REDIRECT_URI": "https://oauth.pstmn.io/v1/callback",
+      "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyBYCoeifmtDuQWCnGGrjjkIBmGv0LEudGQ",
+      "EXPO_PUBLIC_API_URL": "https://api.wynflex.com.ar",
+      "eas": {
+        "projectId": "57ae574a-011e-4d21-8627-821f480087a5"
+      }
     }
   }
 }
-
