@@ -3,16 +3,23 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Alert,
   TextInput,
+  SafeAreaView,
+  StatusBar,
+  ImageBackground,
+  ScrollView,
+  Pressable,
+  Platform,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { useOnboarding } from "../onboarding/OnboardingContext";
 import { VEHICLE_CATALOG } from "../onboarding/VehicleCatalog";
 import type { VehicleType } from "../onboarding/types";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
+import { RoundedButton } from "../components/RoundedButton";
+import { SelectableCard } from "../components/SelectableCard";
+import global from "../theme/global";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Vehicle">;
 
@@ -27,11 +34,14 @@ export function VehicleScreen({ navigation }: Props) {
   const { state, dispatch } = useOnboarding();
 
   const [type, setType] = useState<VehicleType | "">(
-    (state.vehicle.type ?? "") as any
+    (state.vehicle.type ?? "") as VehicleType | ""
   );
   const [brand, setBrand] = useState<string>(state.vehicle.brand ?? "");
   const [model, setModel] = useState<string>(state.vehicle.model ?? "");
   const [plate, setPlate] = useState<string>(state.vehicle.plate ?? "");
+
+  const selectedVehicleLabel =
+    VEHICLE_TYPES.find((item) => item.value === type)?.label ?? "";
 
   const brands = useMemo(() => {
     if (!type) return [];
@@ -43,23 +53,40 @@ export function VehicleScreen({ navigation }: Props) {
     return VEHICLE_CATALOG[type][brand] ?? [];
   }, [type, brand]);
 
-  const onChangeType = (v: VehicleType | "") => {
-    setType(v);
+  const canContinue = Boolean(
+    type && brand && model && plate.trim().length >= 5
+  );
+
+  const onChangeType = (value: VehicleType) => {
+    setType(value);
     setBrand("");
     setModel("");
   };
 
-  const onChangeBrand = (v: string) => {
-    setBrand(v);
+  const onChangeBrand = (value: string) => {
+    setBrand(value);
     setModel("");
   };
 
-  const canContinue = Boolean(type && brand && model && plate.trim().length >= 5);
+  const resetType = () => {
+    setType("");
+    setBrand("");
+    setModel("");
+  };
+
+  const resetBrand = () => {
+    setBrand("");
+    setModel("");
+  };
+
+  const resetModel = () => {
+    setModel("");
+  };
 
   const onContinue = () => {
     if (!canContinue) {
       Alert.alert(
-        "Falta info",
+        "Falta información",
         "Elegí tipo, marca, modelo y completá la patente para continuar."
       );
       return;
@@ -79,104 +106,286 @@ export function VehicleScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tu vehículo</Text>
-      <Text style={styles.subtitle}>
-        Elegí el tipo, marca y modelo para completar tu perfil.
-      </Text>
+    <ImageBackground
+      source={require("../../../assets/background-1.png")}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <View style={styles.overlay} />
 
-      <Text style={styles.label}>Tipo</Text>
-      <View style={styles.pickerBox}>
-        <Picker selectedValue={type} onValueChange={(v) => onChangeType(v)}>
-          <Picker.Item label="Seleccionar tipo…" value="" />
-          {VEHICLE_TYPES.map((t) => (
-            <Picker.Item key={t.value} label={t.label} value={t.value} />
-          ))}
-        </Picker>
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor="#05080E" />
 
-      <Text style={styles.label}>Marca</Text>
-      <View style={[styles.pickerBox, !type && styles.disabled]}>
-        <Picker
-          enabled={Boolean(type)}
-          selectedValue={brand}
-          onValueChange={(v) => onChangeBrand(v)}
-        >
-          <Picker.Item
-            label={type ? "Seleccionar marca…" : "Seleccioná tipo primero"}
-            value=""
-          />
-          {brands.map((b) => (
-            <Picker.Item key={b} label={b} value={b} />
-          ))}
-        </Picker>
-      </View>
+        <View style={styles.screen}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.header}>
+              <Text style={styles.kicker}>VEHÍCULO</Text>
+              <Text style={styles.title}>Registrá tu vehículo</Text>
+              <Text style={styles.subtitle}>
+                Estos datos nos ayudan a asignarte viajes compatibles.
+              </Text>
+            </View>
 
-      <Text style={styles.label}>Modelo</Text>
-      <View style={[styles.pickerBox, !(type && brand) && styles.disabled]}>
-        <Picker
-          enabled={Boolean(type && brand)}
-          selectedValue={model}
-          onValueChange={(v) => setModel(v)}
-        >
-          <Picker.Item
-            label={
-              type && brand ? "Seleccionar modelo…" : "Seleccioná marca primero"
-            }
-            value=""
-          />
-          {models.map((m) => (
-            <Picker.Item key={m} label={m} value={m} />
-          ))}
-        </Picker>
-      </View>
+            <View style={styles.card}>
+              <View style={styles.section}>
+                <Text style={styles.label}>Tipo</Text>
 
-      <Text style={styles.label}>Patente</Text>
-      <TextInput
-        value={plate}
-        onChangeText={(t) => setPlate(t.toUpperCase())}
-        placeholder="Ej: AA123BB"
-        autoCapitalize="characters"
-        style={styles.input}
-      />
+                {type ? (
+                  <SelectedValueCard
+                    value={selectedVehicleLabel}
+                    onChange={resetType}
+                  />
+                ) : (
+                  <View style={styles.optionsGrid}>
+{VEHICLE_TYPES.map((item) => (
+  <View key={item.value} style={styles.gridItem}>
+    <SelectableCard
+      title={item.label}
+      onPress={() => onChangeType(item.value)}
+    />
+  </View>
+))}
+                  </View>
+                )}
+              </View>
 
-      <TouchableOpacity
-        style={[styles.button, !canContinue && styles.buttonDisabled]}
-        onPress={onContinue}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.buttonText}>Continuar</Text>
-      </TouchableOpacity>
+              <View style={styles.section}>
+                <Text style={styles.label}>Marca</Text>
+
+                {!type ? (
+                  <Text style={styles.emptyText}>
+                    Primero seleccioná el tipo.
+                  </Text>
+                ) : brand ? (
+                  <SelectedValueCard value={brand} onChange={resetBrand} />
+                ) : (
+                  <View style={styles.optionsList}>
+                    {brands.map((item) => (
+                      <SelectableCard
+                        key={item}
+                        title={item}
+                        selected={brand === item}
+                        onPress={() => onChangeBrand(item)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.label}>Modelo</Text>
+
+                {!(type && brand) ? (
+                  <Text style={styles.emptyText}>
+                    Primero seleccioná una marca.
+                  </Text>
+                ) : model ? (
+                  <SelectedValueCard value={model} onChange={resetModel} />
+                ) : (
+                  <View style={styles.optionsList}>
+                    {models.map((item) => (
+                      <SelectableCard
+                        key={item}
+                        title={item}
+                        selected={model === item}
+                        onPress={() => setModel(item)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.label}>Patente</Text>
+
+                <TextInput
+                  value={plate}
+                  onChangeText={(text) => setPlate(text.toUpperCase())}
+                  placeholder="Ej: AA123BB"
+                  placeholderTextColor="#64748B"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <View style={!canContinue && styles.disabledButton}>
+              <RoundedButton
+                text="Continuar"
+                onPress={onContinue}
+                disabled={!canContinue}
+              />
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    </ImageBackground>
+  );
+}
+
+type SelectedValueCardProps = {
+  value: string;
+  onChange: () => void;
+};
+
+function SelectedValueCard({ value, onChange }: SelectedValueCardProps) {
+  return (
+    <View style={styles.selectedCard}>
+      <View style={styles.selectedDot} />
+
+      <Text style={styles.selectedText}>{value}</Text>
+
+      <Pressable onPress={onChange} hitSlop={10}>
+        <Text style={styles.changeText}>Cambiar</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 18, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "800", marginTop: 8 },
-  subtitle: { marginTop: 6, color: "#666", marginBottom: 18 },
-  label: { marginTop: 10, marginBottom: 6, fontWeight: "700" },
-  pickerBox: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    overflow: "hidden",
+  background: {
+    flex: 1,
+    backgroundColor: "#05080E",
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,14,0.42)",
   },
-  disabled: { opacity: 0.55 },
-  button: {
-    marginTop: 18,
-    backgroundColor: "#111",
-    paddingVertical: 14,
-    borderRadius: 12,
+  safe: {
+    flex: 1,
+  },
+  screen: {
+    flex: 1,
+  },
+content: {
+  paddingHorizontal: global.SPACING.md,
+  paddingTop:
+    Platform.OS === "android"
+      ? (StatusBar.currentHeight ?? 24) + 28
+      : 32,
+  paddingBottom: 18,
+  gap: 16,
+},
+
+header: {
+  gap: 8,
+  marginTop: 8,
+},
+  kicker: {
+    color: global.COLORS.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+title: {
+  color: "#F8FAFC",
+  fontSize: 24,
+  lineHeight: 28,
+  fontWeight: "900",
+  letterSpacing: -1,
+},
+  subtitle: {
+    color: "#CBD5E1",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
+    maxWidth: 320,
+  },
+
+  card: {
+    borderRadius: 22,
+    backgroundColor: "rgba(13,22,35,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(248,250,252,0.18)",
+    padding: 14,
+    gap: 14,
+  },
+  section: {
+    gap: 8,
+  },
+  label: {
+    color: "#F8FAFC",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  optionsList: {
+    gap: 8,
+  },
+  optionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  gridItem: {
+    width: "48.5%",
+  },
+  emptyText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+    paddingVertical: 4,
+  },
+
+  selectedCard: {
+    minHeight: 46,
+    borderRadius: global.BORDER_RADIUS.md,
+    paddingHorizontal: global.SPACING.md,
+    paddingVertical: 8,
+    backgroundColor: "rgba(0,184,255,0.14)",
+    borderWidth: 1,
+    borderColor: global.COLORS.blue,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
   },
-  buttonDisabled: { opacity: 0.4 },
-  buttonText: { color: "#fff", fontWeight: "800" },
+  selectedDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: global.COLORS.blue,
+  },
+  selectedText: {
+    flex: 1,
+    color: "#F8FAFC",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  changeText: {
+    color: global.COLORS.blue,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  input: {
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: "rgba(5,8,14,0.76)",
+    borderWidth: 1,
+    borderColor: "rgba(248,250,252,0.14)",
+    paddingHorizontal: 14,
+    color: "#F8FAFC",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+
+  footer: {
+    paddingHorizontal: global.SPACING.md,
+    paddingTop: 10,
+    paddingBottom: 16,
+    backgroundColor: "rgba(5,8,14,0.72)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(248,250,252,0.08)",
+  },
+  disabledButton: {
+    opacity: 0.45,
+  },
 });

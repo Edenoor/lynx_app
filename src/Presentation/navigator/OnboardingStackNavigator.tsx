@@ -12,7 +12,7 @@ import { DocKey } from "../onboarding/types";
 export type OnboardingStackParamList = {
   Intro: undefined;
   Terms: undefined;
-  Vehicle: undefined; // ✅ NUEVO
+  Vehicle: undefined;
   Selfie: undefined;
   Doc: { docKey: DocKey };
   Review: undefined;
@@ -23,14 +23,18 @@ const Stack = createNativeStackNavigator<OnboardingStackParamList>();
 
 export function OnboardingStackNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerTitleAlign: "center" }}>
-      <Stack.Screen name="Intro" component={IntroScreen} options={{ title: "Onboarding" }} />
-      <Stack.Screen name="Terms" component={TermsScreen} options={{ title: "Términos" }} />
-      <Stack.Screen name="Vehicle" component={VehicleScreen} options={{ title: "Vehículo" }} />
-      <Stack.Screen name="Selfie" component={CaptureSelfieScreen} options={{ title: "Selfie" }} />
-      <Stack.Screen name="Doc" component={CaptureDocumentScreen} options={{ title: "Documento" }} />
-      <Stack.Screen name="Review" component={ReviewSubmitScreen} options={{ title: "Revisión" }} />
-      <Stack.Screen name="Submit" component={SubmitScreen} options={{ title: "Enviar" }} />
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen name="Intro" component={IntroScreen} />
+      <Stack.Screen name="Terms" component={TermsScreen} />
+      <Stack.Screen name="Vehicle" component={VehicleScreen} />
+      <Stack.Screen name="Selfie" component={CaptureSelfieScreen} />
+      <Stack.Screen name="Doc" component={CaptureDocumentScreen} />
+      <Stack.Screen name="Review" component={ReviewSubmitScreen} />
+      <Stack.Screen name="Submit" component={SubmitScreen} />
     </Stack.Navigator>
   );
 }

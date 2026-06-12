@@ -1,52 +1,60 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+// src/Presentation/views/driver/DriverScreen.tsx
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Image,
+  Alert,
+  AppState,
   Modal,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Switch,
-  Alert,
-  AppState,
-  Pressable,
-} from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import useViewModel from './ViewModel';
-import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList } from '../../../navigator/DriverStackNavigator';
-import global from '../../../theme/global';
-import { postJson } from '../../../config/Api';
-import { useOnboarding } from '../../../onboarding/OnboardingContext';
+} from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import { StackScreenProps } from "@react-navigation/stack";
+
+import useViewModel from "./ViewModel";
+import useEnviosViewModel from "../Envios/ViewModel";
+import { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
+import { postJson } from "../../../config/Api";
+import { useOnboarding } from "../../../onboarding/OnboardingContext";
+import { useNotifications } from "../../../context/NotificationContext";
 
 import {
   setupPushAndRegisterDevice,
   attachNotificationListeners,
-} from '../../../config/Push';
+} from "../../../config/Push";
 import {
   startDriverHeartbeat,
   stopDriverHeartbeat,
-} from '../../../config/HeartBeat';
+} from "../../../config/HeartBeat";
 
-import Bell from '../../../components/Bell';
-import { useNotifications } from '../../../context/NotificationContext';
+import AppTheme from "../../../theme/AppTheme";
+import {
+  DriverBottomNavigation,
+  DriverTabKey,
+} from "../../../components/DriverBottomNavigation";
+import DriverPerformanceCard from "../../../components/DriverPerformanceCard";
+import DriverTurboStatusCard from "../../../components/DriverTurboStatusCard";
+import DriverQrActionGrid from "../../../components/DriverQrActionGrid";
 
-interface Props extends StackScreenProps<RootStackParamList, 'DriverScreen'> {}
+interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
 
 const VEHICLE_KEYS_GUESS = [
-  'vehicle',
-  'vehiculo',
-  'vehicleType',
-  'tipo_vehiculo',
-  'vehicle_type',
+  "vehicle",
+  "vehiculo",
+  "vehicleType",
+  "tipo_vehiculo",
+  "vehicle_type",
 ];
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
 
 const getFirstWord = (value?: string | null): string => {
-  if (!value || typeof value !== 'string') return '';
-
-  return value.trim().split(/\s+/)[0] || '';
+  if (!value || typeof value !== "string") return "";
+  return value.trim().split(/\s+/)[0] || "";
 };
 
 const getDriverDisplayName = (user: any): string => {
@@ -57,71 +65,138 @@ const getDriverDisplayName = (user: any): string => {
     getFirstWord(user?.username) ||
     getFirstWord(user?.email);
 
-  return firstName || 'driver';
+  return firstName || "driver";
 };
 
-const getVehicleEmoji = (user: any): string => {
-  const raw =
-    VEHICLE_KEYS_GUESS.map((k) =>
-      user && user[k] ? String(user[k]) : ''
-    ).find(Boolean) || '';
+const n = (value: any) => {
+  const parsed = Number(value ?? 0);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
 
-  const s = raw.toLowerCase();
+const fmtMoney = (value: any) => `$${n(value).toLocaleString("es-AR")}`;
 
-  if (s.includes('moto') || s.includes('moped') || s.includes('bike')) {
-    return '🏍️';
-  }
+const normalizeStatus = (estado?: string | null) =>
+  String(estado ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 
-  return '🚚';
+const isDelivered = (estado?: string | null) => {
+  return normalizeStatus(estado).includes("entregado");
+};
+
+const isPending = (estado?: string | null) => {
+  const status = normalizeStatus(estado);
+
+  if (!status) return true;
+
+  return !(
+    status.includes("entregado") ||
+    status.includes("reprogramado") ||
+    status.includes("nadie") ||
+    status.includes("cancel")
+  );
+};
+
+const netoChofer = (item?: any | null) => {
+  if (!item) return 0;
+
+  const precio = n(item.precio_chofer);
+  const pRaw = n(item.porcentaje_chofer);
+  const factor = pRaw > 1 ? 1 - pRaw / 100 : 1 - pRaw;
+
+  return Math.round(precio * factor * 100) / 100;
 };
 
 async function acceptShipmentInline(tracking: string, driverUsername: string) {
   const res = await fetch(`${API_BASE}/envios/${tracking}/accept`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ driverUsername }),
   });
 
   if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(t || 'Error al aceptar envío');
+    const t = await res.text().catch(() => "");
+    throw new Error(t || "Error al aceptar envío");
   }
 }
 
 export const DriverScreen = ({ navigation }: Props) => {
-  const { user, removeUserSession } = useViewModel();
-  const { add } = useNotifications();
-  const { resetForCurrentUser } = useOnboarding();
+  const { user } = useViewModel();
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const {
+    list,
+    loading: loadingLegacy,
+    performanceAnalytics,
+  } = useEnviosViewModel();
+
+  const { add } = useNotifications();
+
+
+
   const [turboOn, setTurboOn] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
   const [available] = useState<boolean>(true);
 
-  const username = (user as any)?.username || user?.email || user?.name || '';
+  const username = (user as any)?.username || user?.email || user?.name || "";
 
   const driverDisplayName = useMemo(() => {
     return getDriverDisplayName(user);
   }, [user]);
 
+  const legacyRows = useMemo(() => {
+    return (list || []).filter(Boolean);
+  }, [list]);
+
+  const driverMetrics = useMemo(() => {
+    const total = legacyRows.length;
+
+    const delivered = legacyRows.filter((item) =>
+      isDelivered(item?.estado)
+    ).length;
+
+    const closedOk =
+      (performanceAnalytics?.eliteDeliveries ?? 0) +
+      (performanceAnalytics?.post21Delivered ?? 0) +
+      (performanceAnalytics?.post21Nobody ?? 0) +
+      (performanceAnalytics?.post21Rescheduled ?? 0);
+
+    const pending = legacyRows.filter((item) => isPending(item?.estado)).length;
+
+    const neto = legacyRows.reduce((acc, item) => acc + netoChofer(item), 0);
+
+    const effectiveness = total > 0 ? Math.round((closedOk / total) * 100) : 0;
+    const score = total > 0 ? Math.round((effectiveness / 10) * 10) / 10 : 0;
+
+    return {
+      total,
+      delivered,
+      closedOk,
+      pending,
+      neto,
+      effectiveness,
+      score,
+    };
+  }, [legacyRows, performanceAnalytics]);
+
   const defaultVehicleType = useMemo(() => {
     const raw =
       VEHICLE_KEYS_GUESS.map((k) =>
-        user && (user as any)[k] ? String((user as any)[k]) : ''
-      ).find(Boolean) || '';
+        user && (user as any)[k] ? String((user as any)[k]) : ""
+      ).find(Boolean) || "";
 
     const s = raw.toLowerCase();
 
-    if (s.includes('moto') || s.includes('bike') || s.includes('moped')) {
-      return 'moto';
+    if (s.includes("moto") || s.includes("bike") || s.includes("moped")) {
+      return "moto";
     }
 
-    if (s.includes('auto') || s.includes('car')) {
-      return 'auto';
+    if (s.includes("auto") || s.includes("car")) {
+      return "auto";
     }
 
-    return 'camioneta';
+    return "camioneta";
   }, [user]);
 
   const detachNotiRef = useRef<null | (() => void)>(null);
@@ -133,28 +208,28 @@ export const DriverScreen = ({ navigation }: Props) => {
       try {
         await setupPushAndRegisterDevice({
           username,
-          rol: 'driver',
+          rol: "driver",
           vehicleType: defaultVehicleType,
         });
 
         detachNotiRef.current = attachNotificationListeners({
-          currentUser: { username, rol: 'driver' },
+          currentUser: { username, rol: "driver" },
           onNewTrad: (tracking) => {
             if (!tracking) return;
 
             Alert.alert(
-              'Nuevo envío cercano',
+              "Nuevo envío cercano",
               `Tracking: ${tracking}`,
               [
-                { text: 'Más tarde' },
+                { text: "Más tarde" },
                 {
-                  text: 'Aceptar ahora',
+                  text: "Aceptar ahora",
                   onPress: async () => {
                     try {
                       await acceptShipmentInline(tracking, username);
-                      Alert.alert('Listo ✅', `Tomaste el envío ${tracking}`);
+                      Alert.alert("Listo ✅", `Tomaste el envío ${tracking}`);
                     } catch (e: any) {
-                      Alert.alert('Error', e?.message || 'No se pudo aceptar');
+                      Alert.alert("Error", e?.message || "No se pudo aceptar");
                     }
                   },
                 },
@@ -171,8 +246,8 @@ export const DriverScreen = ({ navigation }: Props) => {
       } catch (_e) {}
     })();
 
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
         startDriverHeartbeat(username, available, defaultVehicleType);
       } else {
         stopDriverHeartbeat();
@@ -196,7 +271,7 @@ export const DriverScreen = ({ navigation }: Props) => {
       if (!username) return;
 
       try {
-        const r = await postJson('/driver/availability/get', { username });
+        const r = await postJson("/driver/availability/get", { username });
 
         if (mounted && r?.ok !== false) {
           setTurboOn(Boolean(r?.turbo_active ?? false));
@@ -216,7 +291,7 @@ export const DriverScreen = ({ navigation }: Props) => {
     setSaving(true);
 
     try {
-      await postJson('/driver/availability/set', {
+      await postJson("/driver/availability/set", {
         username,
         turbo_active: val,
       });
@@ -227,27 +302,31 @@ export const DriverScreen = ({ navigation }: Props) => {
     }
   };
 
-  const removeSession = async () => {
-    await removeUserSession();
+  const handleTabPress = (tab: DriverTabKey) => {
+    if (tab === "home") {
+      navigation.navigate("DriverScreen");
+      return;
+    }
 
-    navigation.getParent()?.reset({
-      index: 0,
-      routes: [{ name: 'HomeScreen' as never }],
-    });
+    if (tab === "deliveries") {
+      navigation.navigate("EnviosScreen");
+      return;
+    }
+
+if (tab === "scan") {
+  navigation.navigate("DriverScanOptionsScreen");
+  return;
+}
+
+    if (tab === "activity") {
+      navigation.navigate("NotificationsScreen");
+      return;
+    }
+
+    if (tab === "profile") {
+      navigation.navigate("DriverAccountScreen");
+    }
   };
-
-  const navigateTo = (screenName: keyof RootStackParamList) => {
-    navigation.navigate(screenName);
-    setIsSidebarOpen(false);
-  };
-
-  const handleOptionPress = () => {
-    setModalVisible(false);
-    navigation.navigate('EnviosScreen');
-  };
-
-  const vehicleEmoji = useMemo(() => getVehicleEmoji(user), [user]);
-  const turboColor = turboOn ? '#16a34a' : '#ef4444';
 
   return (
     <View style={styles.container}>
@@ -263,367 +342,149 @@ export const DriverScreen = ({ navigation }: Props) => {
         <Marker coordinate={{ latitude: -34.6037, longitude: -58.3816 }} />
       </MapView>
 
-      <TouchableOpacity
-        onPress={() => setIsSidebarOpen(true)}
-        style={styles.menuIcon}
+      <View style={styles.mapOverlay} />
+
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
       >
-        <Image
-          source={require('../../../../../assets/user.png')}
-          style={styles.icon}
-        />
-      </TouchableOpacity>
-
-      <View style={styles.bellWrapper}>
-        <Bell />
-      </View>
-
-      <View style={styles.panel}>
-        <View style={styles.panelHeaderRow}>
-          <View style={styles.vehicleBadge}>
-            <Text style={styles.vehicleEmoji}>{vehicleEmoji}</Text>
-          </View>
-
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.panelText}>
-              Hola {driverDisplayName}, todo listo para tus viajes
-            </Text>
-          </View>
-
-          <View style={styles.turboWrap}>
-            <View style={[styles.turboDot, { backgroundColor: turboColor }]} />
-            <Text style={[styles.turboLabel, { color: turboColor }]}>
-              Turbo
-            </Text>
-            <Switch
-              value={turboOn}
-              onValueChange={toggleTurbo}
-              disabled={saving}
-            />
-          </View>
+        <View style={styles.hero}>
+          <Text style={styles.kicker}>LYNX DRIVER</Text>
+          <Text style={styles.title}>Hola {driverDisplayName}</Text>
+          <Text style={styles.subtitle}>
+            Todo listo para operar tus envíos.
+          </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={() => setModalVisible(true)}
-          style={styles.sendButton}
-        >
-          <Text style={styles.sendButtonText}>Ver opciones</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.bottomCards}>
+          <DriverTurboStatusCard
+            active={turboOn}
+            saving={saving}
+            activeTrips={0}
+            onToggle={toggleTurbo}
+          />
 
-      <Modal
-        animationType="slide"
-        transparent
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>¿Qué querés hacer?</Text>
-
-            <TouchableOpacity style={styles.modalOption} onPress={handleOptionPress}>
-              <Text style={styles.modalOptionText}>📋 Ver mis viajes</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                setModalVisible(false);
-                navigation.navigate('DriverScanScreen', { mode: 'colecta' });
-              }}
-            >
-              <Text style={styles.modalOptionText}>
-                📦 Colectar envíos (retiro)
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                setModalVisible(false);
-                navigation.navigate('DriverScanScreen', { mode: 'planta' });
-              }}
-            >
-              <Text style={styles.modalOptionText}>
-                🏭 Descargar en depósito
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                setModalVisible(false);
-                navigation.navigate('DriverScanScreen', { mode: 'asignarme' });
-              }}
-            >
-              <Text style={styles.modalOptionText}>✅ Asignarme envíos</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.modalOptionText}>📍 Ver pendientes cerca</Text>
-            </TouchableOpacity>
-
-            {__DEV__ && (
-              <Pressable
-                onPress={resetForCurrentUser}
-                style={styles.debugButton}
-              >
-                <Text style={styles.debugButtonText}>
-                  Rehacer onboarding (test)
-                </Text>
-              </Pressable>
-            )}
-
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <Text style={styles.modalCancel}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
+          <DriverPerformanceCard
+            loading={loadingLegacy}
+            score={driverMetrics.score}
+            effectiveness={driverMetrics.effectiveness}
+            totalDeliveries={driverMetrics.total}
+            closedOk={driverMetrics.closedOk}
+            delivered={driverMetrics.delivered}
+            pending={driverMetrics.pending}
+            earnings={fmtMoney(driverMetrics.neto)}
+            eliteDeliveries={performanceAnalytics?.eliteDeliveries}
+            post21Delivered={performanceAnalytics?.post21Delivered}
+            post21Nobody={performanceAnalytics?.post21Nobody}
+            post21Rescheduled={performanceAnalytics?.post21Rescheduled}
+            post23Delivered={performanceAnalytics?.post23Delivered}
+            post23Nobody={performanceAnalytics?.post23Nobody}
+            post23Rescheduled={performanceAnalytics?.post23Rescheduled}
+            post23InTransit={performanceAnalytics?.post23InTransit}
+            delayedTotal={performanceAnalytics?.delayedTotal}
+          />
         </View>
-      </Modal>
+      </ScrollView>
 
-      {isSidebarOpen && (
-        <View style={styles.sidebar}>
-          <TouchableOpacity
-            onPress={() => setIsSidebarOpen(false)}
-            style={styles.closeButton}
-          >
-            <Text style={styles.closeText}>✕</Text>
-          </TouchableOpacity>
+      <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
 
-          <View style={styles.profile}>
-            <Image
-              source={require('../../../../../assets/user.png')}
-              style={styles.avatar}
-            />
-            <Text style={styles.name}>{driverDisplayName}</Text>
-            <Text style={styles.email}>{user?.email || username}</Text>
-          </View>
-
-          <TouchableOpacity onPress={() => navigateTo('DriverScreen')}>
-            <Text style={styles.sidebarItem}>Perfil</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              setIsSidebarOpen(false);
-              navigation.navigate('EnviosScreen');
-            }}
-          >
-            <Text style={styles.sidebarItem}>Viajes</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => navigateTo('DriverScreen')}>
-            <Text style={styles.sidebarItem}>Configuración</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => navigateTo('DriverScreen')}>
-            <Text style={styles.sidebarItem}>Medios de pago</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity>
-            <Text style={styles.sidebarItem}>Ayuda</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={removeSession}>
-            <Text style={styles.logout}>Cerrar sesión</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      
     </View>
   );
 };
 
-const PANEL_PADDING = global.SPACING.lg;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: global.COLORS.background,
+    backgroundColor: AppTheme.surfaces.screen,
   },
+
   map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  mapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: AppTheme.overlays.camera,
+  },
+
+  content: {
     flex: 1,
+    zIndex: 10,
   },
-  menuIcon: {
-    position: 'absolute',
-    top: global.SIZES.statusBarHeight + 10,
-    left: 20,
-    backgroundColor: global.COLORS.white,
-    borderRadius: 25,
-    padding: 10,
-    elevation: 3,
-    zIndex: 20,
+
+  contentInner: {
+    flexGrow: 1,
+    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingTop: AppTheme.layout.headerTopPadding + 72,
+    paddingBottom: 108,
   },
-  bellWrapper: {
-    position: 'absolute',
-    top: global.SIZES.statusBarHeight + 10,
-    right: 20,
-    zIndex: 20,
+
+  hero: {
+    gap: AppTheme.spacing.sm,
   },
-  icon: {
-    width: 24,
-    height: 24,
+
+  kicker: {
+    ...AppTheme.typography.kicker,
   },
-  panel: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    backgroundColor: global.COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: PANEL_PADDING,
-    elevation: 6,
+
+  title: {
+    ...AppTheme.typography.titleLg,
   },
-  panelHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: global.SPACING.sm,
+
+  subtitle: {
+    ...AppTheme.typography.body,
   },
-  vehicleBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E6E6E6',
+
+  bottomCards: {
+    marginTop: "auto",
+    gap: AppTheme.spacing.sm,
+    paddingTop: AppTheme.spacing.xl,
   },
-  vehicleEmoji: {
-    fontSize: 22,
-  },
-  panelText: {
-    fontSize: global.FONT.size.md,
-    color: global.COLORS.text,
-    fontWeight: '700',
-  },
-  turboWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: global.COLORS.background,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#E6E6E6',
-  },
-  turboDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  turboLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  sendButton: {
-    marginTop: global.SPACING.md,
-    backgroundColor: '#EEE6FF',
-    paddingVertical: global.SPACING.sm,
-    paddingHorizontal: global.SPACING.xl,
-    alignSelf: 'center',
-    borderRadius: global.BORDER_RADIUS.md,
-  },
-  sendButtonText: {
-    color: '#7A40F2',
-    fontWeight: 'bold',
-    fontSize: global.FONT.size.md,
-  },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: '#00000066',
-    justifyContent: 'flex-end',
+    backgroundColor: AppTheme.overlays.camera,
+    justifyContent: "flex-end",
   },
+
   modalContent: {
-    backgroundColor: global.COLORS.white,
-    padding: global.SPACING.lg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: AppTheme.surfaces.screen,
+    borderTopLeftRadius: AppTheme.radius.xxl,
+    borderTopRightRadius: AppTheme.radius.xxl,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.medium,
+    padding: AppTheme.spacing.lg,
+    gap: AppTheme.spacing.md,
   },
+
+  modalKicker: {
+    ...AppTheme.typography.kicker,
+  },
+
   modalTitle: {
-    fontSize: global.FONT.size.lg,
-    fontWeight: 'bold',
-    marginBottom: global.SPACING.md,
+    ...AppTheme.typography.titleMd,
   },
-  modalOption: {
-    paddingVertical: global.SPACING.md,
-  },
-  modalOptionText: {
-    fontSize: global.FONT.size.md,
-    color: global.COLORS.text,
-  },
+
   modalCancel: {
-    fontSize: global.FONT.size.md,
-    color: global.COLORS.blue,
-    marginTop: global.SPACING.lg,
-    textAlign: 'center',
+    color: AppTheme.text.muted,
+    fontSize: AppTheme.font.size.md,
+    fontWeight: AppTheme.font.weight.bold,
+    textAlign: "center",
+    paddingVertical: AppTheme.spacing.md,
   },
+
   debugButton: {
-    marginTop: 12,
-    backgroundColor: 'black',
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
+    backgroundColor: AppTheme.colors.black,
+    padding: AppTheme.spacing.md,
+    borderRadius: AppTheme.radius.md,
+    alignItems: "center",
   },
+
   debugButtonText: {
-    color: 'white',
-    fontWeight: '700',
-  },
-  sidebar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 280,
-    height: '100%',
-    backgroundColor: global.COLORS.white,
-    padding: global.SPACING.lg,
-    elevation: 10,
-    zIndex: 30,
-  },
-  closeButton: {
-    alignSelf: 'flex-end',
-  },
-  closeText: {
-    fontSize: 22,
-    color: global.COLORS.text,
-  },
-  profile: {
-    alignItems: 'center',
-    marginVertical: global.SPACING.lg,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: global.COLORS.gray,
-    marginBottom: global.SPACING.sm,
-  },
-  name: {
-    fontSize: global.FONT.size.lg,
-    fontWeight: 'bold',
-    color: global.COLORS.text,
-  },
-  email: {
-    fontSize: global.FONT.size.sm,
-    color: global.COLORS.gray,
-  },
-  sidebarItem: {
-    fontSize: global.FONT.size.md,
-    paddingVertical: global.SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: global.COLORS.background,
-    color: global.COLORS.text,
-  },
-  logout: {
-    fontSize: global.FONT.size.md,
-    marginTop: global.SPACING.lg,
-    color: global.COLORS.gray,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
+    color: AppTheme.colors.white,
+    fontWeight: AppTheme.font.weight.bold,
   },
 });
 

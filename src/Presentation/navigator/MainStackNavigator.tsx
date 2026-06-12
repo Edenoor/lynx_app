@@ -44,34 +44,35 @@ export const MainStackNavigator = () => {
 
   const normalizedRol = user?.rol?.toUpperCase();
 
-  const initialRouteName =
-    normalizedRol === "DRIVER"
-      ? "DriverStackNavigator"
-      : normalizedRol === "SELLER" || normalizedRol === "ADMIN"
-      ? "SellerStackNavigator"
-      : "HomeScreen";
-
   return (
-    <Stack.Navigator
-      initialRouteName={initialRouteName}
-      screenOptions={{ headerShown: false }}
-    >
-      <Stack.Screen name="HomeScreen" component={HomeScreen} />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!user ? (
+        <>
+          <Stack.Screen name="HomeScreen" component={HomeScreen} />
 
-      <Stack.Screen
-        name="RegisterScreen"
-        component={RegisterScreen}
-        options={{ headerShown: true, title: "Crear cuenta" }}
-      />
+          <Stack.Screen
+            name="RegisterScreen"
+            component={RegisterScreen}
+            options={{ headerShown: true, title: "Crear cuenta" }}
+          />
 
-      <Stack.Screen
-        name="RecuperarScreen"
-        component={RecuperarScreen}
-        options={{ headerShown: true, title: "Recuperar contraseña" }}
-      />
-
-      <Stack.Screen name="DriverStackNavigator" component={DriverStackNavigator} />
-      <Stack.Screen name="SellerStackNavigator" component={SellerStackNavigator} />
+          <Stack.Screen
+            name="RecuperarScreen"
+            component={RecuperarScreen}
+            options={{ headerShown: true, title: "Recuperar contraseña" }}
+          />
+        </>
+      ) : normalizedRol === "DRIVER" ? (
+        <Stack.Screen
+          name="DriverStackNavigator"
+          component={DriverStackNavigator}
+        />
+      ) : (
+        <Stack.Screen
+          name="SellerStackNavigator"
+          component={SellerStackNavigator}
+        />
+      )}
     </Stack.Navigator>
   );
 };

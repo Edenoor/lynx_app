@@ -1,4 +1,13 @@
-import React, { useCallback, useContext, useMemo, useState } from "react";
+// src/Presentation/views/driver/scan/DriverScanScreen.tsx
+
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -6,7 +15,7 @@ import {
   Pressable,
   Modal,
   Alert,
-  ActivityIndicator,
+  Vibration,
 } from "react-native";
 import {
   CameraView,
@@ -14,25 +23,31 @@ import {
   BarcodeScanningResult,
 } from "expo-camera";
 import { StackScreenProps } from "@react-navigation/stack";
+import { Ionicons } from "@expo/vector-icons";
+
 import { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { UserContext } from "../../../context/UserContext";
+import AppTheme from "../../../theme/AppTheme";
+import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
+import {
+  DriverBottomNavigation,
+  DriverTabKey,
+} from "../../../components/DriverBottomNavigation";
 
 type Props = StackScreenProps<DriverStackParamList, "DriverScanScreen">;
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5000";
 
 const TITLES: Record<NonNullable<Props["route"]["params"]>["mode"], string> = {
-  colecta: "Escaneo de Colecta",
-  planta: "Escaneo En Planta",
-  asignarme: "Escaneo para Asignarme",
+  colecta: "Escanear colecta",
+  planta: "Escanear en planta",
+  asignarme: "Asignarme envío",
 };
 
 const HINTS: Record<NonNullable<Props["route"]["params"]>["mode"], string> = {
-  colecta:
-    "Escaneá el QR del envío. Si pertenece a un cliente vinculado, se ingresa y se marca como colectado.",
-  planta: "Función reservada para depósito.",
-  asignarme:
-    "Escaneá el QR del envío para asignártelo como chofer.",
+  colecta: "Escaneá el código",
+  planta: "Escaneá el código",
+  asignarme: "Escaneá el código",
 };
 
 type ScanPayload = {
@@ -122,18 +137,44 @@ export default function DriverScanScreen({ navigation, route }: Props) {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [open, setOpen] = useState(true);
-  const [scanned, setScanned] = useState(false);
   const [processing, setProcessing] = useState(false);
 
+  const scanLockedRef = useRef(false);
+
   const close = useCallback(() => {
+    scanLockedRef.current = true;
     setOpen(false);
     navigation.goBack();
   }, [navigation]);
 
   const resetScanner = useCallback(() => {
-    setScanned(false);
+    scanLockedRef.current = false;
     setProcessing(false);
   }, []);
+
+  const handleTabPress = useCallback(
+    (tab: DriverTabKey) => {
+      if (tab === "scan") return;
+
+      scanLockedRef.current = true;
+      setOpen(false);
+
+      if (tab === "home") {
+        navigation.navigate("DriverScreen");
+        return;
+      }
+
+      if (tab === "deliveries" || tab === "activity") {
+        navigation.navigate("EnviosScreen");
+        return;
+      }
+
+      if (tab === "profile") {
+        navigation.navigate("DriverAccountScreen");
+      }
+    },
+    [navigation]
+  );
 
   const ensurePermission = useCallback(async () => {
     if (!permission?.granted) {
@@ -335,10 +376,8 @@ export default function DriverScanScreen({ navigation, route }: Props) {
         "Colecta registrada ✅",
         [
           `Envío ML: ${scanPayload.id}`,
-          `Cliente ML: ${scanPayload.senderId}`,
           deliveryId ? `Delivery ID: ${deliveryId}` : null,
           statusResult?.skipped ? statusResult.message : "Estado: colectado",
-          "El seguimiento de estado ML queda a cargo del poller/backend.",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -378,6 +417,10 @@ export default function DriverScanScreen({ navigation, route }: Props) {
         }
       }
 
+      if (!deliveryId) {
+        throw new Error("No hay ID de delivery para asignar.");
+      }
+
       const assignResult = await assignCurrentDeliveryToDriver(
         deliveryId,
         sessionUser
@@ -403,10 +446,11 @@ export default function DriverScanScreen({ navigation, route }: Props) {
 
   const onBarcodeScanned = useCallback(
     async (result: BarcodeScanningResult) => {
-      if (scanned || processing) return;
+      if (scanLockedRef.current) return;
 
-      setScanned(true);
+      scanLockedRef.current = true;
       setProcessing(true);
+      Vibration.vibrate(45);
 
       const rawData = String(result.data ?? "");
       const scanPayload = parseScanPayload(rawData);
@@ -446,39 +490,23 @@ export default function DriverScanScreen({ navigation, route }: Props) {
         setProcessing(false);
       }
     },
-    [
-      scanned,
-      processing,
-      mode,
-      handleColecta,
-      handleAsignarme,
-      resetScanner,
-      close,
-    ]
+    [mode, handleColecta, handleAsignarme, resetScanner, close]
   );
 
-  React.useEffect(() => {
+  useEffect(() => {
     ensurePermission();
   }, [ensurePermission]);
 
   return (
     <Modal visible={open} animationType="slide" onRequestClose={close}>
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>{hint}</Text>
-          </View>
-
-          <Pressable onPress={close} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>Cerrar</Text>
-          </Pressable>
-        </View>
-
         {!permission ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator />
-            <Text style={styles.loadingText}>Cargando permisos…</Text>
+            <LynxPulseLoader message="Preparando cámara..." />
+          </View>
+        ) : !permission.granted ? (
+          <View style={styles.loadingBox}>
+            <LynxPulseLoader message="Solicitando permiso..." />
           </View>
         ) : (
           <View style={styles.cameraWrap}>
@@ -489,17 +517,46 @@ export default function DriverScanScreen({ navigation, route }: Props) {
               barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
             />
 
-            <View pointerEvents="none" style={styles.overlay}>
-              <View style={styles.frame} />
-
-              <Text style={styles.overlayText}>
-                {processing
-                  ? "Procesando envío…"
-                  : "Alineá el QR dentro del recuadro"}
-              </Text>
-
-              {processing && <ActivityIndicator color="#fff" />}
+            <View pointerEvents="box-none" style={styles.backLayer}>
+              <Pressable onPress={close} style={styles.backButton}>
+                <Ionicons
+                  name="arrow-back"
+                  size={30}
+                  color={AppTheme.colors.white}
+                />
+              </Pressable>
             </View>
+
+            <View pointerEvents="none" style={styles.scanLayer}>
+              <View style={styles.scanGuide}>
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
+              </View>
+
+              <View style={styles.scanTextPill}>
+                <Text style={styles.scanText}>
+                  {processing ? "Procesando envío..." : hint}
+                </Text>
+              </View>
+
+              {processing && (
+                <View style={styles.processingCard}>
+                  <LynxPulseLoader
+                    compact
+                    showLogo={false}
+                    message="Procesando..."
+                  />
+                </View>
+              )}
+            </View>
+
+            <View pointerEvents="none" style={styles.bottomInfo}>
+              <Text style={styles.modeText}>{title}</Text>
+            </View>
+
+            <DriverBottomNavigation activeTab="scan" onPress={handleTabPress} />
           </View>
         )}
       </View>
@@ -510,68 +567,125 @@ export default function DriverScanScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: AppTheme.colors.black,
   },
-  header: {
-    paddingTop: 18,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: "#111",
-  },
-  title: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  subtitle: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  closeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: "#222",
-  },
-  closeBtnText: {
-    color: "#fff",
-    fontWeight: "800",
-  },
+
   cameraWrap: {
     flex: 1,
-    position: "relative",
+    backgroundColor: AppTheme.colors.black,
   },
-  overlay: {
-    flex: 1,
+
+  backLayer: {
+    position: "absolute",
+    top: AppTheme.layout.headerTopPadding,
+    left: AppTheme.spacing.lg,
+    zIndex: 20,
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: AppTheme.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
   },
-  frame: {
-    width: 260,
-    height: 260,
-    borderRadius: 18,
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.9)",
-    backgroundColor: "rgba(0,0,0,0.15)",
+
+  scanLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: AppTheme.spacing.lg,
   },
-  overlayText: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 14,
-    fontWeight: "700",
+
+  scanGuide: {
+    width: 270,
+    height: 270,
+    position: "relative",
+  },
+
+  corner: {
+    position: "absolute",
+    width: 58,
+    height: 58,
+    borderColor: AppTheme.colors.white,
+  },
+
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 5,
+    borderLeftWidth: 5,
+  },
+
+  topRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 5,
+    borderRightWidth: 5,
+  },
+
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 5,
+    borderLeftWidth: 5,
+  },
+
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 5,
+    borderRightWidth: 5,
+  },
+
+  scanTextPill: {
+    marginTop: 92,
+    minHeight: 48,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: "rgba(0, 0, 0, 0.78)",
+    paddingHorizontal: AppTheme.spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  scanText: {
+    color: AppTheme.colors.white,
+    fontSize: 16,
+    fontWeight: AppTheme.font.weight.black,
     textAlign: "center",
   },
+
+  processingCard: {
+    position: "absolute",
+    bottom: 148,
+    minWidth: 190,
+    borderRadius: AppTheme.radius.xxl,
+    backgroundColor: "rgba(5, 8, 14, 0.82)",
+    borderWidth: 1,
+    borderColor: AppTheme.borders.medium,
+    paddingVertical: AppTheme.spacing.md,
+    paddingHorizontal: AppTheme.spacing.md,
+  },
+
+  bottomInfo: {
+    position: "absolute",
+    left: AppTheme.spacing.lg,
+    right: AppTheme.spacing.lg,
+    bottom: 104,
+    alignItems: "center",
+  },
+
+  modeText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    fontWeight: AppTheme.font.weight.bold,
+  },
+
   loadingBox: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-  },
-  loadingText: {
-    color: "#fff",
+    backgroundColor: AppTheme.surfaces.screen,
+    paddingHorizontal: AppTheme.spacing.lg,
   },
 });

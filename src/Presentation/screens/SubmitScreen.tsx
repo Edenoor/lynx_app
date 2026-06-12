@@ -1,25 +1,49 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
-  Pressable,
   Alert,
+  SafeAreaView,
+  StatusBar,
+  ImageBackground,
+  Platform,
 } from "react-native";
 import { UserContext } from "../context/UserContext";
 import { useOnboarding } from "../onboarding/OnboardingContext";
 import { uploadDriverDocuments } from "../onboarding/UploadDriverDocuments";
+import { RoundedButton } from "../components/RoundedButton";
+import { LynxLoader } from "../components/LynxLoader";
+import global from "../theme/global";
+
+type SubmitStatus = "sending" | "success" | "error";
 
 export function SubmitScreen() {
   const { state, dispatch, userKey } = useOnboarding();
   const { user } = useContext(UserContext);
-  const [busy, setBusy] = useState(false);
+
+  const [status, setStatus] = useState<SubmitStatus>("sending");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const submittedRef = useRef(false);
 
   const driverId = String(user?.id || userKey || user?.username || "").trim();
 
+  useEffect(() => {
+    if (submittedRef.current) return;
+
+    submittedRef.current = true;
+    submit();
+  }, []);
+
   const submit = async () => {
-    setBusy(true);
+    if (!driverId) {
+      setStatus("error");
+      setErrorMessage("No se pudo identificar el conductor autenticado.");
+      return;
+    }
+
+    setStatus("sending");
+    setErrorMessage(null);
 
     try {
       const res = await uploadDriverDocuments({
@@ -29,82 +53,197 @@ export function SubmitScreen() {
         mode: "real",
       });
 
-      if (!res.ok) throw new Error(res.error ?? "Upload failed");
+      if (!res.ok) {
+        throw new Error(res.error ?? "No se pudo enviar la documentación.");
+      }
 
       console.log("DRIVER DOCUMENTS UPLOADED:", res.documents);
 
       dispatch({ type: "SET_COMPLETED_LOCAL", value: true });
-
-      Alert.alert(
-        "Listo",
-        "Documentación enviada correctamente a Firebase Storage."
-      );
-    } catch (e: any) {
-      Alert.alert("Error", e?.message ?? "No se pudo enviar");
-    } finally {
-      setBusy(false);
+      setStatus("success");
+    } catch (error: any) {
+      setStatus("error");
+      setErrorMessage(error?.message ?? "No se pudo enviar la solicitud.");
     }
   };
 
+  const resetOnboarding = () => {
+    Alert.alert(
+      "Reiniciar onboarding",
+      "Esto borrará el progreso local del alta. ¿Querés continuar?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Reiniciar",
+          style: "destructive",
+          onPress: () => dispatch({ type: "RESET" }),
+        },
+      ]
+    );
+  };
+
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.h1}>Enviando documentación…</Text>
-      <Text style={styles.p}>
-        La app subirá los documentos del conductor a Firebase Storage.
-      </Text>
+    <ImageBackground
+      source={require("../../../assets/background-1.png")}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <View style={styles.overlay} />
 
-      {driverId ? (
-        <Text style={styles.meta}>Driver ID: {driverId}</Text>
-      ) : (
-        <Text style={styles.error}>
-          No se pudo identificar el driver autenticado.
-        </Text>
-      )}
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor="#05080E" />
 
-      {busy ? (
-        <ActivityIndicator />
-      ) : (
-        <Pressable
-          style={[styles.btn, !driverId && styles.btnDisabled]}
-          onPress={submit}
-          disabled={!driverId}
-        >
-          <Text style={styles.btnText}>Enviar ahora</Text>
-        </Pressable>
-      )}
+        <View style={styles.screen}>
+          <View style={styles.card}>
+            {status === "sending" && (
+              <>
+                <LynxLoader message="Enviando solicitud..." />
 
-      <Pressable
-        style={styles.btnSecondary}
-        onPress={() => dispatch({ type: "RESET" })}
-      >
-        <Text style={styles.btnTextSecondary}>Reset onboarding</Text>
-      </Pressable>
-    </View>
+                <Text style={styles.title}>Estamos procesando tu alta</Text>
+
+                <Text style={styles.subtitle}>
+                  Esto puede demorar unos segundos. No cierres la app mientras
+                  enviamos la documentación.
+                </Text>
+              </>
+            )}
+
+            {status === "success" && (
+              <>
+                <View style={styles.successCircle}>
+                  <Text style={styles.successIcon}>✓</Text>
+                </View>
+
+                <Text style={styles.kicker}>SOLICITUD ENVIADA</Text>
+
+                <Text style={styles.title}>Todo listo</Text>
+
+                <Text style={styles.subtitle}>
+                  Recibimos tu documentación. Nuestro equipo la revisará para
+                  habilitar tu cuenta.
+                </Text>
+
+                <RoundedButton text="Finalizar" onPress={() => {}} />
+              </>
+            )}
+
+            {status === "error" && (
+              <>
+                <View style={styles.errorCircle}>
+                  <Text style={styles.errorIcon}>!</Text>
+                </View>
+
+                <Text style={styles.kicker}>ERROR</Text>
+
+                <Text style={styles.title}>No pudimos enviar la solicitud</Text>
+
+                <Text style={styles.subtitle}>
+                  {errorMessage ??
+                    "Revisá tu conexión e intentá nuevamente en unos segundos."}
+                </Text>
+
+                <RoundedButton text="Reintentar" onPress={submit} />
+
+                <Text style={styles.resetText} onPress={resetOnboarding}>
+                  Reiniciar onboarding
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: 20, gap: 12, justifyContent: "center" },
-  h1: { fontSize: 20, fontWeight: "800" },
-  p: { fontSize: 14, opacity: 0.8 },
-  meta: { fontSize: 13, opacity: 0.7 },
-  error: { fontSize: 13, color: "#B00020", fontWeight: "700" },
-  btn: {
-    backgroundColor: "black",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
+  background: {
+    flex: 1,
+    backgroundColor: "#05080E",
   },
-  btnDisabled: {
-    opacity: 0.35,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,14,0.48)",
   },
-  btnText: { color: "white", fontWeight: "800" },
-  btnSecondary: {
+  safe: {
+    flex: 1,
+  },
+  screen: {
+    flex: 1,
+    paddingHorizontal: global.SPACING.md,
+    paddingTop:
+      Platform.OS === "android"
+        ? (StatusBar.currentHeight ?? 24) + 28
+        : 32,
+    paddingBottom: 24,
+    justifyContent: "center",
+  },
+  card: {
+    borderRadius: 26,
+    backgroundColor: "rgba(13,22,35,0.76)",
     borderWidth: 1,
-    borderColor: "black",
-    padding: 14,
-    borderRadius: 12,
+    borderColor: "rgba(248,250,252,0.18)",
+    padding: 22,
+    gap: 14,
     alignItems: "center",
   },
-  btnTextSecondary: { color: "black", fontWeight: "800" },
+  successCircle: {
+    width: 74,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: "rgba(34,197,94,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  successIcon: {
+    color: "#22C55E",
+    fontSize: 36,
+    fontWeight: "900",
+  },
+  errorCircle: {
+    width: 74,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: "rgba(248,113,113,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(248,113,113,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  errorIcon: {
+    color: "#F87171",
+    fontSize: 32,
+    fontWeight: "900",
+  },
+  kicker: {
+    color: global.COLORS.blue,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+  title: {
+    color: "#F8FAFC",
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    letterSpacing: -1,
+    textAlign: "center",
+  },
+  subtitle: {
+    color: "#CBD5E1",
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  resetText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 4,
+  },
 });

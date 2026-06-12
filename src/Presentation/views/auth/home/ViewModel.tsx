@@ -13,9 +13,18 @@ type LoginResult = {
   message?: string;
 };
 
-const buildFullName = (firstName?: string, lastName?: string, fallback?: string) => {
+const buildFullName = (
+  firstName?: string,
+  lastName?: string,
+  fallback?: string,
+) => {
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
   return fullName || fallback || "";
+};
+
+const normalizeRole = (value?: string | null) => {
+  if (!value) return "SELLER";
+  return value.toUpperCase();
 };
 
 const HomeViewModel = () => {
@@ -65,7 +74,7 @@ const HomeViewModel = () => {
     try {
       const response: any = await LoginAuthUseCase(
         values.username.trim(),
-        values.password
+        values.password,
       );
 
       console.log("LOGIN RESPONSE:", JSON.stringify(response));
@@ -93,33 +102,36 @@ const HomeViewModel = () => {
       let currentUser: any = null;
 
       try {
-        const currentUserResponse = await ApiDelivery.get(`/v2/users/${authUser.id}`);
+        const currentUserResponse = await ApiDelivery.get(
+          `/v2/users/${authUser.id}`,
+        );
+
         currentUser = currentUserResponse?.data?.user ?? null;
 
-        console.log("CURRENT USER RESPONSE:", JSON.stringify(currentUserResponse.data));
+        console.log(
+          "CURRENT USER RESPONSE:",
+          JSON.stringify(currentUserResponse.data),
+        );
       } catch (error: any) {
         console.log(
           "CURRENT USER ERROR:",
-          JSON.stringify(error?.response?.data ?? error?.message)
+          JSON.stringify(error?.response?.data ?? error?.message),
         );
       }
 
       const rawUser = currentUser ?? authUser;
 
-      const rol =
-        typeof rawUser?.rol === "string"
-          ? rawUser.rol.toUpperCase()
-          : typeof authUser?.rol === "string"
-          ? authUser.rol.toUpperCase()
-          : "SELLER";
+      const rol = normalizeRole(rawUser?.rol ?? authUser?.rol);
 
       const firstName = rawUser?.first_name ?? "";
       const lastName = rawUser?.last_name ?? "";
-      const fullName = buildFullName(
-        firstName,
-        lastName,
-        rawUser?.name ?? rawUser?.fullName ?? rawUser?.username ?? values.username.trim()
-      );
+      const fallbackName =
+        rawUser?.name ??
+        rawUser?.fullName ??
+        rawUser?.username ??
+        values.username.trim();
+
+      const fullName = buildFullName(firstName, lastName, fallbackName);
 
       const userToSave: User = {
         id: String(rawUser?.id ?? authUser.id ?? ""),

@@ -1,9 +1,12 @@
-import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useEffect, useRef, useState } from "react";
 import { User } from "../../Domain/entities/User";
 import { GetUserLocalUseCase } from "../../Domain/useCases/userLocal/GetUserLocal";
 import { SaveUserLocalUseCase } from "../../Domain/useCases/userLocal/SaveUserLocal";
 import { RemoveUserLocalUseCase } from "../../Domain/useCases/userLocal/RemoveUserLocal";
-import { setAuthToken } from "../../Data/sources/remote/api/ApiDelivery";
+import {
+  setAuthToken,
+  setUnauthorizedHandler,
+} from "../../Data/sources/remote/api/ApiDelivery";
 
 import { NotificationsProvider } from "./NotificationContext";
 
@@ -40,13 +43,47 @@ const isValidSession = (u: unknown): u is User => {
       typeof candidate === "object" &&
       candidate.token &&
       candidate.username &&
-      candidate.rol
+      candidate.rol,
   );
 };
 
-export const UserProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+export const UserProvider: React.FC<React.PropsWithChildren> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const isRemovingSessionRef = useRef(false);
+
+  const clearSessionState = async () => {
+    await RemoveUserLocalUseCase();
+    setAuthToken(null);
+    setUser(null);
+  };
+
+  const removeUserSession = async () => {
+    if (isRemovingSessionRef.current) return;
+
+    isRemovingSessionRef.current = true;
+
+    try {
+      await clearSessionState();
+    } finally {
+      setTimeout(() => {
+        isRemovingSessionRef.current = false;
+      }, 500);
+    }
+  };
+
+  useEffect(() => {
+    setUnauthorizedHandler(async () => {
+      console.log("[Lynx Auth] Sesión expirada. Redirigiendo a login.");
+      await removeUserSession();
+    });
+
+    return () => {
+      setUnauthorizedHandler(null);
+    };
+  }, []);
 
   useEffect(() => {
     const hydrateSession = async () => {
@@ -61,6 +98,7 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           setUser(null);
         }
       } catch (error) {
+        console.log("[Lynx Auth] Error hidratando sesión:", error);
         setAuthToken(null);
         setUser(null);
       } finally {
@@ -93,12 +131,6 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     setAuthToken(null);
     setUser(null);
     return null;
-  };
-
-  const removeUserSession = async () => {
-    await RemoveUserLocalUseCase();
-    setAuthToken(null);
-    setUser(null);
   };
 
   return (

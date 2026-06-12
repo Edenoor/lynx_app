@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,77 +7,174 @@ import {
   StyleSheet,
   Modal,
   Pressable,
-} from 'react-native';
-import { useNotifications, Noti } from '../../context/NotificationContext';
-import global from '../../theme/global';
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 
-const kindLabel: Record<Noti['kind'], string> = {
-  NEW_TRAD: 'Nuevo envío',
-  TRAD_ACCEPTED: 'Envío aceptado',
-  INFO: 'Info',
-  ALERT: 'Alerta',
+import { useNotifications, Noti } from "../../context/NotificationContext";
+import AppTheme from "../../theme/AppTheme";
+import {
+  DriverBottomNavigation,
+  DriverTabKey,
+} from "../../components/DriverBottomNavigation";
+
+const kindLabel: Record<Noti["kind"], string> = {
+  NEW_TRAD: "Nuevo envío",
+  TRAD_ACCEPTED: "Envío aceptado",
+  INFO: "Info",
+  ALERT: "Alerta",
+};
+
+const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
+  NEW_TRAD: "flash-outline",
+  TRAD_ACCEPTED: "checkmark-circle-outline",
+  INFO: "information-circle-outline",
+  ALERT: "alert-circle-outline",
+};
+
+const kindColor: Record<Noti["kind"], string> = {
+  NEW_TRAD: AppTheme.colors.primary,
+  TRAD_ACCEPTED: AppTheme.colors.success,
+  INFO: AppTheme.text.secondary,
+  ALERT: AppTheme.colors.danger,
 };
 
 const formatDate = (ts: number) => {
   try {
     const d = new Date(ts);
-    return d.toLocaleString();
+    return d.toLocaleString("es-AR");
   } catch {
     return String(ts);
   }
 };
 
-const Item: React.FC<{
+const Item = ({
+  item,
+  onPress,
+}: {
   item: Noti;
   onPress: () => void;
-}> = ({ item, onPress }) => {
+}) => {
+  const color = kindColor[item.kind] ?? AppTheme.colors.primary;
+
   return (
-    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.itemRow}>
-        <Text style={styles.itemKind}>{kindLabel[item.kind] ?? 'Notificación'}</Text>
-        {!item.read && <View style={styles.unreadDot} />}
+    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.84}>
+      <View style={styles.itemIcon}>
+        <Ionicons
+          name={kindIcon[item.kind] ?? "notifications-outline"}
+          size={18}
+          color={color}
+        />
       </View>
-      <Text style={styles.itemTitle} numberOfLines={1}>
-        {item.title}
-      </Text>
-      {!!item.body && (
-        <Text style={styles.itemBody} numberOfLines={2}>
-          {item.body}
+
+      <View style={styles.itemContent}>
+        <View style={styles.itemTopRow}>
+          <Text style={[styles.itemKind, { color }]}>
+            {kindLabel[item.kind] ?? "Notificación"}
+          </Text>
+
+          {!item.read && <View style={styles.unreadDot} />}
+        </View>
+
+        <Text style={styles.itemTitle} numberOfLines={1}>
+          {item.title}
         </Text>
-      )}
-      <Text style={styles.itemDate}>{formatDate(item.createdAt)}</Text>
+
+        {!!item.body && (
+          <Text style={styles.itemBody} numberOfLines={2}>
+            {item.body}
+          </Text>
+        )}
+
+        <Text style={styles.itemDate}>{formatDate(item.createdAt)}</Text>
+      </View>
+
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={AppTheme.text.muted}
+      />
     </TouchableOpacity>
   );
 };
 
 const NotificationsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const { items, markRead, markAllRead, remove, clear } = useNotifications();
   const [selected, setSelected] = useState<Noti | null>(null);
 
   const data = useMemo(
-    () => items.sort((a, b) => b.createdAt - a.createdAt),
+    () => [...items].sort((a, b) => b.createdAt - a.createdAt),
     [items]
+  );
+
+  const unreadCount = useMemo(
+    () => items.filter((item) => !item.read).length,
+    [items]
+  );
+
+  const handleTabPress = useCallback(
+    (tab: DriverTabKey) => {
+      if (tab === "activity") return;
+
+      if (tab === "home") {
+        navigation.navigate("DriverScreen");
+        return;
+      }
+
+      if (tab === "deliveries") {
+        navigation.navigate("EnviosScreen");
+        return;
+      }
+
+if (tab === "scan") {
+  navigation.navigate("DriverScanOptionsScreen");
+  return;
+}
+
+      if (tab === "profile") {
+        navigation.navigate("DriverAccountScreen");
+      }
+    },
+    [navigation]
   );
 
   return (
     <View style={styles.container}>
-      {/* Header simple */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Notificaciones</Text>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <TouchableOpacity onPress={markAllRead}>
-            <Text style={styles.headerAction}>Marcar todas leídas</Text>
+        <Text style={styles.kicker}>LYNX DRIVER</Text>
+        <Text style={styles.title}>Alertas</Text>
+        <Text style={styles.subtitle}>
+          {unreadCount > 0
+            ? `${unreadCount} notificación${unreadCount === 1 ? "" : "es"} sin leer`
+            : "No tenés alertas pendientes"}
+        </Text>
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            activeOpacity={0.78}
+            onPress={markAllRead}
+            style={styles.actionButton}
+          >
+            <Text style={styles.actionText}>Marcar leídas</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={clear}>
-            <Text style={styles.headerAction}>Vaciar</Text>
+
+          <TouchableOpacity
+            activeOpacity={0.78}
+            onPress={clear}
+            style={[styles.actionButton, styles.actionButtonDanger]}
+          >
+            <Text style={[styles.actionText, styles.actionTextDanger]}>
+              Vaciar
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <FlatList
-        contentContainerStyle={{ padding: global.SPACING.md }}
         data={data}
         keyExtractor={(it) => it.id}
+        contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         renderItem={({ item }) => (
           <Item
@@ -90,29 +187,59 @@ const NotificationsScreen: React.FC = () => {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTxt}>No tenés notificaciones aún.</Text>
+            <Ionicons
+              name="notifications-off-outline"
+              size={36}
+              color={AppTheme.text.muted}
+            />
+            <Text style={styles.emptyTitle}>Sin notificaciones</Text>
+            <Text style={styles.emptyTxt}>
+              Cuando haya novedades operativas, las vas a ver acá.
+            </Text>
           </View>
         }
       />
 
-      {/* Modal de detalle */}
+      <DriverBottomNavigation activeTab="activity" onPress={handleTabPress} />
+
       <Modal
         transparent
         visible={!!selected}
         onRequestClose={() => setSelected(null)}
         animationType="fade"
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalKind}>
-              {selected ? kindLabel[selected.kind] : ''}
-            </Text>
-            <Text style={styles.modalTitle}>{selected?.title}</Text>
-            {!!selected?.body && <Text style={styles.modalBody}>{selected?.body}</Text>}
+        <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalKind}>
+                  {selected ? kindLabel[selected.kind] : ""}
+                </Text>
+                <Text style={styles.modalTitle}>{selected?.title}</Text>
+              </View>
+
+              <Pressable
+                onPress={() => setSelected(null)}
+                style={styles.closeBtn}
+              >
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color={AppTheme.text.primary}
+                />
+              </Pressable>
+            </View>
+
+            {!!selected?.body && (
+              <Text style={styles.modalBody}>{selected.body}</Text>
+            )}
+
             {!!selected?.data && (
-              <Text style={styles.modalData}>
-                {JSON.stringify(selected?.data, null, 2)}
-              </Text>
+              <View style={styles.modalDataBox}>
+                <Text style={styles.modalData}>
+                  {JSON.stringify(selected.data, null, 2)}
+                </Text>
+              </View>
             )}
 
             <View style={styles.modalFooter}>
@@ -124,15 +251,21 @@ const NotificationsScreen: React.FC = () => {
                     setSelected(null);
                   }}
                 >
-                  <Text style={styles.btnTxt}>Eliminar</Text>
+                  <Text style={[styles.btnTxt, styles.btnTxtDanger]}>
+                    Eliminar
+                  </Text>
                 </Pressable>
               )}
-              <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => setSelected(null)}>
-                <Text style={styles.btnTxt}>Cerrar</Text>
+
+              <Pressable
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={() => setSelected(null)}
+              >
+                <Text style={styles.btnTxtPrimary}>Cerrar</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -143,130 +276,255 @@ export default NotificationsScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: global.COLORS.background,
+    backgroundColor: AppTheme.surfaces.screen,
   },
+
   header: {
-    paddingTop: global.SIZES.statusBarHeight + 8,
-    paddingHorizontal: global.SPACING.md,
-    paddingBottom: global.SPACING.sm,
-    backgroundColor: global.COLORS.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E6E6E6',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 8,
+    paddingTop: AppTheme.layout.headerTopPadding,
+    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingBottom: AppTheme.spacing.md,
   },
-  headerTitle: {
-    fontSize: global.FONT.size.lg,
-    fontWeight: '700',
-    color: global.COLORS.text,
+
+  kicker: {
+    ...AppTheme.typography.kicker,
   },
-  headerAction: {
-    color: global.COLORS.blue,
-    fontWeight: '600',
+
+  title: {
+    ...AppTheme.typography.titleLg,
+    marginTop: AppTheme.spacing.xs,
   },
+
+  subtitle: {
+    ...AppTheme.typography.body,
+    marginTop: AppTheme.spacing.sm,
+  },
+
+  actions: {
+    flexDirection: "row",
+    gap: AppTheme.spacing.sm,
+    marginTop: AppTheme.spacing.md,
+  },
+
+  actionButton: {
+    minHeight: 36,
+    paddingHorizontal: AppTheme.spacing.md,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: AppTheme.overlays.primary,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  actionButtonDanger: {
+    backgroundColor: "rgba(239, 68, 68, 0.10)",
+    borderColor: "rgba(239, 68, 68, 0.24)",
+  },
+
+  actionText: {
+    color: AppTheme.colors.primary,
+    fontSize: 12,
+    fontWeight: AppTheme.font.weight.black,
+  },
+
+  actionTextDanger: {
+    color: AppTheme.colors.danger,
+  },
+
+  listContent: {
+    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingBottom: 124,
+  },
+
   item: {
-    backgroundColor: global.COLORS.white,
-    borderRadius: 12,
-    padding: global.SPACING.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e6e6e6',
+    borderRadius: AppTheme.radius.xl,
+    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.soft,
+    padding: AppTheme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: AppTheme.spacing.md,
   },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+
+  itemIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: AppTheme.radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: AppTheme.overlays.primary,
+  },
+
+  itemContent: {
+    flex: 1,
+  },
+
+  itemTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    marginBottom: 2,
   },
+
   itemKind: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontSize: 10,
+    fontWeight: AppTheme.font.weight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
+
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ef4444',
+    width: 7,
+    height: 7,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: AppTheme.colors.danger,
   },
+
   itemTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: global.COLORS.text,
+    color: AppTheme.text.primary,
+    fontSize: 15,
+    fontWeight: AppTheme.font.weight.black,
   },
+
   itemBody: {
-    marginTop: 2,
-    fontSize: 14,
-    color: '#475569',
-  },
-  itemDate: {
-    marginTop: 6,
+    color: AppTheme.text.secondary,
     fontSize: 12,
-    color: '#94a3b8',
+    lineHeight: 17,
+    fontWeight: AppTheme.font.weight.medium,
+    marginTop: 2,
   },
+
+  itemDate: {
+    color: AppTheme.text.muted,
+    fontSize: 11,
+    fontWeight: AppTheme.font.weight.bold,
+    marginTop: 5,
+  },
+
   empty: {
-    alignItems: 'center',
-    marginTop: 40,
+    alignItems: "center",
+    marginTop: 54,
+    paddingHorizontal: AppTheme.spacing.lg,
   },
+
+  emptyTitle: {
+    color: AppTheme.text.primary,
+    fontSize: 16,
+    fontWeight: AppTheme.font.weight.black,
+    marginTop: AppTheme.spacing.md,
+  },
+
   emptyTxt: {
-    color: '#94a3b8',
+    color: AppTheme.text.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 6,
   },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: '#00000066',
-    justifyContent: 'center',
-    padding: 16,
+    backgroundColor: AppTheme.overlays.camera,
+    justifyContent: "center",
+    padding: AppTheme.spacing.lg,
   },
+
   modalCard: {
-    backgroundColor: global.COLORS.white,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: AppTheme.radius.xxl,
+    backgroundColor: AppTheme.surfaces.screenAlt,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.medium,
+    padding: AppTheme.spacing.lg,
   },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: AppTheme.spacing.md,
+  },
+
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: AppTheme.radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: AppTheme.surfaces.card,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.soft,
+  },
+
   modalKind: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginBottom: 6,
+    ...AppTheme.typography.kicker,
   },
+
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: global.COLORS.text,
+    color: AppTheme.text.primary,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: AppTheme.font.weight.black,
+    marginTop: AppTheme.spacing.xs,
   },
+
   modalBody: {
-    marginTop: 8,
+    color: AppTheme.text.secondary,
     fontSize: 14,
-    color: '#475569',
+    lineHeight: 20,
+    fontWeight: AppTheme.font.weight.medium,
+    marginTop: AppTheme.spacing.md,
   },
+
+  modalDataBox: {
+    marginTop: AppTheme.spacing.md,
+    borderRadius: AppTheme.radius.lg,
+    backgroundColor: AppTheme.surfaces.card,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.soft,
+    padding: AppTheme.spacing.md,
+  },
+
   modalData: {
-    marginTop: 12,
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#334155',
+    color: AppTheme.text.muted,
+    fontSize: 11,
   },
+
   modalFooter: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
+    marginTop: AppTheme.spacing.lg,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: AppTheme.spacing.sm,
   },
+
   btn: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    minHeight: 42,
+    paddingHorizontal: AppTheme.spacing.md,
+    borderRadius: AppTheme.radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
   },
+
   btnPrimary: {
-    backgroundColor: '#7A40F2',
+    backgroundColor: AppTheme.colors.primary,
   },
+
   btnDanger: {
-    backgroundColor: '#ef4444',
+    backgroundColor: "rgba(239, 68, 68, 0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.28)",
   },
+
+  btnTxtPrimary: {
+    color: AppTheme.colors.white,
+    fontWeight: AppTheme.font.weight.black,
+  },
+
   btnTxt: {
-    color: '#fff',
-    fontWeight: '700',
+    fontWeight: AppTheme.font.weight.black,
+  },
+
+  btnTxtDanger: {
+    color: AppTheme.colors.danger,
   },
 });

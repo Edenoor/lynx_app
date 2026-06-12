@@ -5,13 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFE600"
-    },
+"splash": {
+  "image": "./assets/splash.png",
+  "resizeMode": "cover",
+  "backgroundColor": "#080A10"
+},
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beltrameme.wynflexfe",
