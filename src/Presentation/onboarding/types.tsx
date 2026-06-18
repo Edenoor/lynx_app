@@ -21,7 +21,9 @@ export type VehicleInfo = {
   type: VehicleType | null;
   brand: string | null;
   model: string | null;
-    plate: string | null; 
+  plate: string | null;
+  dni: string | null;
+  cuil: string | null;
 };
 
 export type OnboardingState = {

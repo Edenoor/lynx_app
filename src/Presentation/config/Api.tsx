@@ -1,4 +1,5 @@
 // src/Presentation/config/Api.tsx
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.wynflex.com.ar"
@@ -27,14 +28,41 @@ export const handleUnauthorizedResponse = async () => {
   }
 };
 
-export const postJson = async (path: string, body: any) => {
+const getStoredToken = async (): Promise<string | null> => {
+  try {
+    const rawUser = await AsyncStorage.getItem("user");
+    if (!rawUser) return null;
+
+    const parsed = JSON.parse(rawUser);
+    return parsed?.token ? String(parsed.token) : null;
+  } catch {
+    return null;
+  }
+};
+
+const requestJson = async (
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: any
+) => {
   const finalPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${API_URL}${finalPath}`;
+  const token = await getStoredToken();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  console.log("API REQUEST:", `${method} ${url}`);
 
   const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
   let json: any;
@@ -61,4 +89,24 @@ export const postJson = async (path: string, body: any) => {
   }
 
   return json;
+};
+
+export const getJson = async (path: string) => {
+  return requestJson("GET", path);
+};
+
+export const postJson = async (path: string, body: any) => {
+  return requestJson("POST", path, body);
+};
+
+export const putJson = async (path: string, body: any) => {
+  return requestJson("PUT", path, body);
+};
+
+export const patchJson = async (path: string, body: any) => {
+  return requestJson("PATCH", path, body);
+};
+
+export const deleteJson = async (path: string) => {
+  return requestJson("DELETE", path);
 };

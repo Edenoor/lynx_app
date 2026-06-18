@@ -2,6 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   View,
   Text,
   FlatList,
@@ -14,8 +15,10 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
+import { File, Paths } from "expo-file-system/next";
 
 import useEnviosViewModel from "./ViewModel";
+import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
 import global from "../../../theme/global";
 import AppTheme from "../../../theme/AppTheme";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
@@ -27,20 +30,39 @@ import {
   DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
 
+type TabKey = "current" | "finished" | "flex";
+
 type Envio = {
+  id?: string | number | null;
+  delivery_id?: string | number | null;
   numero_tracking: string | null;
+  tracking?: string | null;
+  tracking_number?: string | null;
   fecha_colecta: string | null;
+  fecha_wynflex?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  status_updated_at?: string | null;
+  assigned_at?: string | null;
   nombre_fantasia: string | null;
+  store_name?: string | null;
+  seller_name?: string | null;
   direccion: string | null;
+  address?: string | null;
   cp: string | null;
   estado: string | null;
+  status?: string | null;
+  status_ml?: string | null;
+  assignment_response?: string | null;
   cadete: string | null;
   zona: string | null;
   metodo_envio?: string | null;
   localidad?: string | null;
   provincia?: string | null;
-  precio_chofer?: string | null;
-  porcentaje_chofer?: string | null;
+precio_chofer?: string | null;
+porcentaje_chofer?: string | null;
+neto_chofer?: string | null;
+  [key: string]: any;
 };
 
 const n = (v: any) => {
@@ -49,6 +71,14 @@ const n = (v: any) => {
 };
 
 const fmtMoney = (v: any) => `$${n(v).toLocaleString("es-AR")}`;
+
+const buildExcelFileName = (username?: string | null) => {
+  const cleanName = String(username || "driver")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return `envios_${cleanName || "driver"}.xlsx`;
+};
 
 const tryParseDate = (s?: string | null): Date | null => {
   if (!s) return null;
@@ -86,47 +116,64 @@ const startOfDay = (d: Date) =>
 const endOfDay = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-const normalizeStatus = (estado?: string | null) =>
-  String(estado || "").toLowerCase();
+const normalizeText = (value?: unknown) =>
+  String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-const isOnDemand = (m?: string | null) =>
-  ["tradicional", "turbo"].includes(String(m || "").toLowerCase());
+const getStatus = (item: Envio) =>
+  normalizeText(
+    item.estado ||
+      item.status_ml ||
+      item.status ||
+      item.assignment_response ||
+      ""
+  );
 
-const isFinalizado = (estado?: string | null) => {
-  const s = normalizeStatus(estado);
+const isFinalizado = (item: Envio) => {
+  const s = getStatus(item);
 
   return (
     s.includes("entregado") ||
     s.includes("finaliz") ||
-    s.includes("cancel")
-  );
-};
-
-const esAceptadoOEnCurso = (estado?: string | null) => {
-  const s = normalizeStatus(estado);
-
-  return (
-    s.includes("acept") ||
-    s.includes("asign") ||
-    s.includes("retir") ||
-    s.includes("en camino") ||
-    s.includes("transit")
+    s.includes("cancel") ||
+    s.includes("rechaz")
   );
 };
 
 const isAttention = (item: Envio) => {
-  const s = normalizeStatus(item.estado);
+  const s = getStatus(item);
 
   return (
     !item.cadete ||
     s.includes("cancel") ||
     s.includes("pendiente") ||
-    s.includes("sin asignar")
+    s.includes("sin asignar") ||
+    s.includes("rechaz")
+  );
+};
+
+const getDateValue = (item: Envio): string | null => {
+  return (
+    item.fecha_colecta ||
+    item.fecha_wynflex ||
+    item.status_updated_at ||
+    item.updated_at ||
+    item.assigned_at ||
+    item.created_at ||
+    null
   );
 };
 
 const netoChofer = (it?: Envio | null) => {
   if (!it) return 0;
+
+  if (it.neto_chofer !== undefined && it.neto_chofer !== null) {
+    return n(it.neto_chofer);
+  }
 
   const precio = n(it.precio_chofer);
   const pRaw = n(it.porcentaje_chofer);
@@ -135,10 +182,96 @@ const netoChofer = (it?: Envio | null) => {
   return Math.round(precio * factor * 100) / 100;
 };
 
-export const EnviosScreen = ({ navigation }: any) => {
-  const { list, loading, error, reload } = useEnviosViewModel();
+const normalizeCurrentDelivery = (item: any): Envio => {
+  const tracking =
+    item?.numero_tracking ||
+    item?.tracking ||
+    item?.tracking_number ||
+    item?.trackingNumber ||
+    item?.shipment_id ||
+    item?.shipmentId ||
+    null;
 
-  const rows = (list || []).filter(Boolean) as Envio[];
+  const estado =
+    item?.estado ||
+    item?.status_ml ||
+    item?.status ||
+    item?.assignment_response ||
+    null;
+
+  const nombreFantasia =
+    item?.nombre_fantasia ||
+    item?.store_name ||
+    item?.storeName ||
+    item?.seller_name ||
+    item?.sellerName ||
+    item?.tienda ||
+    null;
+
+  const direccion =
+    item?.direccion ||
+    item?.address ||
+    item?.domicilio ||
+    item?.receiver_address ||
+    null;
+
+  return {
+    ...item,
+    numero_tracking: tracking,
+    tracking,
+    fecha_colecta: getDateValue(item),
+    nombre_fantasia: nombreFantasia,
+    direccion,
+    cp: item?.cp || item?.postal_code || item?.zip_code || null,
+    estado,
+    cadete: item?.cadete || item?.driver_name || item?.driver || null,
+    zona: item?.zona || item?.zone || item?.localidad || item?.provincia || null,
+    localidad: item?.localidad || item?.provincia || item?.zona || null,
+    metodo_envio: item?.metodo_envio || item?.delivery_type || item?.type || "turbo",
+    precio_chofer:
+  item?.precio_chofer !== undefined && item?.precio_chofer !== null
+    ? String(item.precio_chofer)
+    : item?.driver_price !== undefined && item?.driver_price !== null
+    ? String(item.driver_price)
+    : null,
+
+porcentaje_chofer:
+  item?.porcentaje_chofer !== undefined && item?.porcentaje_chofer !== null
+    ? String(item.porcentaje_chofer)
+    : item?.driver_percentage !== undefined && item?.driver_percentage !== null
+    ? String(item.driver_percentage)
+    : null,
+
+neto_chofer:
+  item?.neto_chofer !== undefined && item?.neto_chofer !== null
+    ? String(item.neto_chofer)
+    : null,
+  };
+};
+
+export const EnviosScreen = ({ navigation }: any) => {
+  const {
+    list,
+    currentDeliveries,
+    loading,
+    error,
+    currentError,
+    reload,
+    username,
+  } = useEnviosViewModel();
+
+  const legacyRows = useMemo(
+    () => ((list || []).filter(Boolean) as Envio[]),
+    [list]
+  );
+
+  const currentRows = useMemo(
+    () =>
+      ((currentDeliveries || []).filter(Boolean) as any[]).map(
+        normalizeCurrentDelivery
+      ),
+    [currentDeliveries]
+  );
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -148,16 +281,80 @@ export const EnviosScreen = ({ navigation }: any) => {
   const [to, setTo] = useState<Date | null>(null);
   const [picker, setPicker] = useState<null | "FROM" | "TO">(null);
 
-  const [tab, setTab] = useState<"ondemand" | "flex">("ondemand");
+  const [tab, setTab] = useState<TabKey>("current");
 
   const [selected, setSelected] = useState<Envio | null>(null);
   const [showTotals, setShowTotals] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await reload();
     setRefreshing(false);
   }, [reload]);
+
+  const handleDownloadWeeklyExcel = useCallback(async () => {
+    if (!username) {
+      Alert.alert(
+        "No se puede descargar",
+        "No encontramos el nombre legacy del chofer en la sesión."
+      );
+      return;
+    }
+
+    if (downloadingExcel) return;
+
+    try {
+      setDownloadingExcel(true);
+
+      const Sharing = await import("expo-sharing");
+
+      const response = await ApiDelivery.post(
+        "/v1/data/driver/print",
+        { username },
+        {
+          responseType: "arraybuffer",
+          headers: {
+            Accept:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          },
+        }
+      );
+
+      const fileName = buildExcelFileName(username);
+      const file = new File(Paths.cache, fileName);
+      const bytes = new Uint8Array(response.data);
+
+      await file.write(bytes);
+
+      const canShare = await Sharing.isAvailableAsync();
+
+      if (!canShare) {
+        Alert.alert(
+          "Excel generado",
+          "El archivo se generó correctamente, pero este dispositivo no permite compartirlo desde la app."
+        );
+        return;
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        dialogTitle: "Descargar Excel semanal",
+        UTI: "com.microsoft.excel.xlsx",
+      });
+    } catch (e: any) {
+      const message =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        "No se pudo descargar el Excel semanal.";
+
+      Alert.alert("Error descargando Excel", message);
+    } finally {
+      setDownloadingExcel(false);
+    }
+  }, [downloadingExcel, username]);
 
   const handleTabPress = useCallback(
     (tabKey: DriverTabKey) => {
@@ -168,10 +365,10 @@ export const EnviosScreen = ({ navigation }: any) => {
         return;
       }
 
-if (tabKey === "scan") {
-  navigation.navigate("DriverScanOptionsScreen");
-  return;
-}
+      if (tabKey === "scan") {
+        navigation.navigate("DriverScanOptionsScreen");
+        return;
+      }
 
       if (tabKey === "activity") {
         navigation.navigate("NotificationsScreen");
@@ -185,9 +382,15 @@ if (tabKey === "scan") {
     [navigation]
   );
 
+  const sourceRows = useMemo(() => {
+    if (tab === "flex") return legacyRows;
+    if (tab === "finished") return currentRows.filter(isFinalizado);
+    return currentRows.filter((item) => !isFinalizado(item));
+  }, [currentRows, legacyRows, tab]);
+
   const filtered = useMemo(() => {
-    const base = rows.filter((r) => {
-      const d = tryParseDate(r.fecha_colecta);
+    return sourceRows.filter((r) => {
+      const d = tryParseDate(getDateValue(r));
 
       if (from && to) {
         if (!d) return false;
@@ -202,32 +405,18 @@ if (tabKey === "scan") {
 
       return true;
     });
+  }, [sourceRows, quickToday, from, to]);
 
-    if (tab === "ondemand") {
-      return base.filter(
-        (r) =>
-          isOnDemand(r.metodo_envio) &&
-          !isFinalizado(r.estado) &&
-          esAceptadoOEnCurso(r.estado)
-      );
-    }
-
-    return base.filter(
-      (r) =>
-        !isOnDemand(r.metodo_envio) ||
-        isFinalizado(r.estado) ||
-        !esAceptadoOEnCurso(r.estado)
-    );
-  }, [rows, quickToday, from, to, tab]);
+  const activeError = tab === "flex" ? error : currentError;
 
   const visibleTotals = useMemo(() => {
     const totalEnvios = filtered.length;
 
     const entregados = filtered.filter((it) =>
-      normalizeStatus(it.estado).includes("entregado")
+      getStatus(it).includes("entregado")
     ).length;
 
-    const pendientes = filtered.filter((it) => !isFinalizado(it.estado)).length;
+    const pendientes = filtered.filter((it) => !isFinalizado(it)).length;
     const atencion = filtered.filter(isAttention).length;
 
     const montoBruto = filtered.reduce(
@@ -247,7 +436,19 @@ if (tabKey === "scan") {
     };
   }, [filtered]);
 
-  if (loading && rows.length === 0) {
+  const subtitle = useMemo(() => {
+    if (tab === "current") return "Asignados y activos";
+    if (tab === "finished") return "Historial de envíos cerrados";
+    return "Operación Flex legacy";
+  }, [tab]);
+
+  const emptyTitle = useMemo(() => {
+    if (tab === "current") return "No hay envíos en curso";
+    if (tab === "finished") return "No hay envíos finalizados";
+    return "No hay envíos Flex";
+  }, [tab]);
+
+  if (loading && legacyRows.length === 0 && currentRows.length === 0) {
     return (
       <View style={styles.center}>
         <LynxPulseLoader message="Cargando envíos..." />
@@ -262,14 +463,30 @@ if (tabKey === "scan") {
           <View>
             <Text style={styles.kicker}>DRIVER</Text>
             <Text style={styles.title}>Mis envíos</Text>
-            <Text style={styles.subtitle}>
-              {tab === "ondemand"
-                ? "Seguimiento de envíos activos"
-                : "Operación Flex asignada"}
-            </Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
 
           <View style={styles.headerActions}>
+            {tab === "flex" && (
+              <Pressable
+                style={[
+                  styles.iconButton,
+                  styles.downloadButton,
+                  downloadingExcel && styles.iconButtonDisabled,
+                ]}
+                onPress={handleDownloadWeeklyExcel}
+                disabled={downloadingExcel}
+              >
+                <Ionicons
+                  name={
+                    downloadingExcel ? "hourglass-outline" : "download-outline"
+                  }
+                  size={19}
+                  color={AppTheme.colors.white}
+                />
+              </Pressable>
+            )}
+
             <Pressable style={styles.iconButton} onPress={reload}>
               <Ionicons
                 name="refresh"
@@ -281,55 +498,26 @@ if (tabKey === "scan") {
         </View>
 
         <View style={styles.segmented}>
-          <Pressable
-            onPress={() => setTab("ondemand")}
-            style={[
-              styles.segmentButton,
-              tab === "ondemand" && styles.segmentButtonActive,
-            ]}
-          >
-            <Ionicons
-              name="flash-outline"
-              size={15}
-              color={
-                tab === "ondemand"
-                  ? AppTheme.colors.white
-                  : AppTheme.text.muted
-              }
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                tab === "ondemand" && styles.segmentTextActive,
-              ]}
-            >
-              En curso
-            </Text>
-          </Pressable>
+          <SegmentButton
+            active={tab === "current"}
+            icon="flash-outline"
+            label="En curso"
+            onPress={() => setTab("current")}
+          />
 
-          <Pressable
+          <SegmentButton
+            active={tab === "finished"}
+            icon="checkmark-circle-outline"
+            label="Finalizados"
+            onPress={() => setTab("finished")}
+          />
+
+          <SegmentButton
+            active={tab === "flex"}
+            icon="cube-outline"
+            label="Flex"
             onPress={() => setTab("flex")}
-            style={[
-              styles.segmentButton,
-              tab === "flex" && styles.segmentButtonActive,
-            ]}
-          >
-            <Ionicons
-              name="cube-outline"
-              size={15}
-              color={
-                tab === "flex" ? AppTheme.colors.white : AppTheme.text.muted
-              }
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                tab === "flex" && styles.segmentTextActive,
-              ]}
-            >
-              Flex
-            </Text>
-          </Pressable>
+          />
         </View>
 
         <View style={styles.statsGrid}>
@@ -412,21 +600,23 @@ if (tabKey === "scan") {
           </ScrollView>
         </View>
 
-        {!!error && (
+        {!!activeError && (
           <View style={styles.errorBox}>
             <Ionicons
               name="warning-outline"
               size={16}
               color={AppTheme.colors.danger}
             />
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorText}>{activeError}</Text>
           </View>
         )}
       </View>
 
       <FlatList
         data={filtered}
-        keyExtractor={(item, i) => `${item?.numero_tracking ?? "nt"}-${i}`}
+        keyExtractor={(item, i) =>
+          `${item?.id ?? item?.delivery_id ?? item?.numero_tracking ?? "nt"}-${i}`
+        }
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
@@ -452,11 +642,7 @@ if (tabKey === "scan") {
               size={34}
               color={AppTheme.text.muted}
             />
-            <Text style={styles.emptyTitle}>
-              {tab === "ondemand"
-                ? "No hay envíos en curso"
-                : "No hay envíos Flex"}
-            </Text>
+            <Text style={styles.emptyTitle}>{emptyTitle}</Text>
             <Text style={styles.emptyText}>
               Probá cambiar el filtro de fecha o actualizar la pantalla.
             </Text>
@@ -548,7 +734,7 @@ if (tabKey === "scan") {
                   value={from || new Date()}
                   mode="date"
                   display={Platform.OS === "ios" ? "inline" : "default"}
-                  onChange={(e, d) => {
+                  onChange={(_, d) => {
                     setPicker(null);
                     if (d) setFrom(d);
                   }}
@@ -564,7 +750,7 @@ if (tabKey === "scan") {
                   value={to || new Date()}
                   mode="date"
                   display={Platform.OS === "ios" ? "inline" : "default"}
-                  onChange={(e, d) => {
+                  onChange={(_, d) => {
                     setPicker(null);
                     if (d) setTo(d);
                   }}
@@ -600,6 +786,32 @@ if (tabKey === "scan") {
     </View>
   );
 };
+
+const SegmentButton = ({
+  active,
+  icon,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) => (
+  <Pressable
+    onPress={onPress}
+    style={[styles.segmentButton, active && styles.segmentButtonActive]}
+  >
+    <Ionicons
+      name={icon}
+      size={14}
+      color={active ? AppTheme.colors.white : AppTheme.text.muted}
+    />
+    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+      {label}
+    </Text>
+  </Pressable>
+);
 
 const ModalHeader = ({
   title,
@@ -689,6 +901,15 @@ const styles = StyleSheet.create({
     borderColor: AppTheme.borders.default,
   },
 
+  downloadButton: {
+    backgroundColor: AppTheme.colors.primary,
+    borderColor: AppTheme.colors.primary,
+  },
+
+  iconButtonDisabled: {
+    opacity: 0.58,
+  },
+
   segmented: {
     flexDirection: "row",
     padding: 4,
@@ -701,12 +922,13 @@ const styles = StyleSheet.create({
 
   segmentButton: {
     flex: 1,
-    height: 38,
+    minHeight: 38,
     borderRadius: AppTheme.radius.full,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 6,
+    gap: 4,
+    paddingHorizontal: 4,
   },
 
   segmentButtonActive: {
@@ -715,7 +937,7 @@ const styles = StyleSheet.create({
 
   segmentText: {
     color: AppTheme.text.muted,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: AppTheme.font.weight.black,
   },
 
@@ -767,9 +989,9 @@ const styles = StyleSheet.create({
     height: 38,
     paddingHorizontal: 13,
     borderRadius: AppTheme.radius.full,
-    backgroundColor: "rgba(239, 68, 68, 0.11)",
+    backgroundColor: `${AppTheme.colors.danger}22`,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.28)",
+    borderColor: `${AppTheme.colors.danger}44`,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -784,9 +1006,9 @@ const styles = StyleSheet.create({
     marginTop: AppTheme.spacing.md,
     padding: AppTheme.spacing.md,
     borderRadius: AppTheme.radius.lg,
-    backgroundColor: "rgba(239, 68, 68, 0.10)",
+    backgroundColor: `${AppTheme.colors.danger}22`,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.24)",
+    borderColor: `${AppTheme.colors.danger}44`,
     flexDirection: "row",
     gap: AppTheme.spacing.sm,
   },

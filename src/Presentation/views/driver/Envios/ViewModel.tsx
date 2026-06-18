@@ -5,6 +5,11 @@ import { UserContext } from "../../../context/UserContext";
 import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
 
 type LegacyUserLike = {
+  id?: string | number | null;
+  driver_id?: string | number | null;
+  driverId?: string | number | null;
+  driverDataId?: string | number | null;
+  driver_data_id?: string | number | null;
   username?: string | null;
   name?: string | null;
   first_name?: string | null;
@@ -75,12 +80,43 @@ const buildLegacyDriverName = (user?: LegacyUserLike | null): string => {
   return buildLegacyDriverNameCandidates(user)[0] || "";
 };
 
+const buildDriverIdCandidates = (user?: LegacyUserLike | null): string[] => {
+  if (!user) return [];
+
+  const rawCandidates = [
+    user.driver_id,
+    user.driverId,
+    user.driverDataId,
+    user.driver_data_id,
+    user.id,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(rawCandidates));
+};
+
+const normalizeRows = (payload: any): any[] => {
+  const rows =
+    payload?.deliveries ??
+    payload?.result ??
+    payload?.data ??
+    payload?.rows ??
+    [];
+
+  if (Array.isArray(rows)) return rows;
+  if (rows && typeof rows === "object") return [rows];
+  return [];
+};
+
 const getRowStatus = (row: any): string => {
   return normalizeText(
     row?.estado ||
+      row?.status_ml ||
       row?.status ||
       row?.delivery_status ||
       row?.estado_envio ||
+      row?.assignment_response ||
       row?.Estado
   );
 };
@@ -89,8 +125,12 @@ const getRowStatusDate = (row: any): Date | null => {
   const value =
     row?.fecha_estado ||
     row?.fechaEstado ||
+    row?.status_updated_at ||
     row?.updated_at ||
     row?.updatedAt ||
+    row?.fecha_wynflex ||
+    row?.assigned_at ||
+    row?.created_at ||
     row?.Fecha_estado ||
     row?.["Fecha estado"];
 
@@ -206,10 +246,15 @@ const useEnviosViewModel = () => {
   const { user, getUserSession } = useContext(UserContext);
 
   const [loading, setLoading] = useState(false);
+
   const [list, setList] = useState<any[]>([]);
+  const [currentDeliveries, setCurrentDeliveries] = useState<any[]>([]);
+
   const [totales, setTotales] = useState<any>(null);
   const [discount, setDiscount] = useState<any>(null);
+
   const [error, setError] = useState("");
+  const [currentError, setCurrentError] = useState("");
 
   const legacyDriverName = useMemo(() => {
     return buildLegacyDriverName(user);
@@ -219,8 +264,124 @@ const useEnviosViewModel = () => {
     return buildPerformanceAnalytics(list);
   }, [list]);
 
+  const loadLegacy = async (sessionUser: any) => {
+    const candidates = buildLegacyDriverNameCandidates(sessionUser);
+
+    if (candidates.length === 0) {
+      setList([]);
+      setTotales(null);
+      setDiscount(null);
+      return "No hay nombre de chofer legacy en sesión";
+    }
+
+    console.log("[Driver legacy] candidates:", candidates);
+
+    let finalResponse: any = null;
+    let finalRows: any[] = [];
+    let matchedCandidate = "";
+
+    for (const candidate of candidates) {
+      const response = await ApiDelivery.post("/v1/data/driver/me", {
+        username: candidate,
+      });
+
+      const r = response.data;
+
+      const ok =
+        r?.ok === true ||
+        r?.success === true ||
+        r?.status === "ok" ||
+        r?.statusCode === 200;
+
+      if (!ok) {
+        continue;
+      }
+
+      const rows = r?.result ?? r?.data ?? [];
+
+      console.log(
+        "[Driver legacy] candidate:",
+        candidate,
+        "rows:",
+        rows.length
+      );
+
+      if (rows.length > 0) {
+        finalResponse = r;
+        finalRows = rows;
+        matchedCandidate = candidate;
+        break;
+      }
+
+      if (!finalResponse) {
+        finalResponse = r;
+        finalRows = rows;
+      }
+    }
+
+    console.log("[Driver legacy] matchedCandidate:", matchedCandidate || "none");
+
+    setList(finalRows);
+    setTotales(finalResponse?.totales ?? null);
+    setDiscount(finalResponse?.discount ?? null);
+
+    if (finalRows.length === 0) {
+      return `No se encontraron envíos Flex para: ${candidates.join(" | ")}`;
+    }
+
+    return "";
+  };
+
+  const loadCurrentDeliveries = async (sessionUser: any) => {
+    const driverIds = buildDriverIdCandidates(sessionUser);
+
+    if (driverIds.length === 0) {
+      setCurrentDeliveries([]);
+      return "No hay driver_id disponible para envíos actuales";
+    }
+
+    console.log("[Driver current] driverId candidates:", driverIds);
+
+    let lastMessage = "";
+
+    for (const driverId of driverIds) {
+      try {
+        const response = await ApiDelivery.get(`/v2/drivers/${driverId}/deliveries`);
+        const r = response.data;
+
+        const ok =
+          r?.ok === true ||
+          r?.success === true ||
+          r?.status === "ok" ||
+          r?.statusCode === 200;
+
+        if (!ok) {
+          lastMessage = r?.error || r?.message || `No OK para driver ${driverId}`;
+          continue;
+        }
+
+        const rows = normalizeRows(r);
+
+        console.log("[Driver current] driverId:", driverId, "rows:", rows.length);
+
+        setCurrentDeliveries(rows);
+        return "";
+      } catch (e: any) {
+        lastMessage =
+          e?.response?.data?.error ||
+          e?.response?.data?.message ||
+          e?.message ||
+          `Error cargando envíos actuales para driver ${driverId}`;
+      }
+    }
+
+    setCurrentDeliveries([]);
+    return lastMessage || "No se encontraron envíos actuales";
+  };
+
   const load = async () => {
     setError("");
+    setCurrentError("");
 
     let sessionUser: any = user;
 
@@ -231,19 +392,11 @@ const useEnviosViewModel = () => {
       sessionUser = await getUserSession();
     }
 
-    const candidates = buildLegacyDriverNameCandidates(sessionUser);
-
-    if (candidates.length === 0) {
-      setError("No hay nombre de chofer en sesión");
-      setList([]);
-      setTotales(null);
-      setDiscount(null);
-      return;
-    }
-
     if (!sessionUser?.token) {
       setError("Token no disponible en sesión");
+      setCurrentError("Token no disponible en sesión");
       setList([]);
+      setCurrentDeliveries([]);
       setTotales(null);
       setDiscount(null);
       return;
@@ -252,76 +405,40 @@ const useEnviosViewModel = () => {
     setLoading(true);
 
     try {
-      console.log("[Driver legacy] candidates:", candidates);
+      const [legacyMessage, currentMessage] = await Promise.all([
+        loadLegacy(sessionUser).catch((e: any) => {
+          const message =
+            e?.response?.data?.message ||
+            e?.response?.data?.error ||
+            e?.message ||
+            "Error cargando envíos Flex";
 
-      let finalResponse: any = null;
-      let finalRows: any[] = [];
-      let matchedCandidate = "";
+          console.error("[Driver legacy] error:", message);
 
-      for (const candidate of candidates) {
-        const response = await ApiDelivery.post("/v1/data/driver/me", {
-          username: candidate,
-        });
+          setList([]);
+          setTotales(null);
+          setDiscount(null);
 
-        const r = response.data;
+          return message;
+        }),
 
-        const ok =
-          r?.ok === true ||
-          r?.success === true ||
-          r?.status === "ok" ||
-          r?.statusCode === 200;
+        loadCurrentDeliveries(sessionUser).catch((e: any) => {
+          const message =
+            e?.response?.data?.message ||
+            e?.response?.data?.error ||
+            e?.message ||
+            "Error cargando envíos actuales";
 
-        if (!ok) {
-          continue;
-        }
+          console.error("[Driver current] error:", message);
 
-        const rows = r?.result ?? r?.data ?? [];
+          setCurrentDeliveries([]);
 
-        console.log(
-          "[Driver legacy] candidate:",
-          candidate,
-          "rows:",
-          rows.length
-        );
+          return message;
+        }),
+      ]);
 
-        if (rows.length > 0) {
-          finalResponse = r;
-          finalRows = rows;
-          matchedCandidate = candidate;
-          break;
-        }
-
-        if (!finalResponse) {
-          finalResponse = r;
-          finalRows = rows;
-        }
-      }
-
-      console.log(
-        "[Driver legacy] matchedCandidate:",
-        matchedCandidate || "none"
-      );
-
-      setList(finalRows);
-      setTotales(finalResponse?.totales ?? null);
-      setDiscount(finalResponse?.discount ?? null);
-
-      if (finalRows.length === 0) {
-        setError(`No se encontraron envíos para: ${candidates.join(" | ")}`);
-      }
-    } catch (e: any) {
-      const message =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        e?.message ||
-        "Error cargando envíos";
-
-      console.error("[Driver legacy] error:", message);
-
-      setError(message);
-      setList([]);
-      setTotales(null);
-      setDiscount(null);
+      setError(legacyMessage || "");
+      setCurrentError(currentMessage || "");
     } finally {
       setLoading(false);
     }
@@ -335,9 +452,11 @@ const useEnviosViewModel = () => {
   return {
     loading,
     list,
+    currentDeliveries,
     totales,
     discount,
     error,
+    currentError,
     reload: load,
     username: legacyDriverName,
     legacyDriverName,

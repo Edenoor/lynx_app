@@ -29,15 +29,13 @@ const Stack = createNativeStackNavigator<DriverStackParamList>();
 export const DriverStackNavigator = () => {
   const { state } = useOnboarding();
 
-  const onboardingCompleted = state.completedLocal;
+  const onboardingCompleted = state.completedLocal === true;
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!onboardingCompleted && (
+      {!onboardingCompleted ? (
         <Stack.Screen name="Onboarding" component={OnboardingStackNavigator} />
-      )}
-
-      {onboardingCompleted && (
+      ) : (
         <>
           <Stack.Screen name="DriverScreen" component={DriverScreen} />
           <Stack.Screen name="EnviosScreen" component={EnviosScreen} />

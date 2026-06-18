@@ -1,7 +1,22 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { nanoid } from 'nanoid/non-secure';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { nanoid } from "nanoid/non-secure";
 
-export type NotiKind = 'NEW_TRAD' | 'TRAD_ACCEPTED' | 'INFO' | 'ALERT';
+export type NotiKind =
+  | "NEW_TRAD"
+  | "TRAD_ACCEPTED"
+  | "ASIGNACION"
+  | "DRIVER_ASIGNADO"
+  | "ASSIGNMENT_ACCEPTED"
+  | "ASSIGNMENT_REJECTED"
+  | "INFO"
+  | "ALERT";
 
 export type Noti = {
   id: string;
@@ -9,7 +24,7 @@ export type Noti = {
   title: string;
   body?: string;
   data?: any;
-  createdAt: number;   // Date.now()
+  createdAt: number;
   read: boolean;
 };
 
@@ -33,27 +48,34 @@ const NotificationsContext = createContext<Ctx>({
   clear: () => {},
 });
 
-export const NotificationsProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+export const NotificationsProvider: React.FC<React.PropsWithChildren> = ({
+  children,
+}) => {
   const [items, setItems] = useState<Noti[]>([]);
   const idGen = useRef(() => nanoid(12));
 
-  const add = useCallback((n: { kind: NotiKind; title: string; body?: string; data?: any }) => {
-    setItems((prev) => [
-      {
-        id: idGen.current(),
-        kind: n.kind,
-        title: n.title || 'Notificación',
-        body: n.body,
-        data: n.data,
-        createdAt: Date.now(),
-        read: false,
-      },
-      ...prev,
-    ]);
-  }, []);
+  const add = useCallback(
+    (n: { kind: NotiKind; title: string; body?: string; data?: any }) => {
+      setItems((prev) => [
+        {
+          id: idGen.current(),
+          kind: n.kind,
+          title: n.title || "Notificación",
+          body: n.body,
+          data: n.data,
+          createdAt: Date.now(),
+          read: false,
+        },
+        ...prev,
+      ]);
+    },
+    []
+  );
 
   const markRead = useCallback((id: string) => {
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, read: true } : x)));
+    setItems((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, read: true } : x))
+    );
   }, []);
 
   const markAllRead = useCallback(() => {
@@ -66,14 +88,29 @@ export const NotificationsProvider: React.FC<React.PropsWithChildren> = ({ child
 
   const clear = useCallback(() => setItems([]), []);
 
-  const unreadCount = useMemo(() => items.filter((x) => !x.read).length, [items]);
+  const unreadCount = useMemo(
+    () => items.filter((x) => !x.read).length,
+    [items]
+  );
 
   const value = useMemo(
-    () => ({ items, unreadCount, add, markRead, markAllRead, remove, clear }),
+    () => ({
+      items,
+      unreadCount,
+      add,
+      markRead,
+      markAllRead,
+      remove,
+      clear,
+    }),
     [items, unreadCount, add, markRead, markAllRead, remove, clear]
   );
 
-  return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
+  return (
+    <NotificationsContext.Provider value={value}>
+      {children}
+    </NotificationsContext.Provider>
+  );
 };
 
 export const useNotifications = () => useContext(NotificationsContext);

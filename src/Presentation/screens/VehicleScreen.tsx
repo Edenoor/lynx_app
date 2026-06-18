@@ -39,6 +39,8 @@ export function VehicleScreen({ navigation }: Props) {
   const [brand, setBrand] = useState<string>(state.vehicle.brand ?? "");
   const [model, setModel] = useState<string>(state.vehicle.model ?? "");
   const [plate, setPlate] = useState<string>(state.vehicle.plate ?? "");
+const [dni, setDni] = useState<string>(state.vehicle.dni ?? "");
+const [cuil, setCuil] = useState<string>(state.vehicle.cuil ?? "");
 
   const selectedVehicleLabel =
     VEHICLE_TYPES.find((item) => item.value === type)?.label ?? "";
@@ -53,9 +55,14 @@ export function VehicleScreen({ navigation }: Props) {
     return VEHICLE_CATALOG[type][brand] ?? [];
   }, [type, brand]);
 
-  const canContinue = Boolean(
-    type && brand && model && plate.trim().length >= 5
-  );
+const canContinue = Boolean(
+  type &&
+    brand &&
+    model &&
+    plate.trim().length >= 5 &&
+    dni.trim().length >= 7 &&
+    cuil.trim().length >= 10
+);
 
   const onChangeType = (value: VehicleType) => {
     setType(value);
@@ -92,15 +99,17 @@ export function VehicleScreen({ navigation }: Props) {
       return;
     }
 
-    dispatch({
-      type: "SET_VEHICLE",
-      value: {
-        type: type as VehicleType,
-        brand,
-        model,
-        plate: plate.trim().toUpperCase(),
-      },
-    });
+dispatch({
+  type: "SET_VEHICLE",
+  value: {
+    type: type as VehicleType,
+    brand,
+    model,
+    plate: plate.trim().toUpperCase(),
+    dni: dni.trim(),
+    cuil: cuil.trim(),
+  },
+});
 
     navigation.navigate("Selfie");
   };
@@ -213,6 +222,31 @@ export function VehicleScreen({ navigation }: Props) {
                 />
               </View>
             </View>
+            <View style={styles.section}>
+  <Text style={styles.label}>DNI</Text>
+
+  <TextInput
+    value={dni}
+    onChangeText={(text) => setDni(text.replace(/\D/g, ""))}
+    placeholder="Ej: 30123456"
+    placeholderTextColor="#64748B"
+    keyboardType="number-pad"
+    style={styles.input}
+  />
+</View>
+
+<View style={styles.section}>
+  <Text style={styles.label}>CUIL</Text>
+
+  <TextInput
+    value={cuil}
+    onChangeText={(text) => setCuil(text.replace(/\D/g, ""))}
+    placeholder="Ej: 20301234567"
+    placeholderTextColor="#64748B"
+    keyboardType="number-pad"
+    style={styles.input}
+  />
+</View>
           </ScrollView>
 
           <View style={styles.footer}>

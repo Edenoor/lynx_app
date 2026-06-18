@@ -79,8 +79,11 @@ async function firebaseUpload(input: Input): Promise<Result> {
   };
 }
 
-export async function uploadDriverDocuments(input: Input): Promise<Result> {
+async function uploadDriverDocuments(input: Input): Promise<Result> {
   if (input.mode === "mock") return mockUpload();
 
   return firebaseUpload(input);
 }
+
+export { uploadDriverDocuments };
+export type { UploadedDriverDocument };

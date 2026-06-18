@@ -15,6 +15,7 @@ import { uploadDriverDocuments } from "../onboarding/UploadDriverDocuments";
 import { RoundedButton } from "../components/RoundedButton";
 import { LynxLoader } from "../components/LynxLoader";
 import global from "../theme/global";
+import { saveDriverOnboardingBackend } from "../onboarding/SaveDriverOnboardingBackend";
 
 type SubmitStatus = "sending" | "success" | "error";
 
@@ -57,10 +58,16 @@ export function SubmitScreen() {
         throw new Error(res.error ?? "No se pudo enviar la documentación.");
       }
 
-      console.log("DRIVER DOCUMENTS UPLOADED:", res.documents);
+console.log("DRIVER DOCUMENTS UPLOADED:", res.documents);
 
-      dispatch({ type: "SET_COMPLETED_LOCAL", value: true });
-      setStatus("success");
+await saveDriverOnboardingBackend({
+  userId: user?.id || userKey || "",
+  vehicle: state.vehicle,
+  documents: res.documents,
+});
+
+dispatch({ type: "SET_COMPLETED_LOCAL", value: true });
+setStatus("success");
     } catch (error: any) {
       setStatus("error");
       setErrorMessage(error?.message ?? "No se pudo enviar la solicitud.");

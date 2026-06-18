@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "21332565420",
+    "project_id": "lynx-mobile-7d96b",
+    "storage_bucket": "lynx-mobile-7d96b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:21332565420:android:833745b7bdc7689458ae09",
+        "android_client_info": {
+          "package_name": "com.beltrameme.wynflexfe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC033otwxa3rWFd0bR3wCgA5cBLjbhJrq8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

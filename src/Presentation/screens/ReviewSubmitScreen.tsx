@@ -177,8 +177,22 @@ export function ReviewSubmitScreen({ navigation }: Props) {
                         styles.rowBorder,
                     ]}
                   >
-                    <View style={styles.groupStatusIcon}>
-                      <Text style={styles.groupStatusText}>
+                    <View
+                      style={[
+                        styles.groupStatusIcon,
+                        isComplete
+                          ? styles.groupStatusIconComplete
+                          : styles.groupStatusIconMissing,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.groupStatusText,
+                          isComplete
+                            ? styles.groupStatusTextComplete
+                            : styles.groupStatusTextMissing,
+                        ]}
+                      >
                         {isComplete ? "✓" : "!"}
                       </Text>
                     </View>
@@ -392,16 +406,27 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 999,
-    backgroundColor: "rgba(0,184,255,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(0,184,255,0.25)",
     alignItems: "center",
     justifyContent: "center",
   },
+  groupStatusIconComplete: {
+    backgroundColor: "rgba(34,197,94,0.12)",
+    borderColor: "rgba(34,197,94,0.25)",
+  },
+  groupStatusIconMissing: {
+    backgroundColor: "rgba(251,191,36,0.12)",
+    borderColor: "rgba(251,191,36,0.25)",
+  },
   groupStatusText: {
-    color: global.COLORS.blue,
     fontSize: 14,
     fontWeight: "900",
+  },
+  groupStatusTextComplete: {
+    color: "#22C55E",
+  },
+  groupStatusTextMissing: {
+    color: "#FBBF24",
   },
   groupText: {
     flex: 1,

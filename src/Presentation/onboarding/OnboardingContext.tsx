@@ -22,12 +22,23 @@ const initialState: OnboardingState = {
   acceptedTerms: false,
   files: {},
   completedLocal: false,
-  vehicle: { type: null, brand: null, model: null, plate: null },
+  vehicle: {
+    type: null,
+    brand: null,
+    model: null,
+    plate: null,
+    dni: null,
+    cuil: null,
+  },
 };
+
+type InternalAction =
+  | OnboardingAction
+  | { type: "RESET_STATE_ONLY" };
 
 function reducer(
   state: OnboardingState,
-  action: OnboardingAction
+  action: InternalAction
 ): OnboardingState {
   switch (action.type) {
     case "ACCEPT_TERMS":
@@ -41,6 +52,9 @@ function reducer(
 
     case "SET_VEHICLE":
       return { ...state, vehicle: action.value };
+
+    case "RESET_STATE_ONLY":
+      return { ...initialState };
 
     case "RESET":
       void clearOnboardingDir();
@@ -80,11 +94,13 @@ function pickUserKey(user: any): string | null {
 }
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatchBase] = useReducer(reducer, initialState);
   const [loading, setLoading] = useState(true);
 
   const { user } = useContext(UserContext);
   const userKey = pickUserKey(user);
+
+  const dispatch = dispatchBase as React.Dispatch<OnboardingAction>;
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +108,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     const init = async () => {
       setLoading(true);
 
-      dispatch({ type: "RESET" });
+      dispatchBase({ type: "RESET_STATE_ONLY" });
 
       if (!userKey) {
         if (!cancelled) setLoading(false);
@@ -103,7 +119,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
       if (cancelled) return;
 
-      dispatch({ type: "SET_COMPLETED_LOCAL", value: completed });
+      dispatchBase({ type: "SET_COMPLETED_LOCAL", value: completed });
       setLoading(false);
     };
 
@@ -122,8 +138,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   }, [state.completedLocal, userKey, loading]);
 
   const resetForCurrentUser = async () => {
-    void clearOnboardingDir();
-    dispatch({ type: "RESET" });
+    await clearOnboardingDir();
+    dispatchBase({ type: "RESET_STATE_ONLY" });
 
     if (userKey) {
       await clearOnboardingCompleted(userKey);
@@ -138,7 +154,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       userKey,
       resetForCurrentUser,
     }),
-    [state, loading, userKey]
+    [state, dispatch, loading, userKey]
   );
 
   if (loading) return null;

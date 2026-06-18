@@ -18,9 +18,18 @@ import {
   DriverTabKey,
 } from "../../components/DriverBottomNavigation";
 
+const successOverlay = `${AppTheme.colors.success}22`;
+const successBorder = `${AppTheme.colors.success}55`;
+const dangerOverlay = `${AppTheme.colors.danger}22`;
+const dangerBorder = `${AppTheme.colors.danger}55`;
+
 const kindLabel: Record<Noti["kind"], string> = {
   NEW_TRAD: "Nuevo envío",
   TRAD_ACCEPTED: "Envío aceptado",
+  ASIGNACION: "Asignación",
+  DRIVER_ASIGNADO: "Driver asignado",
+  ASSIGNMENT_ACCEPTED: "Aceptada",
+  ASSIGNMENT_REJECTED: "Rechazada",
   INFO: "Info",
   ALERT: "Alerta",
 };
@@ -28,6 +37,10 @@ const kindLabel: Record<Noti["kind"], string> = {
 const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
   NEW_TRAD: "flash-outline",
   TRAD_ACCEPTED: "checkmark-circle-outline",
+  ASIGNACION: "cube-outline",
+  DRIVER_ASIGNADO: "person-circle-outline",
+  ASSIGNMENT_ACCEPTED: "checkmark-circle-outline",
+  ASSIGNMENT_REJECTED: "close-circle-outline",
   INFO: "information-circle-outline",
   ALERT: "alert-circle-outline",
 };
@@ -35,6 +48,10 @@ const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
 const kindColor: Record<Noti["kind"], string> = {
   NEW_TRAD: AppTheme.colors.primary,
   TRAD_ACCEPTED: AppTheme.colors.success,
+  ASIGNACION: AppTheme.colors.primary,
+  DRIVER_ASIGNADO: AppTheme.colors.success,
+  ASSIGNMENT_ACCEPTED: AppTheme.colors.success,
+  ASSIGNMENT_REJECTED: AppTheme.colors.danger,
   INFO: AppTheme.text.secondary,
   ALERT: AppTheme.colors.danger,
 };
@@ -48,18 +65,112 @@ const formatDate = (ts: number) => {
   }
 };
 
-const Item = ({
-  item,
-  onPress,
-}: {
-  item: Noti;
-  onPress: () => void;
-}) => {
-  const color = kindColor[item.kind] ?? AppTheme.colors.primary;
+const asText = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const pickDataValue = (data: unknown, keys: string[]): string => {
+  if (!data || typeof data !== "object") return "";
+
+  const record = data as Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = asText(record[key]);
+    if (value) return value;
+  }
+
+  return "";
+};
+
+const getAssignmentVisualState = (item: Noti | null) => {
+  if (!item) return "default";
+
+  const response = pickDataValue(item.data, [
+    "assignment_response",
+    "assignmentResponse",
+    "response",
+    "status",
+  ]).toLowerCase();
+
+  if (
+    item.kind === "ASSIGNMENT_ACCEPTED" ||
+    response === "accepted" ||
+    response === "aceptada" ||
+    response === "aceptado"
+  ) {
+    return "accepted";
+  }
+
+  if (
+    item.kind === "ASSIGNMENT_REJECTED" ||
+    response === "rejected" ||
+    response === "rechazada" ||
+    response === "rechazado"
+  ) {
+    return "rejected";
+  }
+
+  if (item.kind === "ASIGNACION") {
+    return "pending";
+  }
+
+  return "default";
+};
+
+const getVisualColor = (item: Noti) => {
+  const visualState = getAssignmentVisualState(item);
+
+  if (visualState === "accepted") return AppTheme.colors.success;
+  if (visualState === "rejected") return AppTheme.colors.danger;
+
+  return kindColor[item.kind] ?? AppTheme.colors.primary;
+};
+
+const getVisualLabel = (item: Noti) => {
+  const visualState = getAssignmentVisualState(item);
+
+  if (visualState === "accepted") return "Asignación aceptada";
+  if (visualState === "rejected") return "Asignación rechazada";
+  if (visualState === "pending" && item.kind === "ASIGNACION") {
+    return "Asignación pendiente";
+  }
+
+  return kindLabel[item.kind] ?? "Notificación";
+};
+
+const DetailRow = ({ label, value }: { label: string; value?: string }) => {
+  if (!value) return null;
 
   return (
-    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.84}>
-      <View style={styles.itemIcon}>
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+};
+
+const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
+  const color = getVisualColor(item);
+  const visualState = getAssignmentVisualState(item);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.item,
+        visualState === "accepted" && styles.itemAccepted,
+        visualState === "rejected" && styles.itemRejected,
+      ]}
+      onPress={onPress}
+      activeOpacity={0.84}
+    >
+      <View
+        style={[
+          styles.itemIcon,
+          visualState === "accepted" && styles.itemIconAccepted,
+          visualState === "rejected" && styles.itemIconRejected,
+        ]}
+      >
         <Ionicons
           name={kindIcon[item.kind] ?? "notifications-outline"}
           size={18}
@@ -70,7 +181,7 @@ const Item = ({
       <View style={styles.itemContent}>
         <View style={styles.itemTopRow}>
           <Text style={[styles.itemKind, { color }]}>
-            {kindLabel[item.kind] ?? "Notificación"}
+            {getVisualLabel(item)}
           </Text>
 
           {!item.read && <View style={styles.unreadDot} />}
@@ -113,6 +224,66 @@ const NotificationsScreen: React.FC = () => {
     [items]
   );
 
+  const selectedColor = selected
+    ? getVisualColor(selected)
+    : AppTheme.colors.primary;
+
+  const selectedTracking = selected
+    ? pickDataValue(selected.data, [
+        "tracking",
+        "tracking_number",
+        "trackingNumber",
+        "shipment_id",
+        "shipmentId",
+        "delivery_id",
+        "deliveryId",
+        "id",
+      ])
+    : "";
+
+  const selectedStore = selected
+    ? pickDataValue(selected.data, [
+        "store",
+        "store_name",
+        "storeName",
+        "seller",
+        "seller_name",
+        "sellerName",
+      ])
+    : "";
+
+  const selectedAddress = selected
+    ? pickDataValue(selected.data, [
+        "address",
+        "direccion",
+        "domicilio",
+        "destination",
+        "receiver_address",
+      ])
+    : "";
+
+  const selectedZone = selected
+    ? pickDataValue(selected.data, [
+        "zone",
+        "zona",
+        "localidad",
+        "city",
+        "barrio",
+      ])
+    : "";
+
+  const selectedType = selected
+    ? pickDataValue(selected.data, [
+        "type",
+        "delivery_type",
+        "deliveryType",
+        "metodo_envio",
+        "metodoEnvio",
+      ])
+    : "";
+
+  const selectedStatus = selected ? getVisualLabel(selected) : "";
+
   const handleTabPress = useCallback(
     (tab: DriverTabKey) => {
       if (tab === "activity") return;
@@ -127,10 +298,10 @@ const NotificationsScreen: React.FC = () => {
         return;
       }
 
-if (tab === "scan") {
-  navigation.navigate("DriverScanOptionsScreen");
-  return;
-}
+      if (tab === "scan") {
+        navigation.navigate("DriverScanOptionsScreen");
+        return;
+      }
 
       if (tab === "profile") {
         navigation.navigate("DriverAccountScreen");
@@ -210,12 +381,25 @@ if (tab === "scan") {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalKind}>
-                  {selected ? kindLabel[selected.kind] : ""}
-                </Text>
-                <Text style={styles.modalTitle}>{selected?.title}</Text>
+            <View style={styles.modalHero}>
+              <View
+                style={[
+                  styles.modalIcon,
+                  getAssignmentVisualState(selected) === "accepted" &&
+                    styles.modalIconAccepted,
+                  getAssignmentVisualState(selected) === "rejected" &&
+                    styles.modalIconRejected,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    selected
+                      ? kindIcon[selected.kind] ?? "notifications-outline"
+                      : "notifications-outline"
+                  }
+                  size={24}
+                  color={selectedColor}
+                />
               </View>
 
               <Pressable
@@ -230,17 +414,30 @@ if (tab === "scan") {
               </Pressable>
             </View>
 
-            {!!selected?.body && (
-              <Text style={styles.modalBody}>{selected.body}</Text>
-            )}
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalKind, { color: selectedColor }]}>
+                {selectedStatus}
+              </Text>
 
-            {!!selected?.data && (
-              <View style={styles.modalDataBox}>
-                <Text style={styles.modalData}>
-                  {JSON.stringify(selected.data, null, 2)}
-                </Text>
-              </View>
-            )}
+              <Text style={styles.modalTitle}>{selected?.title}</Text>
+
+              {!!selected?.body && (
+                <Text style={styles.modalBody}>{selected.body}</Text>
+              )}
+            </View>
+
+            <View style={styles.detailBox}>
+              <DetailRow label="Estado" value={selectedStatus} />
+              <DetailRow label="Tracking" value={selectedTracking} />
+              <DetailRow label="Tienda / Seller" value={selectedStore} />
+              <DetailRow label="Tipo" value={selectedType} />
+              <DetailRow label="Zona" value={selectedZone} />
+              <DetailRow label="Dirección" value={selectedAddress} />
+              <DetailRow
+                label="Fecha"
+                value={selected ? formatDate(selected.createdAt) : ""}
+              />
+            </View>
 
             <View style={styles.modalFooter}>
               {!!selected && (
@@ -317,8 +514,8 @@ const styles = StyleSheet.create({
   },
 
   actionButtonDanger: {
-    backgroundColor: "rgba(239, 68, 68, 0.10)",
-    borderColor: "rgba(239, 68, 68, 0.24)",
+    backgroundColor: dangerOverlay,
+    borderColor: dangerBorder,
   },
 
   actionText: {
@@ -347,6 +544,14 @@ const styles = StyleSheet.create({
     gap: AppTheme.spacing.md,
   },
 
+  itemAccepted: {
+    borderColor: successBorder,
+  },
+
+  itemRejected: {
+    borderColor: dangerBorder,
+  },
+
   itemIcon: {
     width: 38,
     height: 38,
@@ -354,6 +559,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: AppTheme.overlays.primary,
+  },
+
+  itemIconAccepted: {
+    backgroundColor: successOverlay,
+  },
+
+  itemIconRejected: {
+    backgroundColor: dangerOverlay,
   },
 
   itemContent: {
@@ -438,11 +651,35 @@ const styles = StyleSheet.create({
     padding: AppTheme.spacing.lg,
   },
 
-  modalHeader: {
+  modalHero: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: AppTheme.spacing.md,
+  },
+
+  modalIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: AppTheme.radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: AppTheme.overlays.primary,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.primary,
+  },
+
+  modalIconAccepted: {
+    backgroundColor: successOverlay,
+    borderColor: successBorder,
+  },
+
+  modalIconRejected: {
+    backgroundColor: dangerOverlay,
+    borderColor: dangerBorder,
+  },
+
+  modalHeader: {
+    marginTop: AppTheme.spacing.md,
   },
 
   closeBtn: {
@@ -457,13 +694,16 @@ const styles = StyleSheet.create({
   },
 
   modalKind: {
-    ...AppTheme.typography.kicker,
+    fontSize: 10,
+    fontWeight: AppTheme.font.weight.black,
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
 
   modalTitle: {
     color: AppTheme.text.primary,
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: AppTheme.font.weight.black,
     marginTop: AppTheme.spacing.xs,
   },
@@ -473,21 +713,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: AppTheme.font.weight.medium,
-    marginTop: AppTheme.spacing.md,
+    marginTop: AppTheme.spacing.sm,
   },
 
-  modalDataBox: {
-    marginTop: AppTheme.spacing.md,
-    borderRadius: AppTheme.radius.lg,
+  detailBox: {
+    marginTop: AppTheme.spacing.lg,
+    borderRadius: AppTheme.radius.xl,
     backgroundColor: AppTheme.surfaces.card,
     borderWidth: 1,
     borderColor: AppTheme.borders.soft,
-    padding: AppTheme.spacing.md,
+    overflow: "hidden",
   },
 
-  modalData: {
+  detailRow: {
+    paddingHorizontal: AppTheme.spacing.md,
+    paddingVertical: AppTheme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: AppTheme.borders.soft,
+    gap: 3,
+  },
+
+  detailLabel: {
     color: AppTheme.text.muted,
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: AppTheme.font.weight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+
+  detailValue: {
+    color: AppTheme.text.primary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: AppTheme.font.weight.bold,
   },
 
   modalFooter: {
@@ -510,9 +768,9 @@ const styles = StyleSheet.create({
   },
 
   btnDanger: {
-    backgroundColor: "rgba(239, 68, 68, 0.10)",
+    backgroundColor: dangerOverlay,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.28)",
+    borderColor: dangerBorder,
   },
 
   btnTxtPrimary: {
