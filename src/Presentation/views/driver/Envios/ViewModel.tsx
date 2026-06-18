@@ -242,6 +242,71 @@ const buildPerformanceAnalytics = (
   }, buildEmptyPerformanceAnalytics());
 };
 
+const resolveDriverDataIdFromRole = async (
+  sessionUser: LegacyUserLike
+): Promise<string | null> => {
+  const userId = String(sessionUser?.id ?? "").trim();
+
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    const response = await ApiDelivery.get(`/v2/users/${userId}/role`);
+    const r = response.data;
+
+    const ok =
+      r?.ok === true ||
+      r?.success === true ||
+      r?.status === "ok" ||
+      r?.statusCode === 200;
+
+    const role = normalizeText(r?.rol || r?.role || r?.user?.rol || r?.user?.role);
+
+    if (!ok) {
+      console.log("[Driver role] no OK:", r?.error || r?.message || r);
+      return null;
+    }
+
+    if (role && role !== "driver") {
+      console.log("[Driver role] usuario no DRIVER:", role);
+      return null;
+    }
+
+    const driverDataId =
+      r?.data?.id ??
+      r?.driver?.id ??
+      r?.driverData?.id ??
+      r?.driver_data?.id ??
+      r?.result?.id;
+
+    const normalizedDriverDataId = String(driverDataId ?? "").trim();
+
+    if (!normalizedDriverDataId) {
+      console.log("[Driver role] sin driver_data.id en response:", r);
+      return null;
+    }
+
+    console.log(
+      "[Driver role] userId:",
+      userId,
+      "driverDataId:",
+      normalizedDriverDataId
+    );
+
+    return normalizedDriverDataId;
+  } catch (e: any) {
+    const message =
+      e?.response?.data?.error ||
+      e?.response?.data?.message ||
+      e?.message ||
+      "Error resolviendo driver_data.id";
+
+    console.log("[Driver role] error:", message);
+    return null;
+  }
+};
+
 const useEnviosViewModel = () => {
   const { user, getUserSession } = useContext(UserContext);
 
@@ -333,11 +398,19 @@ const useEnviosViewModel = () => {
   };
 
   const loadCurrentDeliveries = async (sessionUser: any) => {
-    const driverIds = buildDriverIdCandidates(sessionUser);
+    const roleDriverDataId = await resolveDriverDataIdFromRole(sessionUser);
+
+    const driverIds = Array.from(
+      new Set(
+        [roleDriverDataId, ...buildDriverIdCandidates(sessionUser)]
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+      )
+    );
 
     if (driverIds.length === 0) {
       setCurrentDeliveries([]);
-      return "No hay driver_id disponible para envíos actuales";
+      return "No hay driver_data.id disponible para envíos actuales";
     }
 
     console.log("[Driver current] driverId candidates:", driverIds);
@@ -346,7 +419,9 @@ const useEnviosViewModel = () => {
 
     for (const driverId of driverIds) {
       try {
-        const response = await ApiDelivery.get(`/v2/drivers/${driverId}/deliveries`);
+        const response = await ApiDelivery.get(
+          `/v2/drivers/${driverId}/deliveries`
+        );
         const r = response.data;
 
         const ok =
