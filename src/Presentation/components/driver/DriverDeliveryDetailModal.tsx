@@ -49,21 +49,43 @@ const fmtDate = (d?: Date | null) => {
   return `${dd}/${mm}/${yy}`;
 };
 
-const normalizeStatus = (estado?: string | null) =>
-  String(estado || "").toLowerCase();
+const normalizeStatus = (value?: string | null) =>
+  String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 
-const statusLabel = (estado?: string | null, cadete?: string | null) => {
-  if (!cadete) return "Sin asignar";
+const getRawStatus = (delivery?: DriverDeliveryCardItem | null) => {
+  if (!delivery) return "";
 
-  const s = normalizeStatus(estado);
+  return String(
+    delivery.status_ml ||
+      delivery.estado ||
+      delivery.status ||
+      delivery.delivery_status ||
+      delivery.estado_actual ||
+      delivery.assignment_response ||
+      ""
+  ).trim();
+};
+
+const statusLabel = (delivery?: DriverDeliveryCardItem | null) => {
+  const raw = getRawStatus(delivery);
+  const s = normalizeStatus(raw);
 
   if (s.includes("entregado")) return "Entregado";
   if (s.includes("retirado") || s.includes("en camino") || s.includes("transit"))
     return "En camino";
   if (s.includes("solicitado") || s.includes("creado") || s.includes("pendiente"))
     return "A retirar";
+  if (s.includes("cancel")) return "Cancelado";
+  if (s.includes("nadie")) return "Nadie";
+  if (s.includes("reprogram")) return "Reprogramado";
+  if (s.includes("accepted")) return "Aceptado";
+  if (s.includes("rejected")) return "Rechazado";
 
-  return estado || "Estado";
+  return raw || "Estado";
 };
 
 const metodoLabel = (m?: string | null) => {
@@ -96,11 +118,32 @@ const zoneText = (it?: DriverDeliveryCardItem | null) => {
 const netoChofer = (it?: DriverDeliveryCardItem | null) => {
   if (!it) return 0;
 
+  if (it.neto_chofer !== undefined && it.neto_chofer !== null) {
+    return n(it.neto_chofer);
+  }
+
   const precio = n(it.precio_chofer);
   const pRaw = n(it.porcentaje_chofer);
   const factor = pRaw > 1 ? 1 - pRaw / 100 : 1 - pRaw;
 
   return Math.round(precio * factor * 100) / 100;
+};
+
+const storeText = (delivery?: DriverDeliveryCardItem | null) => {
+  if (!delivery) return "—";
+
+  return (
+    delivery.store_name ||
+    delivery.storeName ||
+    delivery.nombre_fantasia ||
+    "—"
+  );
+};
+
+const accountText = (delivery?: DriverDeliveryCardItem | null) => {
+  if (!delivery) return "—";
+
+  return delivery.nombre_fantasia || "—";
 };
 
 export function DriverDeliveryDetailModal({
@@ -127,11 +170,11 @@ export function DriverDeliveryDetailModal({
             <View style={styles.summary}>
               <View style={styles.summaryMain}>
                 <Text style={styles.client} numberOfLines={1}>
-                  {delivery.nombre_fantasia?.trim() || "Cliente"}
+                  {accountText(delivery)}
                 </Text>
 
-                <Text style={styles.tracking} numberOfLines={1}>
-                  {delivery.numero_tracking ?? "—"}
+                <Text style={styles.tracking} numberOfLines={2}>
+                  {delivery.direccion || "—"}
                 </Text>
               </View>
 
@@ -144,11 +187,15 @@ export function DriverDeliveryDetailModal({
             </View>
 
             <View style={styles.rows}>
-              <Row label="Estado" value={statusLabel(delivery.estado, delivery.cadete)} />
+              <Row label="Estado" value={statusLabel(delivery)} />
               <Row label="Método" value={metodoLabel(delivery.metodo_envio)} />
+              <Row label="Cuenta" value={accountText(delivery)} />
+              <Row label="Store" value={storeText(delivery)} />
               <Row
                 label="Dirección"
-                value={`${delivery.direccion || "—"}${delivery.cp ? ` (${delivery.cp})` : ""}`}
+                value={`${delivery.direccion || "—"}${
+                  delivery.cp ? ` (${delivery.cp})` : ""
+                }`}
               />
               <Row label="Zona" value={zoneText(delivery)} />
               <Row label="Precio chofer" value={fmtMoney(delivery.precio_chofer)} />
@@ -165,6 +212,7 @@ export function DriverDeliveryDetailModal({
                 }
               />
               <Row label="Colecta" value={fmtDate(tryParseDate(delivery.fecha_colecta))} />
+              <Row label="Tracking" value={delivery.numero_tracking || "—"} />
             </View>
 
             <Pressable style={styles.primaryBtn} onPress={onClose}>

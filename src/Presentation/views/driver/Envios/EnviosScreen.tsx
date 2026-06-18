@@ -59,9 +59,9 @@ type Envio = {
   metodo_envio?: string | null;
   localidad?: string | null;
   provincia?: string | null;
-precio_chofer?: string | null;
-porcentaje_chofer?: string | null;
-neto_chofer?: string | null;
+  precio_chofer?: string | null;
+  porcentaje_chofer?: string | null;
+  neto_chofer?: string | null;
   [key: string]: any;
 };
 
@@ -124,14 +124,19 @@ const normalizeText = (value?: unknown) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const getStatus = (item: Envio) =>
-  normalizeText(
-    item.estado ||
-      item.status_ml ||
+const getDisplayStatus = (item: Envio): string => {
+  return String(
+    item.status_ml ||
+      item.estado ||
       item.status ||
+      item.delivery_status ||
+      item.estado_actual ||
       item.assignment_response ||
       ""
-  );
+  ).trim();
+};
+
+const getStatus = (item: Envio) => normalizeText(getDisplayStatus(item));
 
 const isFinalizado = (item: Envio) => {
   const s = getStatus(item);
@@ -140,7 +145,9 @@ const isFinalizado = (item: Envio) => {
     s.includes("entregado") ||
     s.includes("finaliz") ||
     s.includes("cancel") ||
-    s.includes("rechaz")
+    s.includes("cerrado") ||
+    s.includes("nadie") ||
+    s.includes("reprogram")
   );
 };
 
@@ -148,11 +155,11 @@ const isAttention = (item: Envio) => {
   const s = getStatus(item);
 
   return (
-    !item.cadete ||
     s.includes("cancel") ||
     s.includes("pendiente") ||
-    s.includes("sin asignar") ||
-    s.includes("rechaz")
+    s.includes("rechaz") ||
+    s.includes("nadie") ||
+    s.includes("reprogram")
   );
 };
 
@@ -193,9 +200,11 @@ const normalizeCurrentDelivery = (item: any): Envio => {
     null;
 
   const estado =
-    item?.estado ||
     item?.status_ml ||
+    item?.estado ||
     item?.status ||
+    item?.delivery_status ||
+    item?.estado_actual ||
     item?.assignment_response ||
     null;
 
@@ -227,25 +236,24 @@ const normalizeCurrentDelivery = (item: any): Envio => {
     cadete: item?.cadete || item?.driver_name || item?.driver || null,
     zona: item?.zona || item?.zone || item?.localidad || item?.provincia || null,
     localidad: item?.localidad || item?.provincia || item?.zona || null,
-    metodo_envio: item?.metodo_envio || item?.delivery_type || item?.type || "turbo",
+    metodo_envio:
+      item?.metodo_envio || item?.delivery_type || item?.type || item?.tipo_envio || "flex",
     precio_chofer:
-  item?.precio_chofer !== undefined && item?.precio_chofer !== null
-    ? String(item.precio_chofer)
-    : item?.driver_price !== undefined && item?.driver_price !== null
-    ? String(item.driver_price)
-    : null,
-
-porcentaje_chofer:
-  item?.porcentaje_chofer !== undefined && item?.porcentaje_chofer !== null
-    ? String(item.porcentaje_chofer)
-    : item?.driver_percentage !== undefined && item?.driver_percentage !== null
-    ? String(item.driver_percentage)
-    : null,
-
-neto_chofer:
-  item?.neto_chofer !== undefined && item?.neto_chofer !== null
-    ? String(item.neto_chofer)
-    : null,
+      item?.precio_chofer !== undefined && item?.precio_chofer !== null
+        ? String(item.precio_chofer)
+        : item?.driver_price !== undefined && item?.driver_price !== null
+        ? String(item.driver_price)
+        : null,
+    porcentaje_chofer:
+      item?.porcentaje_chofer !== undefined && item?.porcentaje_chofer !== null
+        ? String(item.porcentaje_chofer)
+        : item?.driver_percentage !== undefined && item?.driver_percentage !== null
+        ? String(item.driver_percentage)
+        : null,
+    neto_chofer:
+      item?.neto_chofer !== undefined && item?.neto_chofer !== null
+        ? String(item.neto_chofer)
+        : null,
   };
 };
 

@@ -1,116 +1,124 @@
-import React, { useEffect, useState } from 'react'
-import { ActivityIndicator, ScrollView, Text, ToastAndroid, View } from 'react-native'
-import { CustomTextInput } from '../../../components/CustomTextInput'
-import useViewModel from './ViewModel';
-import { StackScreenProps } from '@react-navigation/stack';
-import { RoundedButton } from '../../../components/RoundedButton';
-import { Picker } from '@react-native-picker/picker';
-import { RootStackParamList } from '../../../navigator/MainStackNavigator';
+import React from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import AppTheme from "../../../theme/AppTheme";
 
-
-interface Props extends StackScreenProps<RootStackParamList, 'RegisterScreen'>{};
-
-export const RegisterScreen = ({navigation, route}: Props) => {
-  const { name, email, password, confirmPassword, errorMessage, onChange, register, user, loading, rol, setRol } = useViewModel();
-  useEffect(() => {
-    if (errorMessage != '') {
-      ToastAndroid.show(errorMessage, ToastAndroid.LONG);
-    }
-  }, [errorMessage])
-  const [modalVisible, setModalVisible] = useState(false);
-
-  useEffect(() => {      
-          if (user?.id !== null && user?.id !== undefined) {
-              navigation.replace('HomeScreen');
-          }
-      }, [user])
-  
-
+export const RegisterScreen = () => {
   return (
-    <View >
-          
-
-        <View >
-
-          <ScrollView>
-
-            <Text >REGISTRARSE</Text>
-            
-            <CustomTextInput 
-              placeholder='Nombre'
-              keyboardType='default'
-              image={ require('../../../../../assets/email.png') }
-              property='name'
-              onChangeText={ onChange }
-              value={ name }
-              />
-
-            <CustomTextInput 
-              placeholder='Correo electronico'
-              keyboardType='email-address'
-              image={ require('../../../../../assets/email.png') }
-              property='email'
-              onChangeText={ onChange }
-              value={ email }
-              />
-
-            
-            
-            <CustomTextInput 
-              placeholder='Contraseña'
-              keyboardType='default'
-              image={ require('../../../../../assets/password.png') }
-              property='password'
-              onChangeText={ onChange }
-              value={ password }
-              secureTextEntry={ true }
-              />
-            
-            <CustomTextInput 
-              placeholder='Confirmar Contraseña'
-              keyboardType='default'
-              image={ require('../../../../../assets/confirm_password.png') }
-              property='confirmPassword'
-              onChangeText={ onChange }
-              value={ confirmPassword }
-              secureTextEntry={ true }
-              />
-            <View>
-              <Picker
-              selectedValue={rol}
-              onValueChange={(itemValue, itemIndex) =>
-                setRol(itemValue)
-              }>
-              <Picker.Item label="SELECCIONE SU ROL" value='' />
-              <Picker.Item label="DRIVER" value="DRIVER" />
-              <Picker.Item label="SELLER" value="SELLER" />
-              </Picker>
-            </View>
-            <View style={{ marginTop: 30 }}>
-                
-                <RoundedButton text='Log In With Google' onPress={ () => ToastAndroid.show('EN CAMINO', ToastAndroid.LONG)} foto={require('../../../../../assets/google.png')}/>
-
-            </View>
-
-            <View style={{ marginTop: 30 }}>
-                
-                <RoundedButton text='Log In With Mercadolibre' onPress={ () => ToastAndroid.show('EN CAMINO', ToastAndroid.LONG)} foto={require('../../../../../assets/mercadolibre.png')}/>
-
-            </View>
-            <View style={{ marginTop: 30 }}>
-                
-                <RoundedButton text='CONFIRMAR' onPress={ () => register()} />
-
-            </View>
-
-          </ScrollView>
-
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.iconContainer}>
+          <Ionicons
+            name="person-add-outline"
+            size={52}
+            color={AppTheme.colors.primary}
+          />
         </View>
-        {
-          loading &&
-          <ActivityIndicator style={{position: 'absolute',top: 0,bottom: 0,left: 0,right: 0}} size="large" color='#F4991A' />
-        }
-        
+
+        <Text style={styles.title}>Crear cuenta</Text>
+
+        <Text style={styles.description}>
+          El registro de nuevas cuentas aún no se encuentra disponible desde la
+          aplicación.
+        </Text>
+
+        <Text style={styles.description}>
+          Si necesitás acceso a Lynx, comunicate con soporte para que podamos
+          crear tu usuario y asignar los permisos correspondientes.
+        </Text>
+
+        <View style={styles.card}>
+          <Ionicons
+            name="information-circle-outline"
+            size={20}
+            color={AppTheme.colors.primary}
+          />
+
+          <Text style={styles.cardText}>
+            Drivers y Sellers deben solicitar el alta de usuario a soporte.
+          </Text>
+        </View>
+
+        <TouchableOpacity style={styles.button}>
+          <Text style={styles.buttonText}>Entendido</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
-  )
-}
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: AppTheme.surfaces.screen,
+  },
+
+  content: {
+    flexGrow: 1,
+    padding: 24,
+    justifyContent: "center",
+  },
+
+  iconContainer: {
+    alignSelf: "center",
+    marginBottom: 24,
+  },
+
+  title: {
+    color: AppTheme.text.primary,
+    fontSize: 32,
+    fontWeight: AppTheme.font.weight.black,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+
+  description: {
+    color: AppTheme.text.secondary,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 12,
+  },
+
+  card: {
+    marginTop: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: AppTheme.radius.xl,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.soft,
+    padding: 18,
+  },
+
+  cardText: {
+    flex: 1,
+    color: AppTheme.text.secondary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  button: {
+    marginTop: 32,
+    backgroundColor: AppTheme.colors.primary,
+    borderRadius: AppTheme.radius.lg,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+
+  buttonText: {
+    color: AppTheme.colors.white,
+    fontSize: 16,
+    fontWeight: AppTheme.font.weight.black,
+  },
+});
