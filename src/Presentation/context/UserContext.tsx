@@ -9,6 +9,7 @@ import {
 } from "../../Data/sources/remote/api/ApiDelivery";
 
 import { NotificationsProvider } from "./NotificationContext";
+import { stopDriverTracking } from "../config/DriverLocation";
 
 type Ctx = {
   user: User | null;
@@ -66,6 +67,9 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     isRemovingSessionRef.current = true;
 
     try {
+      // Fin de operación: apaga el seguimiento y sube lo pendiente mientras
+      // el token todavía sirve.
+      await stopDriverTracking({ available: false });
       await clearSessionState();
     } finally {
       setTimeout(() => {

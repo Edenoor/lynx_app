@@ -25,9 +25,9 @@ import {
   attachNotificationListeners,
 } from "../../../config/Push";
 import {
-  startDriverHeartbeat,
-  stopDriverHeartbeat,
-} from "../../../config/HeartBeat";
+  startDriverTracking,
+  flushDriverPositions,
+} from "../../../config/DriverLocation";
 
 import {
   acceptDeliveryAssignment,
@@ -331,7 +331,6 @@ export const DriverScreen = ({ navigation }: Props) => {
           },
         });
 
-        startDriverHeartbeat(username, available, defaultVehicleType);
       } catch (_e) {
         showFeedback(
           "error",
@@ -339,13 +338,31 @@ export const DriverScreen = ({ navigation }: Props) => {
           "No se pudo registrar el dispositivo para recibir alertas."
         );
       }
+
+      // Seguimiento operativo: sigue en segundo plano y con la pantalla
+      // bloqueada; se apaga al cerrar sesión, no al salir de esta pantalla.
+      const tracking = await startDriverTracking({ available });
+      if (cancelled) return;
+
+      if (!tracking.ok) {
+        showFeedback(
+          "info",
+          "Ubicación desactivada",
+          "Sin permiso de ubicación no se puede seguir tu recorrido. Activalo desde Ajustes."
+        );
+      } else if (tracking.mode === "foreground-only") {
+        showFeedback(
+          "info",
+          "Ubicación solo con la app abierta",
+          "Para seguir el recorrido con la pantalla bloqueada, permití la ubicación \"Siempre\" en Ajustes."
+        );
+      }
     })();
 
+    // Al volver a primer plano se sube lo acumulado sin esperar al próximo fix.
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        startDriverHeartbeat(username, available, defaultVehicleType);
-      } else {
-        stopDriverHeartbeat();
+        void flushDriverPositions();
       }
     });
 
@@ -353,7 +370,6 @@ export const DriverScreen = ({ navigation }: Props) => {
       cancelled = true;
 
       sub.remove();
-      stopDriverHeartbeat();
 
       if (detachNotiRef.current) {
         detachNotiRef.current();

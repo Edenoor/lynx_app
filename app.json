@@ -42,7 +42,8 @@
         "ACCESS_BACKGROUND_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -55,6 +56,17 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#00B8FF"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Lynx usa tu ubicación para seguir el recorrido mientras trabajás, incluso con la pantalla bloqueada.",
+          "locationAlwaysPermission": "Lynx usa tu ubicación para seguir el recorrido mientras trabajás, incluso con la pantalla bloqueada.",
+          "locationWhenInUsePermission": "Lynx usa tu ubicación para mostrarte envíos cercanos.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ]
     ],
