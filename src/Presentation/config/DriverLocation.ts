@@ -119,6 +119,7 @@ export const flushDriverPositions = (opts: { available?: boolean } = {}): Promis
       const body: Record<string, unknown> = {};
       if (batch.length) body.positions = batch;
       if (available !== undefined) body.available = available;
+      if (trackingStatus) body.tracking = trackingStatus;
 
       let res: any;
       try {
@@ -259,12 +260,23 @@ export const isDriverTrackingActive = async () => {
   }
 };
 
+// Diagnóstico: cómo quedó el seguimiento en este teléfono. Viaja en cada lote
+// para poder verlo desde el servidor sin depender de los logs del celular.
+type TrackingStatus = { mode: string; error?: string; at: string };
+let trackingStatus: TrackingStatus | null = null;
+const setTrackingStatus = (mode: string, error?: string) => {
+  trackingStatus = { mode, ...(error ? { error } : {}), at: new Date().toISOString() };
+};
+
 export const startDriverTracking = async (opts: { available?: boolean } = {}): Promise<StartResult> => {
   sessionExpired = false;
 
   const fg = await Location.getForegroundPermissionsAsync();
   const fgFinal = fg.granted ? fg : await Location.requestForegroundPermissionsAsync();
-  if (!fgFinal.granted) return { ok: false, reason: "foreground-permission" };
+  if (!fgFinal.granted) {
+    setTrackingStatus("off", "foreground-permission");
+    return { ok: false, reason: "foreground-permission" };
+  }
 
   // El permiso "siempre" se pide después del de primer plano (Android lo exige
   // en ese orden y en Android 11+ lo lleva a Ajustes).
@@ -272,6 +284,7 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
   const bgFinal = bg.granted ? bg : await Location.requestBackgroundPermissionsAsync();
 
   if (!bgFinal.granted) {
+    setTrackingStatus("foreground-only", "background-permission");
     startFallback();
     void flushDriverPositions({ available: opts.available });
     return { ok: true, mode: "foreground-only" };
@@ -297,12 +310,15 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
         },
       });
     }
+    setTrackingStatus("background");
     stopFallback();
     void flushDriverPositions({ available: opts.available });
     return { ok: true, mode: "background" };
   } catch (e: any) {
     console.log("[Lynx Location] No se pudo iniciar el seguimiento en segundo plano:", e?.message ?? e);
+    setTrackingStatus("fallback", String(e?.message ?? e));
     startFallback();
+    void flushDriverPositions({ available: opts.available });
     return { ok: false, reason: "error", error: String(e?.message ?? e) };
   }
 };
