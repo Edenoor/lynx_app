@@ -11,6 +11,8 @@ import { useOnboarding } from "../onboarding/OnboardingContext";
 
 import DriverScanScreen from "../views/driver/scan/DriverScanScreen";
 import DriverScanOptionsScreen from "../views/driver/scan/DriverScanOptionsScreen";
+import RoutesScreen from "../views/driver/routes/RoutesScreen";
+import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
@@ -22,6 +24,8 @@ export type DriverStackParamList = {
   DriverAccountScreen: undefined;
   DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
+  RoutesScreen: undefined;
+  RouteDetailScreen: { routeId: number };
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -52,6 +56,8 @@ export const DriverStackNavigator = () => {
             component={DriverScanOptionsScreen}
           />
           <Stack.Screen name="DriverScanScreen" component={DriverScanScreen} />
+          <Stack.Screen name="RoutesScreen" component={RoutesScreen} />
+          <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
         </>
       )}
     </Stack.Navigator>

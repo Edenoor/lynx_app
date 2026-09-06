@@ -1,12 +1,14 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import AppTheme from "../theme/AppTheme";
 
 export type DriverTabKey =
   | "home"
   | "deliveries"
   | "scan"
+  | "routes"
   | "activity"
   | "profile";
 
@@ -38,6 +40,11 @@ const tabs: Array<{
     isPrimary: true,
   },
   {
+    key: "routes",
+    label: "Rutas",
+    icon: "map-outline",
+  },
+  {
     key: "activity",
     label: "Alertas",
     icon: "notifications-outline",
@@ -53,6 +60,15 @@ export function DriverBottomNavigation({
   activeTab,
   onPress,
 }: DriverBottomNavigationProps) {
+  // "Rutas" navega desde acá para no tocar el handler de cada pantalla.
+  const navigation = useNavigation<any>();
+  const handlePress = (tab: DriverTabKey) => {
+    if (tab === "routes") {
+      if (activeTab !== "routes") navigation.navigate("RoutesScreen");
+      return;
+    }
+    onPress(tab);
+  };
   return (
     <View style={styles.safeArea}>
       <View style={styles.container}>
@@ -64,7 +80,7 @@ export function DriverBottomNavigation({
               <Pressable
                 key={tab.key}
                 style={styles.primaryItem}
-                onPress={() => onPress(tab.key)}
+                onPress={() => handlePress(tab.key)}
               >
                 <View
                   style={[
@@ -90,7 +106,7 @@ export function DriverBottomNavigation({
             <Pressable
               key={tab.key}
               style={styles.item}
-              onPress={() => onPress(tab.key)}
+              onPress={() => handlePress(tab.key)}
             >
               <Ionicons
                 name={tab.icon}

@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../../theme/AppTheme";
-import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
+import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import DriverQrActionGrid from "../../../components/DriverQrActionGrid";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 
@@ -21,9 +21,7 @@ type Props = NativeStackScreenProps<
 >;
 
 export default function DriverScanOptionsScreen({ navigation }: Props) {
-  const handleTabPress = (
-    tab: "home" | "deliveries" | "scan" | "activity" | "profile"
-  ) => {
+  const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
       case "home":
         navigation.navigate("DriverScreen");
