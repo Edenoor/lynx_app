@@ -10,11 +10,11 @@ export type StopStatus = "PENDING" | "ARRIVED" | "DONE" | "SKIPPED";
 
 export type RouteSummary = {
   id: number; type: RouteType; status: RouteStatus; scheduled_date: string;
-  stops_count: number; deliveries_count: number; expected_count: number | null; confirmed_count: number | null;
+  stops_count: number; deliveries_count: number; load_expected_count: number | null; load_confirmed_count: number | null;
 };
 export type StopDelivery = {
   delivery_id: number; tracking: string | number | null; nombre_destinatario: string | null; direccion: string | null;
-  codigo_postal: string | null; ops_status: string; outcome: string | null; outcome_at: string | null; notes: string | null;
+  codigo_postal: string | null; tipo_envio: string | null; ops_status: string; outcome: string | null; outcome_at: string | null; notes: string | null;
 };
 export type Stop = {
   id: number; route_id: number; sequence: number; type: "PICKUP" | "DELIVERY"; status: StopStatus;
@@ -24,7 +24,10 @@ export type Stop = {
   address?: string | null; postal_code?: string | null; latitude?: number | null; longitude?: number | null; receiver_name?: string | null;
   deliveries: StopDelivery[];
 };
-export type RouteDetail = RouteSummary & { qr_token: string; notes: string | null; started_at: string | null; completed_at: string | null; stops: Stop[] };
+// `warnings` solo viene en la respuesta de /start: envíos Flex que Mercado
+// Libre todavía no muestra «En camino».
+export type StartWarning = { delivery_id: number; tracking: string | number | null; status_ml: string | null; message: string };
+export type RouteDetail = RouteSummary & { qr_token: string; notes: string | null; started_at: string | null; completed_at: string | null; stops: Stop[]; warnings?: StartWarning[] };
 export type PendingDelivery = { delivery_id: number; tracking: string | number | null; nombre_destinatario: string | null; codigo_postal: string | null; ops_status: string };
 
 export const TYPE_LABEL: Record<RouteType, string> = { PICKUP: "Colecta", DELIVERY: "Reparto", TURBO: "Turbo" };
@@ -55,7 +58,7 @@ export const fetchRouteByQr = async (token: string) =>
 
 export const confirmLoad = async (id: number, confirmed: number) =>
   unwrap<{ loaded: boolean; discrepancy: { expected: number; confirmed: number; difference: number; reason: string } | null; route: RouteDetail }>(
-    await putJson(`/v2/routes/${id}/confirm-load`, { confirmed_count: confirmed })
+    await putJson(`/v2/routes/${id}/confirm-load`, { load_confirmed_count: confirmed })
   );
 
 export const startRoute = async (id: number) => unwrap<{ route: RouteDetail }>(await putJson(`/v2/routes/${id}/start`, {})).route;

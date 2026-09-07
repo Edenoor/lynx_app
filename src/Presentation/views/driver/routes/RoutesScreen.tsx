@@ -78,7 +78,7 @@ export default function RoutesScreen({ navigation }: Props) {
                 </View>
                 <Text style={styles.cardMeta}>
                   {item.stops_count} {item.stops_count === 1 ? "parada" : "paradas"} · {item.deliveries_count} {item.deliveries_count === 1 ? "envío" : "envíos"}
-                  {item.type === "DELIVERY" && item.expected_count !== null ? ` · carga ${item.confirmed_count ?? "–"}/${item.expected_count}` : ""}
+                  {item.type === "DELIVERY" && item.load_expected_count !== null ? ` · carga ${item.load_confirmed_count ?? "–"}/${item.load_expected_count}` : ""}
                 </Text>
                 {item.type === "DELIVERY" && item.status === "ASSIGNED" ? <Text style={styles.cardHint}>Escaneá el QR del recorrido y confirmá la cantidad para salir.</Text> : null}
               </Pressable>

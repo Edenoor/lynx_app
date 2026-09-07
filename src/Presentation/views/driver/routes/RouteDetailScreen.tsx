@@ -52,7 +52,12 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
       }
     });
 
-  const onStart = () => act(() => startRoute(routeId));
+  const onStart = () =>
+    act(async () => {
+      const r = await startRoute(routeId);
+      // Flex que no figura «En camino» en Mercado Libre: se avisa, no se frena.
+      if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
+    });
   const onComplete = () =>
     Alert.alert("Completar recorrido", "¿Terminaste todas las paradas?", [
       { text: "No", style: "cancel" },
@@ -93,18 +98,18 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>Control de carga</Text>
               <Text style={styles.panelText}>
-                {route.expected_count === null
+                {route.load_expected_count === null
                   ? "El depósito todavía no cargó cuántos bultos preparó. Pedile que lo haga antes de salir."
-                  : `El depósito preparó ${route.expected_count} bultos. Contá los que recibiste y confirmá.`}
+                  : `El depósito preparó ${route.load_expected_count} bultos. Contá los que recibiste y confirmá.`}
               </Text>
               <View style={styles.row}>
-                <TextInput value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="Cantidad" placeholderTextColor={AppTheme.text.muted} style={styles.input} editable={!busy && route.expected_count !== null} />
-                <Pressable onPress={onConfirmLoad} disabled={busy || route.expected_count === null} style={[styles.btn, (busy || route.expected_count === null) && styles.btnDisabled]}>
+                <TextInput value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="Cantidad" placeholderTextColor={AppTheme.text.muted} style={styles.input} editable={!busy && route.load_expected_count !== null} />
+                <Pressable onPress={onConfirmLoad} disabled={busy || route.load_expected_count === null} style={[styles.btn, (busy || route.load_expected_count === null) && styles.btnDisabled]}>
                   <Text style={styles.btnText}>Confirmar</Text>
                 </Pressable>
               </View>
-              {route.confirmed_count !== null && route.expected_count !== null && route.confirmed_count !== route.expected_count ? (
-                <Text style={styles.warn}>Última confirmación: {route.confirmed_count} de {route.expected_count}. Con diferencia el recorrido no sale.</Text>
+              {route.load_confirmed_count !== null && route.load_expected_count !== null && route.load_confirmed_count !== route.load_expected_count ? (
+                <Text style={styles.warn}>Última confirmación: {route.load_confirmed_count} de {route.load_expected_count}. Con diferencia el recorrido no sale.</Text>
               ) : null}
             </View>
           ) : null}
@@ -148,7 +153,8 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
   }, [open, isPickup, stop.status, stop.id, routeId, stop.collected_count]);
 
   const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value, notes || undefined));
-  const withoutOutcome = stop.deliveries.filter((d) => !d.outcome);
+  // Los Flex se cierran desde Envíos Flex: no cuentan como «sin resultado».
+  const withoutOutcome = stop.deliveries.filter((d) => !d.outcome && d.tipo_envio !== "flex");
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
 
   return (
@@ -178,9 +184,13 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
                 <Text style={styles.deliveryTitle}>{d.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(d.tracking ?? d.delivery_id)}</Text></Text>
                 <Text style={styles.stopMeta}>{OPS_LABEL[d.ops_status] ?? d.ops_status}{d.outcome ? ` · ${d.outcome === "DELIVERED" ? "entregado" : "no entregado"} ${time(d.outcome_at) ?? ""}` : ""}</Text>
               </View>
-              {inProgress && stop.status === "ARRIVED" && !d.outcome ? (
+              {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !d.outcome ? (
                 <View style={styles.row}>
-                  <Pressable onPress={() => outcome(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregado</Text></Pressable>
+                  {d.tipo_envio === "flex" ? (
+                    <Text style={styles.stopMeta}>Entregado: se registra en Envíos Flex</Text>
+                  ) : (
+                    <Pressable onPress={() => outcome(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregado</Text></Pressable>
+                  )}
                   <Pressable onPress={() => outcome(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No entregado</Text></Pressable>
                 </View>
               ) : null}
@@ -217,7 +227,7 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
                 {stop.status === "PENDING" ? (
                   <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "arrive"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}><Text style={styles.btnText}>Llegué</Text></Pressable>
                 ) : null}
-                {stop.status === "ARRIVED" ? (
+                {stop.status === "ARRIVED" || (!isPickup && stop.status === "PENDING") ? (
                   <Pressable
                     onPress={() => {
                       if (!isPickup && withoutOutcome.length) { Alert.alert("Faltan resultados", `Hay ${withoutOutcome.length} envíos sin marcar como entregados o no entregados.`); return; }
