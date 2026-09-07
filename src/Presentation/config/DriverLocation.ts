@@ -33,6 +33,11 @@ const MAX_BATCH = 500;          // tope del endpoint
 const FLUSH_MIN_INTERVAL_MS = 30_000;
 const FLUSH_WHEN_PENDING = 10;  // con esta cantidad acumulada se sube sin esperar
 const FALLBACK_POLL_MS = 30_000;
+// Con el chofer quieto no hay fixes (distanceInterval) y el panel lo vería
+// "perdido"; además, con la pantalla bloqueada el sistema retiene lo diferido
+// en memoria. Cada HEARTBEAT_MS se informa la última posición conocida y se
+// sube lo pendiente aunque no haya fix nuevo.
+const HEARTBEAT_MS = 5 * 60_000;
 
 type PendingPosition = {
   latitude: number;
@@ -42,7 +47,7 @@ type PendingPosition = {
   heading: number | null;
   battery_level: number | null;
   recorded_at: string;
-  source: "foreground" | "background" | "buffer";
+  source: "foreground" | "background" | "buffer" | "heartbeat";
 };
 
 export type StartResult =
@@ -206,6 +211,7 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: TaskManager.TaskMa
 
   const battery = await readBattery();
   await enqueue(locations.map((l) => toPending(l, battery)));
+  lastFixAt = Date.now();
   await maybeFlush(await pendingPositionsCount());
 });
 
@@ -231,6 +237,7 @@ const startFallback = () => {
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       await enqueue([toPending(loc, await readBattery())]);
+      lastFixAt = Date.now();
       await maybeFlush(await pendingPositionsCount());
     } catch (e) {
       console.log("[Lynx Location] Sin posición en primer plano:", e);
@@ -240,8 +247,46 @@ const startFallback = () => {
   fallbackTimer = setInterval(tick, FALLBACK_POLL_MS);
 };
 
+/* =========================
+   Latido
+   ========================= */
+
+let lastFixAt = 0;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+const stopHeartbeat = () => {
+  if (heartbeatTimer !== null) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+};
+
+// Si hubo un fix hace poco no se duplica nada: solo se sube lo pendiente.
+// Si no lo hubo (chofer quieto), se encola la última posición conocida con
+// fuente "heartbeat" y el instante actual, para que el panel sepa que sigue ahí.
+const startHeartbeat = () => {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(async () => {
+    if (Date.now() - lastFixAt >= HEARTBEAT_MS) {
+      try {
+        const last = await Location.getLastKnownPositionAsync({ maxAge: HEARTBEAT_MS });
+        const loc = last ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        await enqueue([{ ...toPending(loc, await readBattery()), source: "heartbeat", recorded_at: new Date().toISOString() }]);
+      } catch (e) {
+        console.log("[Lynx Location] Latido sin posición:", e);
+      }
+    }
+    try {
+      await flushDriverPositions();
+    } catch (e) {
+      console.log("[Lynx Location] Latido: flush fallido:", e);
+    }
+  }, HEARTBEAT_MS);
+};
+
 const stopLocationUpdatesQuietly = async () => {
   stopFallback();
+  stopHeartbeat();
   try {
     if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK)) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK);
@@ -286,6 +331,7 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
   if (!bgFinal.granted) {
     setTrackingStatus("foreground-only", "background-permission");
     startFallback();
+    startHeartbeat();
     void flushDriverPositions({ available: opts.available });
     return { ok: true, mode: "foreground-only" };
   }
@@ -297,7 +343,7 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
         timeInterval: 30_000,          // Android: un fix cada 30 s como máximo
         distanceInterval: 20,          // o cada 20 m, lo que ocurra primero
         deferredUpdatesInterval: 60_000,   // entrega agrupada: menos radio y batería
-        deferredUpdatesDistance: 100,
+        deferredUpdatesDistance: 50,           // en ciudad, 100 m tardaba demasiado en refrescar el mapa
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         showsBackgroundLocationIndicator: true,
@@ -312,12 +358,14 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
     }
     setTrackingStatus("background");
     stopFallback();
+    startHeartbeat();
     void flushDriverPositions({ available: opts.available });
     return { ok: true, mode: "background" };
   } catch (e: any) {
     console.log("[Lynx Location] No se pudo iniciar el seguimiento en segundo plano:", e?.message ?? e);
     setTrackingStatus("fallback", String(e?.message ?? e));
     startFallback();
+    startHeartbeat();
     void flushDriverPositions({ available: opts.available });
     return { ok: false, reason: "error", error: String(e?.message ?? e) };
   }
