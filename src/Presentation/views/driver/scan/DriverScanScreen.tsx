@@ -37,6 +37,8 @@ import {
 import {
   API_URL,
   getJson,
+  postJson,
+  putJson,
 } from "../../../config/Api";
 
 type Props = StackScreenProps<
@@ -49,7 +51,7 @@ const TITLES: Record<
   string
 > = {
   colecta: "Ingresar envío",
-  planta: "Diagnóstico planta",
+  planta: "Recepción en planta",
   asignarme: "Asignarme envío",
 };
 
@@ -58,7 +60,7 @@ const HINTS: Record<
   string
 > = {
   colecta: "Escaneá el QR del envío para ingresarlo",
-  planta: "Escaneá un QR para inspeccionarlo",
+  planta: "Escaneá el bulto. Si lo movés, escaneá después la estantería",
   asignarme: "Escaneá el QR del envío para asignártelo",
 };
 
@@ -896,41 +898,212 @@ export default function DriverScanScreen({
 
   /**
    * ====================================================
-   * PLANTA
+   * PLANTA · recepción como punto de control (PR 3)
    * ====================================================
    *
-   * Por ahora sigue siendo SOLO LECTURA.
+   * Un escaneo del bulto registra el ingreso (ARRIVED_WAREHOUSE → SHELVED),
+   * indica la estantería y devuelve las alertas: pendiente de
+   * geolocalización, CP no catalogado, Flex sin «En camino». Ninguna frena
+   * el bulto. Si después se escanea el QR de una estantería
+   * (LYNX:SHELF:…), el último bulto recibido se mueve ahí.
+   *
+   * Pide warehouse_access en el servidor: es una pantalla de depósito, no
+   * de chofer.
    */
 
-  const handlePlantaReadOnly =
+  const lastReceivedRef =
+    useRef<{
+      id: number;
+      tracking: string;
+    } | null>(null);
+
+  const handlePlanta =
     useCallback(
-      (
+      async (
         payload: ScanPayload
       ) => {
-        Alert.alert(
-          "QR leído ✅",
+        const raw =
+          payload.raw;
+
+        // Segundo escaneo: la estantería a la que se mueve el último bulto.
+        if (
+          raw.startsWith(
+            "LYNX:SHELF:"
+          )
+        ) {
+          const last =
+            lastReceivedRef.current;
+
+          if (!last) {
+            throw new Error(
+              "Escaneá primero el bulto y después la estantería."
+            );
+          }
+
+          const moved =
+            await putJson(
+              `/v2/warehouse/deliveries/${last.id}/shelf`,
+              {
+                shelf_qr: raw,
+              }
+            );
+
+          if (
+            moved?.ok ===
+            false
+          ) {
+            throw new Error(
+              moved?.error ||
+                "No se pudo mover el bulto."
+            );
+          }
+
+          Vibration.vibrate(
+            80
+          );
+
+          Alert.alert(
+            `→ ${
+              moved?.shelf
+                ?.code ??
+              "movido"
+            }`,
+            `${last.tracking} movido${
+              moved?.from
+                ? ` de ${moved.from}`
+                : ""
+            } a ${
+              moved?.shelf
+                ?.code ??
+              "la estantería"
+            }.`,
+            [
+              {
+                text:
+                  "Escanear otro",
+                onPress:
+                  resetScanner,
+              },
+              {
+                text:
+                  "Cerrar",
+                onPress:
+                  close,
+              },
+            ]
+          );
+
+          return;
+        }
+
+        const r =
+          await postJson(
+            "/v2/warehouse/receive",
+            {
+              qr: raw,
+            }
+          );
+
+        if (
+          r?.ok === false
+        ) {
+          throw new Error(
+            r?.error ||
+              "No se pudo recibir el bulto."
+          );
+        }
+
+        const shelfCode =
+          r?.shelf?.code ??
+          "NO ENTRA";
+
+        const tracking =
+          String(
+            r?.delivery
+              ?.tracking ??
+              r?.delivery
+                ?.id ??
+              ""
+          );
+
+        lastReceivedRef.current =
+          r?.delivery?.id
+            ? {
+                id: Number(
+                  r.delivery.id
+                ),
+                tracking,
+              }
+            : null;
+
+        const alerts: {
+          code: string;
+          text: string;
+        }[] =
+          Array.isArray(
+            r?.alerts
+          )
+            ? r.alerts
+            : [];
+
+        // Con avisos vibra distinto: el operador no tiene que leer para
+        // saber que hay algo que mirar.
+        Vibration.vibrate(
+          alerts.length
+            ? [0, 120, 80, 120]
+            : 80
+        );
+
+        const lines: string[] =
           [
-            "PRUEBA SEGURA — NO SE MODIFICÓ NADA",
-            "",
-            "Modo: planta",
-            "",
-            `shipping_id: ${
-              payload.id ||
-              "(vacío)"
+            `${tracking} · ${
+              r?.delivery
+                ?.store ??
+              ""
             }`,
-            `sender_id: ${
-              payload.senderId ||
-              "(vacío)"
-            }`,
-            "",
-            `security_digit: ${
-              payload.securityDigit ??
-              "(vacío)"
+            `${
+              r?.delivery
+                ?.receiver ??
+              ""
+            } · CP ${
+              r?.delivery
+                ?.postal_code ??
+              "—"
             }`,
             "",
-            "Planta sigue en modo diagnóstico.",
-            "No se cambió ningún estado.",
-          ].join("\n"),
+            r?.ops
+              ?.already_here
+              ? "Ya estaba en planta."
+              : `Ingreso registrado: ${
+                  r?.ops?.to ??
+                  ""
+                }.`,
+          ];
+
+        if (
+          r?.shelf
+            ?.suggested
+        ) {
+          lines.push(
+            `El mapa dice ${r.shelf.suggested}.`
+          );
+        }
+
+        if (
+          alerts.length
+        ) {
+          lines.push(
+            "",
+            ...alerts.map(
+              (a) =>
+                `⚠ ${a.text}`
+            )
+          );
+        }
+
+        Alert.alert(
+          `→ ${shelfCode}`,
+          lines.join("\n"),
           [
             {
               text:
@@ -1047,7 +1220,7 @@ export default function DriverScanScreen({
             return;
           }
 
-          handlePlantaReadOnly(
+          await handlePlanta(
             scanPayload
           );
         } catch (
@@ -1129,7 +1302,7 @@ export default function DriverScanScreen({
         mode,
         handleAsignarme,
         handleColecta,
-        handlePlantaReadOnly,
+        handlePlanta,
         resetScanner,
         close,
       ]
