@@ -16,6 +16,7 @@ import {
 } from "./OnboardingPersistence";
 
 import { clearOnboardingDir } from "./OnboardingStorage";
+import { getJson } from "../config/Api";
 import { UserContext } from "../context/UserContext";
 
 const initialState: OnboardingState = {
@@ -115,7 +116,18 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         return;
       }
 
-      const completed = await loadOnboardingCompleted(userKey);
+      let completed = await loadOnboardingCompleted(userKey);
+
+      // Si el servidor ya tiene la ficha del chofer (DNI y patente), no se
+      // vuelve a pedir el onboarding en un teléfono nuevo.
+      if (!completed && user?.id && String(user?.rol ?? "").toUpperCase() === "DRIVER") {
+        try {
+          const role = await getJson(`/v2/users/${user.id}/role`);
+          if (role?.ok && role?.data?.dni && role?.data?.patente) completed = true;
+        } catch {
+          // sin red: se conserva la decisión local
+        }
+      }
 
       if (cancelled) return;
 
