@@ -340,10 +340,19 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
     if (!(await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK))) {
       await Location.startLocationUpdatesAsync(LOCATION_TASK, {
         accuracy: Location.Accuracy.High,
-        timeInterval: 30_000,          // Android: un fix cada 30 s como máximo
-        distanceInterval: 20,          // o cada 20 m, lo que ocurra primero
-        deferredUpdatesInterval: 60_000,   // entrega agrupada: menos radio y batería
-        deferredUpdatesDistance: 50,           // en ciudad, 100 m tardaba demasiado en refrescar el mapa
+        timeInterval: 30_000,          // Android: un fix cada 30 s
+        // 0 = el tiempo es el UNICO criterio. Con distanceInterval > 0 el chofer
+        // detenido no genera fixes, no despierta la tarea y desaparece del mapa
+        // aunque siga ahi; reportando por tiempo, quieto o no, sigue visible.
+        distanceInterval: 0,
+        // Sin diferido. deferredUpdates* autoriza a Android a RETENER los fixes y
+        // entregarlos en tanda cuando quiera: medido el 7-sep-2026, con la app en
+        // segundo plano los retuvo ~30 min y recien los entrego al volver a primer
+        // plano. Como el unico envio en segundo plano ocurre dentro del callback de
+        // la tarea, mientras Android no la llama no se sube nada y el panel ve al
+        // chofer inactivo. En vivo pesa mas que el ahorro de bateria.
+        deferredUpdatesInterval: 0,
+        deferredUpdatesDistance: 0,
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         showsBackgroundLocationIndicator: true,
