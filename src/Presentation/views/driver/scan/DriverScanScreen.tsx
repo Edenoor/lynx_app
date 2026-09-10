@@ -109,6 +109,51 @@ type ScanResponse = {
   [key: string]: unknown;
 };
 
+/**
+ * Un escaneo puede venir en tres formatos: el JSON de la etiqueta de Mercado
+ * Libre, una query-string, o el tracking pelado (QR o código de barras del
+ * depósito).
+ *
+ * OJO con el JSON: `JSON.parse("47741557287")` NO tira excepción, devuelve el
+ * numero. Si se intenta parsear cualquier payload como JSON, el tracking
+ * pelado entra por ese camino, ninguna clave existe y el escaneo muere en
+ * "No pudimos identificar el shipping_id" sin llegar a la API. Por eso el
+ * camino JSON se abre solo cuando el payload arranca con "{", igual que en el
+ * backend (`receiveService.parseMlQr`).
+ */
+const parseTextPayload = (
+  raw: string
+): ScanPayload => {
+  const shippingMatch =
+    raw.match(
+      /(?:shipping_id|shippingId|shipment_id|tracking|order_id|orderId|id)=([^&\s]+)/i
+    );
+
+  const senderMatch =
+    raw.match(
+      /(?:sender_id|senderId)=([^&\s]+)/i
+    );
+
+  const longNumberMatch =
+    raw.match(/\d{8,}/);
+
+  return {
+    raw,
+
+    id:
+      shippingMatch?.[1]?.trim() ||
+      longNumberMatch?.[0] ||
+      raw,
+
+    senderId:
+      senderMatch?.[1]?.trim() ||
+      "",
+
+    hashCode: null,
+    securityDigit: null,
+  };
+};
+
 const parseScanPayload = (
   value: string
 ): ScanPayload => {
@@ -116,68 +161,56 @@ const parseScanPayload = (
     value ?? ""
   ).trim();
 
-  try {
-    const parsed =
-      JSON.parse(raw);
+  if (
+    raw.startsWith("{")
+  ) {
+    try {
+      const parsed =
+        JSON.parse(raw);
 
-    return {
-      raw,
+      if (
+        parsed &&
+        typeof parsed ===
+          "object"
+      ) {
+        return {
+          raw,
 
-      id: String(
-        parsed?.id ??
-          parsed?.shipping_id ??
-          parsed?.shippingId ??
-          parsed?.tracking ??
-          ""
-      ).trim(),
+          id: String(
+            parsed?.id ??
+              parsed?.shipping_id ??
+              parsed?.shippingId ??
+              parsed?.tracking ??
+              ""
+          ).trim(),
 
-      senderId: String(
-        parsed?.sender_id ??
-          parsed?.senderId ??
-          ""
-      ).trim(),
+          senderId: String(
+            parsed?.sender_id ??
+              parsed?.senderId ??
+              ""
+          ).trim(),
 
-      hashCode:
-        parsed?.hash_code ??
-        parsed?.hashCode ??
-        null,
+          hashCode:
+            parsed?.hash_code ??
+            parsed?.hashCode ??
+            null,
 
-      securityDigit:
-        parsed?.security_digit ??
-        parsed?.securityDigit ??
-        null,
-    };
-  } catch (_e) {
-    const shippingMatch =
-      raw.match(
-        /(?:shipping_id|shippingId|shipment_id|tracking|order_id|orderId|id)=([^&\s]+)/i
-      );
-
-    const senderMatch =
-      raw.match(
-        /(?:sender_id|senderId)=([^&\s]+)/i
-      );
-
-    const longNumberMatch =
-      raw.match(/\d{8,}/);
-
-    return {
-      raw,
-
-      id:
-        shippingMatch?.[1]?.trim() ||
-        longNumberMatch?.[0] ||
-        raw,
-
-      senderId:
-        senderMatch?.[1]?.trim() ||
-        "",
-
-      hashCode: null,
-      securityDigit: null,
-    };
+          securityDigit:
+            parsed?.security_digit ??
+            parsed?.securityDigit ??
+            null,
+        };
+      }
+    } catch (_e) {
+      // JSON inválido: se lee como texto, abajo.
+    }
   }
+
+  return parseTextPayload(
+    raw
+  );
 };
+
 
 export default function DriverScanScreen({
   navigation,
