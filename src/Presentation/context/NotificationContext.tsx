@@ -15,6 +15,7 @@ export type NotiKind =
   | "DRIVER_ASIGNADO"
   | "ASSIGNMENT_ACCEPTED"
   | "ASSIGNMENT_REJECTED"
+  | "ROUTE_CONFIRMATION"
   | "INFO"
   | "ALERT";
 

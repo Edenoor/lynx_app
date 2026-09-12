@@ -14,6 +14,7 @@ export type NotiKind =
   | "DRIVER_ASIGNADO"
   | "ASSIGNMENT_ACCEPTED"
   | "ASSIGNMENT_REJECTED"
+  | "ROUTE_CONFIRMATION"
   | "INFO"
   | "ALERT";
 
@@ -205,6 +206,7 @@ export function attachNotificationListeners({
     if (normalized === "DRIVER_ASIGNADO") return "DRIVER_ASIGNADO";
     if (normalized === "ASSIGNMENT_ACCEPTED") return "ASSIGNMENT_ACCEPTED";
     if (normalized === "ASSIGNMENT_REJECTED") return "ASSIGNMENT_REJECTED";
+    if (normalized === "ROUTE_CONFIRMATION") return "ROUTE_CONFIRMATION";
 
     if (data?.deliveryId && titleNormalized.includes("NUEVO ENVÍO ASIGNADO")) {
       return "ASIGNACION";
@@ -239,6 +241,8 @@ export function attachNotificationListeners({
           ? "Asignación aceptada"
           : kind === "ASSIGNMENT_REJECTED"
           ? "Asignación rechazada"
+          : kind === "ROUTE_CONFIRMATION"
+          ? "Ronda de mañana"
           : "Notificación"),
       body: body ?? undefined,
       data,
