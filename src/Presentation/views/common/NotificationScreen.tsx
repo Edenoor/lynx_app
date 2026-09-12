@@ -30,6 +30,7 @@ const kindLabel: Record<Noti["kind"], string> = {
   DRIVER_ASIGNADO: "Driver asignado",
   ASSIGNMENT_ACCEPTED: "Aceptada",
   ASSIGNMENT_REJECTED: "Rechazada",
+  ROUTE_CONFIRMATION: "Ronda de mañana",
   INFO: "Info",
   ALERT: "Alerta",
 };
@@ -41,6 +42,7 @@ const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
   DRIVER_ASIGNADO: "person-circle-outline",
   ASSIGNMENT_ACCEPTED: "checkmark-circle-outline",
   ASSIGNMENT_REJECTED: "close-circle-outline",
+  ROUTE_CONFIRMATION: "calendar-outline",
   INFO: "information-circle-outline",
   ALERT: "alert-circle-outline",
 };
@@ -52,6 +54,7 @@ const kindColor: Record<Noti["kind"], string> = {
   DRIVER_ASIGNADO: AppTheme.colors.success,
   ASSIGNMENT_ACCEPTED: AppTheme.colors.success,
   ASSIGNMENT_REJECTED: AppTheme.colors.danger,
+  ROUTE_CONFIRMATION: AppTheme.colors.primary,
   INFO: AppTheme.text.secondary,
   ALERT: AppTheme.colors.danger,
 };
@@ -440,6 +443,18 @@ const NotificationsScreen: React.FC = () => {
             </View>
 
             <View style={styles.modalFooter}>
+              {selected?.kind === "ROUTE_CONFIRMATION" && (
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  onPress={() => {
+                    markRead(selected.id);
+                    setSelected(null);
+                    (navigation as any).navigate("RoutesScreen");
+                  }}
+                >
+                  <Text style={styles.btnTxtPrimary}>Contestar en Rutas</Text>
+                </Pressable>
+              )}
               {!!selected && (
                 <Pressable
                   style={[styles.btn, styles.btnDanger]}

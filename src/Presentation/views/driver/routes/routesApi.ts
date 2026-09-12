@@ -8,9 +8,14 @@ export type RouteType = "PICKUP" | "DELIVERY" | "TURBO";
 export type RouteStatus = "PLANNED" | "ASSIGNED" | "LOADED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 export type StopStatus = "PENDING" | "ARRIVED" | "DONE" | "SKIPPED";
 
+export type ConfirmationState = "ACCEPTED" | "DECLINED" | "PENDING" | "OVERDUE";
 export type RouteSummary = {
   id: number; type: RouteType; status: RouteStatus; scheduled_date: string;
   stops_count: number; deliveries_count: number; load_expected_count: number | null; load_confirmed_count: number | null;
+  // Solo en recorridos que vienen de una ronda fija: cómo se llama, a qué hora
+  // sale y qué contestó el chofer al aviso de la noche anterior.
+  template_id?: number | null; template_name?: string | null; departure_time?: string | null;
+  driver_confirmation?: "ACCEPTED" | "DECLINED" | null; confirmation_state?: ConfirmationState | null;
 };
 export type StopDelivery = {
   delivery_id: number; tracking: string | number | null; nombre_destinatario: string | null; direccion: string | null;
@@ -47,9 +52,14 @@ const unwrap = <T,>(res: any): T => {
 };
 
 export const todayIso = () => new Date().toISOString().slice(0, 10);
+export const tomorrowIso = () => new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
 export const fetchMyRoutes = async (date: string) =>
   unwrap<{ routes: RouteSummary[] }>(await getJson(`/v2/routes/mine?date=${date}`)).routes;
+
+// ¿Puede hacer la ronda? Se contesta la noche anterior; contestar de nuevo pisa la respuesta.
+export const respondConfirmation = async (id: number, response: "ACCEPTED" | "DECLINED") =>
+  unwrap<{ route: RouteDetail }>(await putJson(`/v2/routes/${id}/confirmation`, { response })).route;
 
 export const fetchRoute = async (id: number) => unwrap<{ route: RouteDetail }>(await getJson(`/v2/routes/${id}`)).route;
 

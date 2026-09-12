@@ -9,7 +9,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppTheme from "../../../theme/AppTheme";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
-import { fetchMyRoutes, RouteSummary, STATUS_LABEL, todayIso, TYPE_LABEL } from "./routesApi";
+import { fetchMyRoutes, respondConfirmation, RouteSummary, STATUS_LABEL, todayIso, tomorrowIso, TYPE_LABEL } from "./routesApi";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -26,10 +26,24 @@ export default function RoutesScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Las rondas de mañana que esperan respuesta: el aviso llega de noche y se
+  // contesta acá (también sirve si la notificación se perdió).
+  const [porConfirmar, setPorConfirmar] = useState<RouteSummary[]>([]);
+  const [respondiendo, setRespondiendo] = useState<number | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setRoutes(await fetchMyRoutes(date)); } catch (e: any) { setError(e?.message ?? "No se pudieron cargar los recorridos"); } finally { setLoading(false); }
+    try {
+      setRoutes(await fetchMyRoutes(date));
+      const manana = await fetchMyRoutes(tomorrowIso()).catch(() => [] as RouteSummary[]);
+      setPorConfirmar(manana.filter((r) => r.template_id && r.confirmation_state && r.confirmation_state !== "ACCEPTED"));
+    } catch (e: any) { setError(e?.message ?? "No se pudieron cargar los recorridos"); } finally { setLoading(false); }
   }, [date]);
+
+  const responder = async (r: RouteSummary, response: "ACCEPTED" | "DECLINED") => {
+    setRespondiendo(r.id);
+    try { await respondConfirmation(r.id, response); await load(); } catch (e: any) { setError(e?.message ?? "No se pudo enviar la respuesta"); } finally { setRespondiendo(null); }
+  };
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => navigation.addListener("focus", load), [navigation, load]);
@@ -61,6 +75,24 @@ export default function RoutesScreen({ navigation }: Props) {
 
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
+          {porConfirmar.length ? (
+            <View style={styles.confirmBox}>
+              <Text style={styles.confirmTitle}>Mañana tenés {porConfirmar.length === 1 ? "una ronda" : `${porConfirmar.length} rondas`}. ¿Podés hacerla?</Text>
+              {porConfirmar.map((r) => (
+                <View key={r.id} style={styles.confirmRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.confirmName}>{r.template_name ?? `Colecta #${r.id}`} · {r.departure_time?.slice(0, 5)}</Text>
+                    <Text style={styles.cardMeta}>{r.stops_count} {r.stops_count === 1 ? "tienda" : "tiendas"}{r.confirmation_state === "DECLINED" ? " · dijiste que no" : ""}</Text>
+                  </View>
+                  <Pressable style={[styles.confirmBtn, styles.confirmYes]} disabled={respondiendo === r.id} onPress={() => responder(r, "ACCEPTED")}><Text style={styles.confirmBtnText}>Sí</Text></Pressable>
+                  {r.confirmation_state !== "DECLINED" ? (
+                    <Pressable style={[styles.confirmBtn, styles.confirmNo]} disabled={respondiendo === r.id} onPress={() => responder(r, "DECLINED")}><Text style={styles.confirmBtnText}>No</Text></Pressable>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <FlatList
             data={routes}
             keyExtractor={(r) => String(r.id)}
@@ -76,6 +108,7 @@ export default function RoutesScreen({ navigation }: Props) {
                     <Text style={styles.badgeText}>{STATUS_LABEL[item.status]}</Text>
                   </View>
                 </View>
+                {item.template_name ? <Text style={styles.cardMeta}>Ronda {item.template_name} · sale {item.departure_time?.slice(0, 5)}{item.driver_confirmation === "ACCEPTED" ? " · confirmaste" : item.driver_confirmation === "DECLINED" ? " · dijiste que no podías" : ""}</Text> : null}
                 <Text style={styles.cardMeta}>
                   {item.stops_count} {item.stops_count === 1 ? "parada" : "paradas"} · {item.deliveries_count} {item.deliveries_count === 1 ? "envío" : "envíos"}
                   {item.type === "DELIVERY" && item.load_expected_count !== null ? ` · carga ${item.load_confirmed_count ?? "–"}/${item.load_expected_count}` : ""}
@@ -114,6 +147,14 @@ const styles = StyleSheet.create({
   badgeText: { color: AppTheme.text.primary, fontSize: 12, fontWeight: "600" },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
   emptyText: { color: AppTheme.text.secondary, textAlign: "center" },
+  confirmBox: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.colors.primary, padding: AppTheme.spacing.md, marginBottom: AppTheme.spacing.md, gap: 8 },
+  confirmTitle: { color: AppTheme.text.primary, fontSize: 15, fontWeight: "700" },
+  confirmRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: AppTheme.borders.default },
+  confirmName: { color: AppTheme.text.primary, fontSize: 14, fontWeight: "600" },
+  confirmBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  confirmYes: { borderColor: AppTheme.colors.success, backgroundColor: `${AppTheme.colors.success}22` },
+  confirmNo: { borderColor: AppTheme.colors.danger, backgroundColor: `${AppTheme.colors.danger}22` },
+  confirmBtnText: { color: AppTheme.text.primary, fontWeight: "700" },
   errorBox: { borderWidth: 1, borderColor: AppTheme.colors.danger ?? "#d9534f", borderRadius: AppTheme.radius.md, padding: 12, marginBottom: 12 },
   errorText: { color: AppTheme.text.primary },
 });
