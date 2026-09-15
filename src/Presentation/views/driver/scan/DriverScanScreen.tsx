@@ -1117,8 +1117,14 @@ export default function DriverScanScreen({
           r?.shelf
             ?.suggested
         ) {
+          // Dónde está y dónde le corresponde: el operador necesita las dos
+          // para decidir si lo mueve (pedido en las pruebas del 15-sep-2026).
           lines.push(
-            `El mapa dice ${r.shelf.suggested}.`
+            r?.shelf?.code &&
+              r.shelf.code !==
+                r.shelf.suggested
+              ? `Está en ${r.shelf.code}; por su CP le corresponde ${r.shelf.suggested}.`
+              : `El mapa dice ${r.shelf.suggested}.`
           );
         }
 
