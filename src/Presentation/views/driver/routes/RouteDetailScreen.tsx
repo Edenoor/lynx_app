@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppTheme from "../../../theme/AppTheme";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
-  completeRoute, confirmLoad, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, RouteDetail, startRoute,
+  completeRoute, confirmLoad, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, RouteDetail, startRoute, todayIso,
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 
@@ -54,6 +54,12 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
   const onStart = () =>
     act(async () => {
+      // La ronda de mañana se ve hoy (para confirmarla), pero no se arranca hoy.
+      // El servidor también lo rechaza; acá se explica antes de mandar nada.
+      const fecha = route?.scheduled_date?.slice(0, 10);
+      if (fecha && fecha > todayIso()) {
+        throw new Error(`Este recorrido es del ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: se inicia ese día.`);
+      }
       const r = await startRoute(routeId);
       // Flex que no figura «En camino» en Mercado Libre: se avisa, no se frena.
       if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
