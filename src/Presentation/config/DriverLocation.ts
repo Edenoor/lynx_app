@@ -23,7 +23,7 @@ import * as Battery from "expo-battery";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
-import { postJson } from "./Api";
+import { postJsonWithTimeout } from "./Api";
 
 export const LOCATION_TASK = "lynx-driver-location";
 
@@ -33,6 +33,11 @@ const MAX_BATCH = 500;          // tope del endpoint
 const FLUSH_MIN_INTERVAL_MS = 30_000;
 const FLUSH_WHEN_PENDING = 10;  // con esta cantidad acumulada se sube sin esperar
 const FALLBACK_POLL_MS = 30_000;
+// Tiempo límite de cada envío, aplicado del lado nativo (ver postJsonWithTimeout).
+// Con la app en segundo plano Android congela la red por ratos: sin límite, el
+// request se cuelga y no entra al catch; con límite, falla, marca "buffer" y el
+// próximo fix reintenta. Un lote de 500 posiciones pesa ~60 KB: 15 s sobran.
+const UPLOAD_TIMEOUT_MS = 15_000;
 // Con el chofer quieto no hay fixes (distanceInterval) y el panel lo vería
 // "perdido"; además, con la pantalla bloqueada el sistema retiene lo diferido
 // en memoria. Cada HEARTBEAT_MS se informa la última posición conocida y se
@@ -60,6 +65,10 @@ export type StartResult =
 
 // Las llamadas de la tarea de fondo y las de la pantalla comparten el mismo
 // runtime de JS: un candado en memoria alcanza para que no se pisen el buffer.
+// El candado protege SOLO lecturas y escrituras de AsyncStorage (milisegundos).
+// La llamada de red va SIEMPRE con el candado suelto: si se tomara con el
+// candado puesto, un envío colgado dejaría esperando a cada fix que llega
+// detrás (grabar también pasa por acá) y nada saldría hasta abrir la app.
 let chain: Promise<unknown> = Promise.resolve();
 const withLock = <T>(fn: () => Promise<T>): Promise<T> => {
   const next = chain.then(fn, fn);
@@ -107,68 +116,110 @@ let sessionExpired = false;
 
 type FlushResult = { sent: number; pending: number; stopped?: boolean };
 
+// Una posición se identifica por su instante de grabación: es lo que se usa
+// para sacar del buffer exactamente el lote que se envió, aunque mientras
+// viajaba hayan entrado fixes nuevos por detrás.
+const keyOf = (p: PendingPosition) => p.recorded_at;
+
+// Saca del buffer el lote enviado (aceptado o rechazado como inválido) y
+// devuelve cuántas quedan.
+const removeFromBuffer = (batch: PendingPosition[]) =>
+  withLock(async () => {
+    const keys = new Set(batch.map(keyOf));
+    const rest = (await readBuffer()).filter((p) => !keys.has(keyOf(p)));
+    await writeBuffer(rest);
+    return rest.length;
+  });
+
+// El envío falló (sin red o sin respuesta a tiempo): lo que hay se marca como
+// "buffer" (en el histórico se distingue lo que se subió con demora) y se
+// reintenta en el próximo ciclo. Devuelve cuántas quedan.
+const markBufferDelayed = () =>
+  withLock(async () => {
+    const marked = (await readBuffer()).map((p) => (p.source === "buffer" ? p : { ...p, source: "buffer" as const }));
+    await writeBuffer(marked);
+    return marked.length;
+  });
+
+// Un solo envío en vuelo. El que llega mientras otro está en curso no se
+// encola detrás: comparte el resultado y el próximo fix vuelve a intentar.
+// La excepción es el aviso de disponibilidad (`available`), que no se puede
+// perder: espera a que termine el que está en vuelo y recién sale.
+let inflight: Promise<FlushResult> | null = null;
+
 // Sube el buffer en lotes de hasta MAX_BATCH. `available` viaja solo en el
 // primer lote (o solo, sin posiciones, cuando hay que informar un cambio de
 // disponibilidad con el buffer vacío).
-export const flushDriverPositions = (opts: { available?: boolean } = {}): Promise<FlushResult> =>
-  withLock(async () => {
-    let buffer = await readBuffer();
-    let sent = 0;
-    let available = opts.available;
+export const flushDriverPositions = async (opts: { available?: boolean } = {}): Promise<FlushResult> => {
+  if (inflight) {
+    if (opts.available === undefined) return inflight;
+    await inflight.catch(() => undefined);
+  }
+  const run = flushNow(opts);
+  inflight = run;
+  try {
+    return await run;
+  } finally {
+    if (inflight === run) inflight = null;
+  }
+};
 
-    if (!buffer.length && available === undefined) return { sent, pending: 0 };
-    if (sessionExpired && available === undefined) return { sent, pending: buffer.length };
+const flushNow = async (opts: { available?: boolean }): Promise<FlushResult> => {
+  let sent = 0;
+  let available = opts.available;
 
-    while (buffer.length || available !== undefined) {
-      const batch = buffer.slice(0, MAX_BATCH);
-      const body: Record<string, unknown> = {};
-      if (batch.length) body.positions = batch;
-      if (available !== undefined) body.available = available;
-      if (trackingStatus) body.tracking = trackingStatus;
+  if (sessionExpired && available === undefined) return { sent, pending: await pendingPositionsCount() };
 
-      let res: any;
-      try {
-        res = await postJson("/v2/driver-locations", body);
-      } catch (e) {
-        // Sin red: lo que queda se marca como "buffer" (en el histórico se
-        // distingue lo que se subió con demora) y se reintenta en el próximo ciclo.
-        buffer = buffer.map((p) => (p.source === "buffer" ? p : { ...p, source: "buffer" as const }));
-        await writeBuffer(buffer);
-        console.log("[Lynx Location] Sin conexión, quedan", buffer.length, "posiciones en el buffer");
-        return { sent, pending: buffer.length };
-      }
+  for (;;) {
+    // Bajo candado solo se LEE el lote; la red se llama con el candado suelto.
+    const batch = await withLock(async () => (await readBuffer()).slice(0, MAX_BATCH));
+    if (!batch.length && available === undefined) break;
 
-      if (res?.sessionExpired || res?.status === 401) {
-        sessionExpired = true;
-        console.log("[Lynx Location] Sesión vencida: se detiene el seguimiento");
-        await stopLocationUpdatesQuietly();
-        return { sent, pending: buffer.length, stopped: true };
-      }
+    const body: Record<string, unknown> = {};
+    if (batch.length) body.positions = batch;
+    if (available !== undefined) body.available = available;
+    if (trackingStatus) body.tracking = trackingStatus;
 
-      if (res?.ok) {
-        sent += Number(res.accepted ?? 0) + Number(res.duplicated ?? 0);
-        buffer = buffer.slice(batch.length);
-        available = undefined;
-        lastFlushAt = Date.now();
-        continue;
-      }
+    let res: any;
+    try {
+      res = await postJsonWithTimeout("/v2/driver-locations", body, UPLOAD_TIMEOUT_MS);
+    } catch (e: any) {
+      const pending = await markBufferDelayed();
+      console.log("[Lynx Location] No se pudo subir (", String(e?.message ?? e), "), quedan", pending, "posiciones en el buffer");
+      return { sent, pending };
+    }
 
+    if (res?.sessionExpired || res?.status === 401) {
+      sessionExpired = true;
+      console.log("[Lynx Location] Sesión vencida: se detiene el seguimiento");
+      await stopLocationUpdatesQuietly();
+      return { sent, pending: await pendingPositionsCount(), stopped: true };
+    }
+
+    const accepted = Boolean(res?.ok);
+    if (accepted) {
+      sent += Number(res.accepted ?? 0) + Number(res.duplicated ?? 0);
+      lastFlushAt = Date.now();
+    } else {
       // 400/403/422: el servidor rechazó el lote entero. Reintentarlo no lo va
       // a arreglar (lote inválido, chofer sin ficha): se descarta para no
       // trabar el resto y se deja constancia.
       console.log("[Lynx Location] Lote rechazado por el servidor:", res?.status, res?.error ?? res?.message);
-      buffer = buffer.slice(batch.length);
-      available = undefined;
-      if (res?.status === 403) {
-        await stopLocationUpdatesQuietly();
-        await writeBuffer(buffer);
-        return { sent, pending: buffer.length, stopped: true };
-      }
     }
 
-    await writeBuffer(buffer);
-    return { sent, pending: buffer.length };
-  });
+    // Aceptado o rechazado como inválido, el lote sale del buffer.
+    const pending = batch.length ? await removeFromBuffer(batch) : await pendingPositionsCount();
+    available = undefined;
+
+    if (!accepted && res?.status === 403) {
+      await stopLocationUpdatesQuietly();
+      return { sent, pending, stopped: true };
+    }
+    if (!batch.length) break; // era solo el aviso de disponibilidad
+  }
+
+  return { sent, pending: await pendingPositionsCount() };
+};
 
 const maybeFlush = async (pending: number) => {
   const due = Date.now() - lastFlushAt >= FLUSH_MIN_INTERVAL_MS;
