@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -25,9 +26,9 @@ import {
   attachNotificationListeners,
 } from "../../../config/Push";
 import {
-  startDriverHeartbeat,
-  stopDriverHeartbeat,
-} from "../../../config/HeartBeat";
+  startDriverTracking,
+  flushDriverPositions,
+} from "../../../config/DriverLocation";
 
 import {
   acceptDeliveryAssignment,
@@ -168,6 +169,8 @@ export const DriverScreen = ({ navigation }: Props) => {
   const [turboOn, setTurboOn] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
   const [available] = useState<boolean>(true);
+  // Modo en que quedó el seguimiento: si no es "background", se muestra un aviso fijo.
+  const [trackingMode, setTrackingMode] = useState<string | null>(null);
 
   const [pendingAssignment, setPendingAssignment] =
     useState<PendingAssignment | null>(null);
@@ -331,7 +334,6 @@ export const DriverScreen = ({ navigation }: Props) => {
           },
         });
 
-        startDriverHeartbeat(username, available, defaultVehicleType);
       } catch (_e) {
         showFeedback(
           "error",
@@ -339,13 +341,32 @@ export const DriverScreen = ({ navigation }: Props) => {
           "No se pudo registrar el dispositivo para recibir alertas."
         );
       }
+
+      // Seguimiento operativo: sigue en segundo plano y con la pantalla
+      // bloqueada; se apaga al cerrar sesión, no al salir de esta pantalla.
+      const tracking = await startDriverTracking({ available });
+      if (cancelled) return;
+      setTrackingMode(tracking.ok ? tracking.mode : tracking.reason === "error" ? "fallback" : "off");
+
+      if (!tracking.ok) {
+        showFeedback(
+          "info",
+          "Ubicación desactivada",
+          "Sin permiso de ubicación no se puede seguir tu recorrido. Activalo desde Ajustes."
+        );
+      } else if (tracking.mode === "foreground-only") {
+        showFeedback(
+          "info",
+          "Ubicación solo con la app abierta",
+          "Para seguir el recorrido con la pantalla bloqueada, permití la ubicación \"Siempre\" en Ajustes."
+        );
+      }
     })();
 
+    // Al volver a primer plano se sube lo acumulado sin esperar al próximo fix.
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        startDriverHeartbeat(username, available, defaultVehicleType);
-      } else {
-        stopDriverHeartbeat();
+        void flushDriverPositions();
       }
     });
 
@@ -353,7 +374,6 @@ export const DriverScreen = ({ navigation }: Props) => {
       cancelled = true;
 
       sub.remove();
-      stopDriverHeartbeat();
 
       if (detachNotiRef.current) {
         detachNotiRef.current();
@@ -540,6 +560,18 @@ export const DriverScreen = ({ navigation }: Props) => {
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
       >
+        {trackingMode && trackingMode !== "background" ? (
+          <Pressable onPress={() => Linking.openSettings()} style={styles.trackingBanner}>
+            <Ionicons name="warning-outline" size={18} color="#1A1A1A" />
+            <Text style={styles.trackingBannerText}>
+              {trackingMode === "off"
+                ? "Ubicación desactivada: tu recorrido no se está siguiendo. Tocá para abrir Ajustes y permitirla."
+                : trackingMode === "fallback"
+                  ? "No se pudo activar el seguimiento en segundo plano: solo se comparte con la app abierta. Tocá para revisar Ajustes."
+                  : "La ubicación solo se comparte con la app abierta. Tocá para permitir «Siempre» en Ajustes."}
+            </Text>
+          </Pressable>
+        ) : null}
         <View style={styles.hero}>
           <Text style={styles.kicker}>LYNX DRIVER</Text>
           <Text style={styles.title}>Hola {driverDisplayName}</Text>
@@ -982,6 +1014,22 @@ const styles = StyleSheet.create({
     color: AppTheme.colors.white,
     fontSize: AppTheme.font.size.md,
     fontWeight: AppTheme.font.weight.black,
+  },
+  trackingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFD54F",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  trackingBannerText: {
+    flex: 1,
+    color: "#1A1A1A",
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
 
