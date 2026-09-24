@@ -13,6 +13,7 @@ import DriverScanScreen from "../views/driver/scan/DriverScanScreen";
 import DriverScanOptionsScreen from "../views/driver/scan/DriverScanOptionsScreen";
 import RoutesScreen from "../views/driver/routes/RoutesScreen";
 import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
+import TurboOffersScreen from "../views/driver/turbo/TurboOffersScreen";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
@@ -26,6 +27,7 @@ export type DriverStackParamList = {
   DriverScanScreen: { mode: DriverScanMode };
   RoutesScreen: undefined;
   RouteDetailScreen: { routeId: number };
+  TurboOffersScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -58,6 +60,7 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="DriverScanScreen" component={DriverScanScreen} />
           <Stack.Screen name="RoutesScreen" component={RoutesScreen} />
           <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
+          <Stack.Screen name="TurboOffersScreen" component={TurboOffersScreen} />
         </>
       )}
     </Stack.Navigator>

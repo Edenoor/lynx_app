@@ -16,6 +16,7 @@ export type NotiKind =
   | "ASSIGNMENT_ACCEPTED"
   | "ASSIGNMENT_REJECTED"
   | "ROUTE_CONFIRMATION"
+  | "TURBO_OFFER"
   | "INFO"
   | "ALERT";
 

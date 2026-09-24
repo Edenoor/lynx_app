@@ -166,6 +166,8 @@ export const DriverScreen = ({ navigation }: Props) => {
   const { add } = useNotifications();
 
   const [turboOn, setTurboOn] = useState<boolean>(false);
+  // null = todavía no se sabe; false = el coordinador no lo habilitó para turbos.
+  const [turboEnabled, setTurboEnabled] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [available] = useState<boolean>(true);
 
@@ -329,6 +331,12 @@ export const DriverScreen = ({ navigation }: Props) => {
           onAny: ({ kind, title, body, data }) => {
             add({ title, body, kind, data });
           },
+
+          // Turbo ofrecido: se va derecho a la pantalla de ofertas, que tiene
+          // la cuenta regresiva y los botones. Si ya está ahí, ella se refresca sola.
+          onTurboOffer: () => {
+            navigation.navigate("TurboOffersScreen" as never);
+          },
         });
 
         startDriverHeartbeat(username, available, defaultVehicleType);
@@ -373,6 +381,7 @@ export const DriverScreen = ({ navigation }: Props) => {
 
         if (mounted && r?.ok !== false) {
           setTurboOn(Boolean(r?.turbo_active ?? false));
+          if (typeof r?.turbo_enabled === "boolean") setTurboEnabled(r.turbo_enabled);
         }
       } catch (_e) {}
     })();
@@ -389,10 +398,12 @@ export const DriverScreen = ({ navigation }: Props) => {
     setSaving(true);
 
     try {
-      await postJson("/driver/availability/set", {
+      const r = await postJson("/driver/availability/set", {
         username,
         turbo_active: val,
       });
+      if (r?.ok === false) throw new Error(r?.error || "rechazado");
+      if (typeof r?.turbo_enabled === "boolean") setTurboEnabled(r.turbo_enabled);
     } catch (_e) {
       setTurboOn(!val);
       showFeedback(
@@ -553,6 +564,7 @@ export const DriverScreen = ({ navigation }: Props) => {
             active={turboOn}
             saving={saving}
             activeTrips={0}
+            enabled={turboEnabled}
             onToggle={toggleTurbo}
           />
 

@@ -10,6 +10,8 @@ type DriverTurboStatusCardProps = {
   saving?: boolean;
   activeTrips?: number;
   nextDeliveryText?: string;
+  // false = no habilitado por el coordinador: el interruptor anda, pero no le van a ofrecer turbos.
+  enabled?: boolean | null;
   onToggle: (value: boolean) => void;
 };
 
@@ -18,6 +20,7 @@ export function DriverTurboStatusCard({
   saving = false,
   activeTrips = 0,
   nextDeliveryText,
+  enabled = null,
   onToggle,
 }: DriverTurboStatusCardProps) {
   const statusColor = active ? AppTheme.colors.success : AppTheme.colors.danger;
@@ -71,6 +74,11 @@ export function DriverTurboStatusCard({
         {nextDeliveryText ||
           "Cuando haya un Turbo disponible, vas a recibir una alerta para aceptarlo."}
       </Text>
+      {enabled === false ? (
+        <Text style={[styles.description, { color: AppTheme.colors.warning }]}>
+          Todavía no estás habilitado para Turbo: pedíselo a tu coordinador.
+        </Text>
+      ) : null}
     </View>
   );
 }

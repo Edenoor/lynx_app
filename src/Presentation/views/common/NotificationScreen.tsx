@@ -31,6 +31,7 @@ const kindLabel: Record<Noti["kind"], string> = {
   ASSIGNMENT_ACCEPTED: "Aceptada",
   ASSIGNMENT_REJECTED: "Rechazada",
   ROUTE_CONFIRMATION: "Ronda de mañana",
+  TURBO_OFFER: "Turbo",
   INFO: "Info",
   ALERT: "Alerta",
 };
@@ -43,6 +44,7 @@ const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
   ASSIGNMENT_ACCEPTED: "checkmark-circle-outline",
   ASSIGNMENT_REJECTED: "close-circle-outline",
   ROUTE_CONFIRMATION: "calendar-outline",
+  TURBO_OFFER: "flash-outline",
   INFO: "information-circle-outline",
   ALERT: "alert-circle-outline",
 };
@@ -55,6 +57,7 @@ const kindColor: Record<Noti["kind"], string> = {
   ASSIGNMENT_ACCEPTED: AppTheme.colors.success,
   ASSIGNMENT_REJECTED: AppTheme.colors.danger,
   ROUTE_CONFIRMATION: AppTheme.colors.primary,
+  TURBO_OFFER: AppTheme.colors.primary,
   INFO: AppTheme.text.secondary,
   ALERT: AppTheme.colors.danger,
 };
@@ -443,6 +446,18 @@ const NotificationsScreen: React.FC = () => {
             </View>
 
             <View style={styles.modalFooter}>
+              {selected?.kind === "TURBO_OFFER" && (
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  onPress={() => {
+                    markRead(selected.id);
+                    setSelected(null);
+                    (navigation as any).navigate("TurboOffersScreen");
+                  }}
+                >
+                  <Text style={styles.btnTxtPrimary}>Ver ofertas</Text>
+                </Pressable>
+              )}
               {selected?.kind === "ROUTE_CONFIRMATION" && (
                 <Pressable
                   style={[styles.btn, styles.btnPrimary]}
