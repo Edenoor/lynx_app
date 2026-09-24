@@ -10,6 +10,7 @@ import AppTheme from "../../../theme/AppTheme";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { fetchMyRoutes, respondConfirmation, RouteSummary, STATUS_LABEL, todayIso, tomorrowIso, TYPE_LABEL } from "./routesApi";
+import { fetchMyOffers } from "../turbo/turboApi";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -30,6 +31,8 @@ export default function RoutesScreen({ navigation }: Props) {
   // contesta acá (también sirve si la notificación se perdió).
   const [porConfirmar, setPorConfirmar] = useState<RouteSummary[]>([]);
   const [respondiendo, setRespondiendo] = useState<number | null>(null);
+  // Turbos ofrecidos y todavía sin respuesta: el push puede perderse, el banner no.
+  const [ofertas, setOfertas] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -37,6 +40,7 @@ export default function RoutesScreen({ navigation }: Props) {
       setRoutes(await fetchMyRoutes(date));
       const manana = await fetchMyRoutes(tomorrowIso()).catch(() => [] as RouteSummary[]);
       setPorConfirmar(manana.filter((r) => r.template_id && r.confirmation_state && r.confirmation_state !== "ACCEPTED"));
+      setOfertas((await fetchMyOffers().catch(() => [])).length);
     } catch (e: any) { setError(e?.message ?? "No se pudieron cargar los recorridos"); } finally { setLoading(false); }
   }, [date]);
 
@@ -74,6 +78,19 @@ export default function RoutesScreen({ navigation }: Props) {
           </View>
 
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
+
+          {ofertas ? (
+            <Pressable style={[styles.confirmBox, styles.turboBox]} onPress={() => navigation.navigate("TurboOffersScreen")}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Ionicons name="flash" size={22} color={AppTheme.text.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.confirmTitle}>Tenés {ofertas === 1 ? "un turbo ofrecido" : `${ofertas} turbos ofrecidos`}</Text>
+                  <Text style={styles.cardMeta}>Contestá antes de que venza: el primero que acepta se lo queda.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={AppTheme.text.muted} />
+              </View>
+            </Pressable>
+          ) : null}
 
           {porConfirmar.length ? (
             <View style={styles.confirmBox}>
@@ -149,6 +166,7 @@ const styles = StyleSheet.create({
   emptyText: { color: AppTheme.text.secondary, textAlign: "center" },
   confirmBox: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.colors.primary, padding: AppTheme.spacing.md, marginBottom: AppTheme.spacing.md, gap: 8 },
   confirmTitle: { color: AppTheme.text.primary, fontSize: 15, fontWeight: "700" },
+  turboBox: { borderColor: AppTheme.text.accent },
   confirmRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: AppTheme.borders.default },
   confirmName: { color: AppTheme.text.primary, fontSize: 14, fontWeight: "600" },
   confirmBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },

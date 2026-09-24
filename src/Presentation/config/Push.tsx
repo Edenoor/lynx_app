@@ -15,6 +15,7 @@ export type NotiKind =
   | "ASSIGNMENT_ACCEPTED"
   | "ASSIGNMENT_REJECTED"
   | "ROUTE_CONFIRMATION"
+  | "TURBO_OFFER"
   | "INFO"
   | "ALERT";
 
@@ -172,6 +173,7 @@ export function attachNotificationListeners({
   onNewTrad,
   onAccepted,
   onAssignment,
+  onTurboOffer,
   onAny,
 }: {
   currentUser: { username: string; rol: MobileRole };
@@ -185,6 +187,8 @@ export function attachNotificationListeners({
     localidad?: string;
     raw?: any;
   }) => void;
+  // Un turbo ofrecido: se llama tanto al llegar como al tocar la notificación.
+  onTurboOffer?: (payload: { routeId: number | null; source: "received" | "response"; raw?: any }) => void;
   onAny?: (payload: {
     kind: NotiKind;
     title: string;
@@ -207,6 +211,7 @@ export function attachNotificationListeners({
     if (normalized === "ASSIGNMENT_ACCEPTED") return "ASSIGNMENT_ACCEPTED";
     if (normalized === "ASSIGNMENT_REJECTED") return "ASSIGNMENT_REJECTED";
     if (normalized === "ROUTE_CONFIRMATION") return "ROUTE_CONFIRMATION";
+    if (normalized === "TURBO_OFFER") return "TURBO_OFFER";
 
     if (data?.deliveryId && titleNormalized.includes("NUEVO ENVÍO ASIGNADO")) {
       return "ASIGNACION";
@@ -243,6 +248,8 @@ export function attachNotificationListeners({
           ? "Asignación rechazada"
           : kind === "ROUTE_CONFIRMATION"
           ? "Ronda de mañana"
+          : kind === "TURBO_OFFER"
+          ? "Turbo disponible"
           : "Notificación"),
       body: body ?? undefined,
       data,
@@ -275,6 +282,12 @@ export function attachNotificationListeners({
 
     if (source === "received") {
       save(kind, content.title ?? undefined, content.body ?? undefined, data);
+    }
+
+    if (kind === "TURBO_OFFER" && currentUser.rol === "driver") {
+      const routeId = Number(data?.routeId ?? data?.route_id);
+      onTurboOffer?.({ routeId: Number.isFinite(routeId) ? routeId : null, source, raw: data });
+      return;
     }
 
     if (

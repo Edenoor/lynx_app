@@ -14,6 +14,7 @@ import {
   completeRoute, confirmLoad, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, RouteDetail, startRoute, todayIso,
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
+import { fetchDispatch, hhmm } from "../turbo/turboApi";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -26,12 +27,18 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState("");
   const [openStop, setOpenStop] = useState<number | null>(null);
+  // Solo en un Turbo: hasta qué hora hay que entregar (regla de Mercado Libre).
+  const [deadline, setDeadline] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { const r = await fetchRoute(routeId); setRoute(r); setError(null); }
     catch (e: any) { setError(e?.message ?? "No se pudo cargar el recorrido"); }
   }, [routeId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (route?.type !== "TURBO") return;
+    fetchDispatch(routeId).then((d) => setDeadline(d?.deadline_at ?? null)).catch(() => setDeadline(null));
+  }, [route?.type, routeId]);
 
   // Ejecuta una acción, recarga y muestra el error del servidor si lo hay.
   const act = async (fn: () => Promise<unknown>) => {
@@ -95,6 +102,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
               <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
               <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos{route.started_at ? ` · salida ${time(route.started_at)}` : ""}</Text>
+              {route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
             </View>
           </View>
 
@@ -192,7 +200,9 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
               </View>
               {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !d.outcome ? (
                 <View style={styles.row}>
-                  {d.tipo_envio === "flex" ? (
+                  {routeType === "TURBO" ? (
+                    <Text style={styles.stopMeta}>Cerrá la entrega en Envíos Flex — Lynx se entera solo</Text>
+                  ) : d.tipo_envio === "flex" ? (
                     <Text style={styles.stopMeta}>Entregado: se registra en Envíos Flex</Text>
                   ) : (
                     <Pressable onPress={() => outcome(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregado</Text></Pressable>
@@ -269,6 +279,7 @@ const styles = StyleSheet.create({
   eyebrow: { ...AppTheme.typography.kicker },
   title: { color: AppTheme.text.primary, fontSize: 22, fontWeight: "700" },
   meta: { color: AppTheme.text.secondary, fontSize: 13, marginTop: 2 },
+  deadline: { color: AppTheme.colors.warning, fontSize: 14, fontWeight: "700", marginTop: 4 },
   link: { color: AppTheme.text.accent },
   panel: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.borders.primary, padding: AppTheme.spacing.md, gap: 10 },
   panelTitle: { color: AppTheme.text.primary, fontWeight: "700", fontSize: 15 },
