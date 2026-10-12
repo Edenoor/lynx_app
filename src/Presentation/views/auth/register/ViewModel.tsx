@@ -25,7 +25,6 @@ const RegisterViewModel = () => {
             values.rol = rol!
             const response = await RegisterAuthUseCase(values);
             setLoading(false)
-            console.log('RESULT: ' + JSON.stringify(response)); 
             if(response.success){
                 await SaveUserLocalUseCase(response.data)
                 getUserSession()

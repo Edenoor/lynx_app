@@ -1,4 +1,5 @@
 import React, { createContext, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import { User } from "../../Domain/entities/User";
 import { GetUserLocalUseCase } from "../../Domain/useCases/userLocal/GetUserLocal";
 import { SaveUserLocalUseCase } from "../../Domain/useCases/userLocal/SaveUserLocal";
@@ -9,7 +10,15 @@ import {
 } from "../../Data/sources/remote/api/ApiDelivery";
 
 import { NotificationsProvider } from "./NotificationContext";
-import { stopDriverTracking } from "../config/DriverLocation";
+import { clearDriverPositionsBuffer, stopDriverTracking } from "../config/DriverLocation";
+import { onSessionRenewed, renewSessionIfNeeded } from "../config/SessionRenewal";
+import {
+  retryPendingPushUnregister,
+  unregisterPushOnLogout,
+} from "../config/PushUnregister";
+
+// Cada cuánto se revisa, con la app abierta, si el token está por vencer.
+const RENEW_CHECK_MS = 15 * 60_000;
 
 type Ctx = {
   user: User | null;
@@ -61,15 +70,21 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     setUser(null);
   };
 
-  const removeUserSession = async () => {
+  // Fin de operación: apaga el seguimiento y sube lo pendiente mientras el
+  // token todavía sirve. Solo el cierre manual da de baja el push: con la
+  // sesión vencida (401) el teléfono sigue siendo del usuario.
+  const endSession = async ({ unregisterPush }: { unregisterPush: boolean }) => {
     if (isRemovingSessionRef.current) return;
 
     isRemovingSessionRef.current = true;
 
     try {
-      // Fin de operación: apaga el seguimiento y sube lo pendiente mientras
-      // el token todavía sirve.
       await stopDriverTracking({ available: false });
+      // Lo que no se pudo subir (sin red, sesión vencida) se descarta: con el
+      // token del próximo chofer quedaría a su nombre.
+      const discarded = await clearDriverPositionsBuffer();
+      if (discarded) console.log("[Lynx Location] Al cerrar sesión se descartaron", discarded, "posiciones sin subir");
+      if (unregisterPush) await unregisterPushOnLogout();
       await clearSessionState();
     } finally {
       setTimeout(() => {
@@ -78,10 +93,13 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     }
   };
 
+  const removeUserSession = () => endSession({ unregisterPush: true });
+  const expireSession = () => endSession({ unregisterPush: false });
+
   useEffect(() => {
     setUnauthorizedHandler(async () => {
       console.log("[Lynx Auth] Sesión expirada. Redirigiendo a login.");
-      await removeUserSession();
+      await expireSession();
     });
 
     return () => {
@@ -100,6 +118,7 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
         } else {
           setAuthToken(null);
           setUser(null);
+          retryPendingPushUnregister();
         }
       } catch (error) {
         console.log("[Lynx Auth] Error hidratando sesión:", error);
@@ -112,6 +131,28 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
 
     hydrateSession();
   }, []);
+
+  // Renovación de la sesión (C7): al abrir, al volver a primer plano y cada
+  // RENEW_CHECK_MS mientras la app está abierta. Ver SessionRenewal.ts.
+  const loggedIn = Boolean(user);
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    const unsubscribe = onSessionRenewed((token) => {
+      setUser((prev) => (prev ? { ...prev, token } : prev));
+    });
+    renewSessionIfNeeded();
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") renewSessionIfNeeded();
+    });
+    const timer = setInterval(renewSessionIfNeeded, RENEW_CHECK_MS);
+
+    return () => {
+      unsubscribe();
+      appStateSub.remove();
+      clearInterval(timer);
+    };
+  }, [loggedIn]);
 
   const saveUserSession = async (u: User) => {
     await SaveUserLocalUseCase(u);

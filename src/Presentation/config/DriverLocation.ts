@@ -24,6 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
 import { postJsonWithTimeout } from "./Api";
+import { renewSessionIfNeeded } from "./SessionRenewal";
 
 export const LOCATION_TASK = "lynx-driver-location";
 
@@ -107,6 +108,16 @@ const enqueue = (items: PendingPosition[]) =>
 
 export const pendingPositionsCount = async () => (await readBuffer()).length;
 
+// Al cerrar sesión: lo que no se pudo subir con el token de este chofer no se
+// puede subir con el del siguiente (se le atribuiría a otro). Devuelve cuántas
+// posiciones se descartaron.
+export const clearDriverPositionsBuffer = () =>
+  withLock(async () => {
+    const discarded = (await readBuffer()).length;
+    await writeBuffer([]);
+    return discarded;
+  });
+
 /* =========================
    Subida en lote
    ========================= */
@@ -170,6 +181,11 @@ const flushNow = async (opts: { available?: boolean }): Promise<FlushResult> => 
 
   if (sessionExpired && available === undefined) return { sent, pending: await pendingPositionsCount() };
 
+  // Con la app en segundo plano esta es la única parte que sigue corriendo:
+  // acá se renueva la sesión antes de que venza (C7). No se espera: se renueva
+  // con horas de margen, así que este envío sale bien con el token actual.
+  void renewSessionIfNeeded();
+
   for (;;) {
     // Bajo candado solo se LEE el lote; la red se llama con el candado suelto.
     const batch = await withLock(async () => (await readBuffer()).slice(0, MAX_BATCH));
@@ -197,6 +213,18 @@ const flushNow = async (opts: { available?: boolean }): Promise<FlushResult> => 
     }
 
     const accepted = Boolean(res?.ok);
+
+    // 5xx, 408 y 429 son fallas del servidor o del camino (reinicio del api, 502
+    // del proxy, límite de pedidos), no del lote: se conserva igual que cuando
+    // no hay red y se reintenta en el próximo ciclo. Solo un rechazo 4xx
+    // descarta el lote.
+    const status = Number(res?.status ?? 0);
+    if (!accepted && (status === 0 || status >= 500 || status === 408 || status === 429)) {
+      const pending = await markBufferDelayed();
+      console.log("[Lynx Location] El servidor no pudo recibir el lote (", status, "), quedan", pending, "posiciones en el buffer");
+      return { sent, pending };
+    }
+
     if (accepted) {
       sent += Number(res.accepted ?? 0) + Number(res.duplicated ?? 0);
       lastFlushAt = Date.now();

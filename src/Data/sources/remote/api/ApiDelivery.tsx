@@ -42,7 +42,7 @@ export const setAuthToken = (token?: string | null) => {
 
 ApiDelivery.interceptors.request.use(
   (config) => {
-    console.log(
+    if (__DEV__) console.log(
       "API REQUEST:",
       `${config.method?.toUpperCase()} ${config.baseURL}${config.url}`,
     );
@@ -58,14 +58,14 @@ ApiDelivery.interceptors.response.use(
     const status = error?.response?.status;
     const url = error?.config?.url;
 
-    console.log("API ERROR:", {
+    if (__DEV__) console.log("API ERROR:", {
       url,
       status,
       data: error?.response?.data,
     });
 
     if (status === 401) {
-      console.log("[Lynx Auth] Token expirado detectado en ApiDelivery");
+      if (__DEV__) console.log("[Lynx Auth] Token expirado detectado en ApiDelivery");
       await handleUnauthorized();
     }
 

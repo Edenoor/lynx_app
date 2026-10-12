@@ -77,8 +77,8 @@ const HomeViewModel = () => {
         values.password,
       );
 
-      console.log("LOGIN RESPONSE:", JSON.stringify(response));
-
+      // Sin loguear la respuesta: trae el token, y los logs quedan en logcat
+      // también en release.
       const success = response?.ok === true;
       const token = response?.token;
       const authUser = response?.user;
@@ -107,15 +107,10 @@ const HomeViewModel = () => {
         );
 
         currentUser = currentUserResponse?.data?.user ?? null;
-
-        console.log(
-          "CURRENT USER RESPONSE:",
-          JSON.stringify(currentUserResponse.data),
-        );
       } catch (error: any) {
         console.log(
           "CURRENT USER ERROR:",
-          JSON.stringify(error?.response?.data ?? error?.message),
+          error?.response?.status ?? error?.message,
         );
       }
 

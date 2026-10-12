@@ -16,7 +16,7 @@ export class AuthRepositoryImpl implements AuthRepository {
     } catch (error) {
       const e = error as AxiosError<ResponseApiDelivery>;
 
-      console.log("ERROR LOGIN:", JSON.stringify(e.response?.data));
+      if (__DEV__) console.log("ERROR LOGIN:", JSON.stringify(e.response?.data));
 
       return (
         e.response?.data ?? {
@@ -34,7 +34,7 @@ export class AuthRepositoryImpl implements AuthRepository {
     } catch (error) {
       const e = error as AxiosError<ResponseApiDelivery>;
 
-      console.log("ERROR REGISTER:", JSON.stringify(e.response?.data));
+      if (__DEV__) console.log("ERROR REGISTER:", JSON.stringify(e.response?.data));
 
       return (
         e.response?.data ?? {
@@ -55,7 +55,7 @@ export class AuthRepositoryImpl implements AuthRepository {
     } catch (error) {
       const e = error as AxiosError<ResponseApiDelivery>;
 
-      console.log("ERROR RECOVERY:", JSON.stringify(e.response?.data));
+      if (__DEV__) console.log("ERROR RECOVERY:", JSON.stringify(e.response?.data));
 
       return (
         e.response?.data ?? {

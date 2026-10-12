@@ -19,17 +19,15 @@ function vehicleLabel(vehicle: VehicleInfo) {
   return [vehicle.type, vehicle.brand, vehicle.model].filter(Boolean).join(" · ");
 }
 
+// Solo datos personales: tarifa, alias, CBU y comisión los carga el admin y el
+// chofer no los manda (antes iban en null y le borraban los datos de cobro).
 function buildDriverDataPayload(vehicle: VehicleInfo) {
   return {
     driver: {
-      tarifaId: null,
       vehiculo: vehicleLabel(vehicle),
       patente: vehicle.plate,
       DNI: vehicle.dni ? Number(vehicle.dni) : null,
       CUIL: vehicle.cuil ? Number(vehicle.cuil) : null,
-      alias: null,
-      CBU: null,
-      comision: null,
     },
   };
 }
@@ -67,8 +65,9 @@ export async function saveDriverOnboardingBackend({
 
   const driverDataId = roleResponse.data.id;
 
+  // Ruta propia del chofer: el servidor toma la ficha del token, no del id.
   const dataResponse = await putJson(
-    `/v2/drivers/${driverDataId}`,
+    "/v2/drivers/me/onboarding",
     buildDriverDataPayload(vehicle)
   );
 

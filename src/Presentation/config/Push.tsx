@@ -3,6 +3,7 @@ import * as Device from "expo-device";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { getJson, postJson, putJson } from "./Api";
+import { rememberPushToken } from "./PushUnregister";
 
 type MobileRole = "seller" | "driver" | "admin";
 
@@ -37,7 +38,7 @@ export async function setupPushAndRegisterDevice(params: {
   rol: MobileRole;
   vehicleType?: string | null;
 }) {
-  console.log("[Lynx Push Mobile] Iniciando setup push...", {
+  if (__DEV__) console.log("[Lynx Push Mobile] Iniciando setup push...", {
     userId: params.userId,
     username: params.username,
     rol: params.rol,
@@ -45,19 +46,19 @@ export async function setupPushAndRegisterDevice(params: {
   });
 
   if (!Device.isDevice) {
-    console.log("[Lynx Push Mobile] No es dispositivo físico.");
+    if (__DEV__) console.log("[Lynx Push Mobile] No es dispositivo físico.");
     return null;
   }
 
   let perm = await Notifications.getPermissionsAsync();
-  console.log("[Lynx Push Mobile] Permiso inicial:", perm.status);
+  if (__DEV__) console.log("[Lynx Push Mobile] Permiso inicial:", perm.status);
 
   if (perm.status !== "granted") {
     perm = await Notifications.requestPermissionsAsync();
-    console.log("[Lynx Push Mobile] Permiso solicitado:", perm.status);
+    if (__DEV__) console.log("[Lynx Push Mobile] Permiso solicitado:", perm.status);
 
     if (perm.status !== "granted") {
-      console.log("[Lynx Push Mobile] Permiso denegado.");
+      if (__DEV__) console.log("[Lynx Push Mobile] Permiso denegado.");
       return null;
     }
   }
@@ -70,13 +71,11 @@ export async function setupPushAndRegisterDevice(params: {
     });
 
     token = response.data;
+    await rememberPushToken(token);
 
-    console.log("==============================================");
-    console.log("[Lynx Push Mobile] Expo Push Token:");
-    console.log(token);
-    console.log("==============================================");
+    if (__DEV__) console.log("[Lynx Push Mobile] Expo Push Token:", token);
   } catch (error) {
-    console.log("[Lynx Push Mobile] Error obteniendo Expo Push Token:", error);
+    if (__DEV__) console.log("[Lynx Push Mobile] Error obteniendo Expo Push Token:", error);
     return null;
   }
 
@@ -91,23 +90,23 @@ export async function setupPushAndRegisterDevice(params: {
       finalLocPerm = await Location.requestForegroundPermissionsAsync();
     }
 
-    console.log("[Lynx Push Mobile] Permiso ubicación:", finalLocPerm.status);
+    if (__DEV__) console.log("[Lynx Push Mobile] Permiso ubicación:", finalLocPerm.status);
 
     if (finalLocPerm.status === "granted") {
       const pos = await Location.getCurrentPositionAsync({});
       lat = pos.coords.latitude;
       lng = pos.coords.longitude;
 
-      console.log("[Lynx Push Mobile] Ubicación inicial:", { lat, lng });
+      if (__DEV__) console.log("[Lynx Push Mobile] Ubicación inicial:", { lat, lng });
     }
   } catch (error) {
-    console.log("[Lynx Push Mobile] No se pudo obtener ubicación inicial:", error);
+    if (__DEV__) console.log("[Lynx Push Mobile] No se pudo obtener ubicación inicial:", error);
   }
 
   try {
     const deviceResponse = await getJson(`/v2/users/${params.userId}/devices`);
 
-    console.log("[Lynx Push Mobile] Device del usuario:", deviceResponse);
+    if (__DEV__) console.log("[Lynx Push Mobile] Device del usuario:", deviceResponse);
 
     let finalDeviceId =
       deviceResponse?.devices?.id ||
@@ -116,7 +115,7 @@ export async function setupPushAndRegisterDevice(params: {
       deviceResponse?.device?.[0]?.id;
 
     if (!finalDeviceId) {
-      console.log(
+      if (__DEV__) console.log(
         "[Lynx Push Mobile] No se encontró deviceId. Intentando crear device..."
       );
 
@@ -124,7 +123,7 @@ export async function setupPushAndRegisterDevice(params: {
         userID: params.userId,
       });
 
-      console.log(
+      if (__DEV__) console.log(
         "[Lynx Push Mobile] Respuesta crear device:",
         createDeviceResponse
       );
@@ -137,14 +136,14 @@ export async function setupPushAndRegisterDevice(params: {
         createDeviceResponse?.devices?.[0]?.id;
 
       if (!finalDeviceId) {
-        console.log(
+        if (__DEV__) console.log(
           "[Lynx Push Mobile] No se pudo obtener deviceId luego de crear device."
         );
         return token;
       }
     }
 
-    console.log("[Lynx Push Mobile] Actualizando token para device:", {
+    if (__DEV__) console.log("[Lynx Push Mobile] Actualizando token para device:", {
       finalDeviceId,
       token,
       platform: Platform.OS,
@@ -159,9 +158,9 @@ export async function setupPushAndRegisterDevice(params: {
       lng,
     });
 
-    console.log("[Lynx Push Mobile] Respuesta update token:", response);
+    if (__DEV__) console.log("[Lynx Push Mobile] Respuesta update token:", response);
   } catch (error) {
-    console.log("[Lynx Push Mobile] Error actualizando token del device:", error);
+    if (__DEV__) console.log("[Lynx Push Mobile] Error actualizando token del device:", error);
   }
 
   return token;
@@ -255,7 +254,7 @@ export function attachNotificationListeners({
     const data: any = content.data ?? {};
     const kind = normalizeKind(data?.type, data, content.title);
 
-    console.log(`[Lynx Push Mobile] Notificación ${source}:`, {
+    if (__DEV__) console.log(`[Lynx Push Mobile] Notificación ${source}:`, {
       kind,
       title: content.title,
       body: content.body,
@@ -263,7 +262,7 @@ export function attachNotificationListeners({
     });
 
     if (kind === "DRIVER_ASIGNADO") {
-      console.log("[Lynx Push Mobile] Notificación seller DRIVER_ASIGNADO:", {
+      if (__DEV__) console.log("[Lynx Push Mobile] Notificación seller DRIVER_ASIGNADO:", {
         title: content.title,
         body: content.body,
         data,
@@ -282,7 +281,7 @@ export function attachNotificationListeners({
       const deliveryId = String(data?.deliveryId || data?.delivery_id || data?.id || "");
 
       if (!deliveryId) {
-        console.log("[Lynx Push Mobile] ASIGNACION sin deliveryId:", data);
+        if (__DEV__) console.log("[Lynx Push Mobile] ASIGNACION sin deliveryId:", data);
         return;
       }
 

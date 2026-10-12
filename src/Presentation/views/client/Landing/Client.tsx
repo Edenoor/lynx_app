@@ -33,16 +33,18 @@ export const ClientScreen = ({ navigation }: Props) => {
 
   // nombre/username para registrar el device
   const username = (user as any)?.username || user?.email || user?.name || '';
+  const userId = user?.id;
 
   // 🔔 registro de push + listeners para seller
   useEffect(() => {
-    if (!username) return;
+    if (!username || !userId) return;
     let detach: (() => void) | null = null;
 
     (async () => {
       try {
         // 1) registrar token/device del seller
         await setupPushAndRegisterDevice({
+          userId,
           username,
           rol: 'seller',
         });
@@ -69,7 +71,7 @@ export const ClientScreen = ({ navigation }: Props) => {
     return () => {
       detach?.();
     };
-  }, [username, add]);
+  }, [userId, username, add]);
 
   const removeSession = async () => {
     await removeUserSession();

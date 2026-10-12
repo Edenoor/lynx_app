@@ -364,9 +364,23 @@ export const DriverScreen = ({ navigation }: Props) => {
     })();
 
     // Al volver a primer plano se sube lo acumulado sin esperar al próximo fix.
+    // También se renueva el push, como mucho cada 12 h: el servidor deja de
+    // mandarle a un teléfono que no renovó el token en 7 días
+    // (PUSH_INACTIVE_DAYS), y con la app viva en segundo plano esta pantalla
+    // no se vuelve a montar.
+    let lastPushRegisterAt = Date.now();
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         void flushDriverPositions();
+        if (Date.now() - lastPushRegisterAt > 12 * 60 * 60 * 1000) {
+          lastPushRegisterAt = Date.now();
+          setupPushAndRegisterDevice({
+            userId,
+            username,
+            rol: "driver",
+            vehicleType: defaultVehicleType,
+          }).catch(() => {});
+        }
       }
     });
 

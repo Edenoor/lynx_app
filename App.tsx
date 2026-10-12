@@ -5,15 +5,18 @@ import { MainStackNavigator } from "./src/Presentation/navigator/MainStackNaviga
 
 import { UserProvider } from "./src/Presentation/context/UserContext";
 import { OnboardingProvider } from "./src/Presentation/onboarding/OnboardingContext";
+import { AppVersionGate } from "./src/Presentation/components/AppVersionGate";
 
 export default function App() {
   return (
-    <UserProvider>
-      <OnboardingProvider>
-        <NavigationContainer>
-          <MainStackNavigator />
-        </NavigationContainer>
-      </OnboardingProvider>
-    </UserProvider>
+    <AppVersionGate>
+      <UserProvider>
+        <OnboardingProvider>
+          <NavigationContainer>
+            <MainStackNavigator />
+          </NavigationContainer>
+        </OnboardingProvider>
+      </UserProvider>
+    </AppVersionGate>
   );
 }

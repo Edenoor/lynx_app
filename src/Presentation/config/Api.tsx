@@ -1,5 +1,5 @@
 // src/Presentation/config/Api.tsx
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { readSession } from "../../Data/sources/local/SessionStorage";
 
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.wynflex.com.ar"
@@ -30,7 +30,7 @@ export const handleUnauthorizedResponse = async () => {
 
 const getStoredToken = async (): Promise<string | null> => {
   try {
-    const rawUser = await AsyncStorage.getItem("user");
+    const rawUser = await readSession();
     if (!rawUser) return null;
 
     const parsed = JSON.parse(rawUser);
@@ -57,7 +57,7 @@ const requestJson = async (
     headers.Authorization = `Bearer ${token}`;
   }
 
-  console.log("API REQUEST:", `${method} ${url}`);
+  if (__DEV__) console.log("API REQUEST:", `${method} ${url}`);
 
   const res = await fetch(url, {
     method,
@@ -133,7 +133,10 @@ export const postJsonWithTimeout = async (path: string, body: any, timeoutMs: nu
   });
 
   if (json.status === 401) {
-    await handleUnauthorizedResponse();
+    // Sin await: el manejador cierra la sesión llamando a stopDriverTracking,
+    // que espera a la subida del GPS en curso, y esa subida es justamente la
+    // que está acá. Esperarlo trababa las dos (N-APP-3).
+    void handleUnauthorizedResponse();
     return {
       ...json,
       ok: false,
