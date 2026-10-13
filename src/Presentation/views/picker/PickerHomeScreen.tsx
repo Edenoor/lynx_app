@@ -10,7 +10,7 @@ import AppTheme from "../../theme/AppTheme";
 import { UserContext } from "../../context/UserContext";
 import { DriverActionCard } from "../../components/DriverActionCard";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
-import { fetchShelves, WarehouseApiError } from "./warehouseApi";
+import { fetchShelves, loadErrorMessage } from "./warehouseApi";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerHomeScreen">;
 
@@ -33,14 +33,7 @@ export default function PickerHomeScreen({ navigation }: Props) {
         if (alive) setWarehouse({ status: "ok", id: r.warehouse_id, shelves });
       })
       .catch((e) => {
-        if (!alive) return;
-        const reason =
-          e instanceof WarehouseApiError && e.status === 403
-            ? "Tu usuario no tiene warehouse_access para ver el depósito."
-            : e instanceof WarehouseApiError
-            ? e.message
-            : "Sin conexión con el servidor.";
-        setWarehouse({ status: "unavailable", reason });
+        if (alive) setWarehouse({ status: "unavailable", reason: loadErrorMessage(e) });
       });
     return () => {
       alive = false;
@@ -83,8 +76,20 @@ export default function PickerHomeScreen({ navigation }: Props) {
           subtitle="Escaneá el paquete y, si lo movés, la estantería"
           onPress={() => navigation.navigate("PickerScanScreen", { warehouseId })}
         />
+        <DriverActionCard
+          icon="file-tray-stacked-outline"
+          title="Estanterías"
+          subtitle="Qué paquetes hay en cada una"
+          onPress={() => navigation.navigate("PickerShelvesScreen")}
+        />
+        <DriverActionCard
+          icon="swap-horizontal-outline"
+          title="Descolocados"
+          subtitle="Paquetes en una estantería que no les toca"
+          onPress={() => navigation.navigate("PickerMisplacedScreen")}
+        />
 
-        <Text style={styles.note}>Descolocados, estanterías y recorridos se gestionan desde la Web por ahora.</Text>
+        <Text style={styles.note}>La configuración de estanterías y los recorridos se gestionan desde la Web.</Text>
       </View>
 
       <Pressable style={styles.logout} onPress={removeUserSession}>

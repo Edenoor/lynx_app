@@ -5,8 +5,7 @@
 // su CP; estantería → se mueve ahí el último paquete leído.
 
 import React, { useCallback, useState } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, Vibration, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView, StyleSheet, Text, Vibration, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -14,6 +13,7 @@ import AppTheme from "../../theme/AppTheme";
 import { QrScanner } from "../../components/QrScanner";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { PendingPackage, processScan, ScanOutcome } from "./pickerScan";
+import { PickerHeader, warehouseLabel } from "./pickerUi";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerScanScreen">;
 
@@ -26,8 +26,8 @@ export default function PickerScanScreen({ navigation, route }: Props) {
   const [processing, setProcessing] = useState(false);
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [pending, setPending] = useState<PendingPackage | null>(null);
-  const { warehouseId } = route.params;
-  const warehouseLabel = warehouseId ? `Warehouse #${warehouseId}` : "Warehouse asignado a tu usuario";
+  const { warehouseId, target } = route.params;
+  const warehouse = warehouseLabel(warehouseId);
 
   // processScan no tira errores (los devuelve como resultado); el finally
   // garantiza igual que la pantalla no quede en "Procesando…".
@@ -50,15 +50,12 @@ export default function PickerScanScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-          <Ionicons name="arrow-back" size={26} color={AppTheme.text.primary} />
-        </Pressable>
-        <View>
-          <Text style={styles.headerTitle}>Recepción en planta</Text>
-          <Text style={styles.headerSub}>{warehouseLabel}</Text>
-        </View>
-      </View>
+      <PickerHeader title="Recepción en planta" subtitle={warehouse} onBack={() => navigation.goBack()} />
+      {target ? (
+        <Text style={styles.target}>
+          Reubicando {target.tracking ?? "el paquete"}: escaneá el paquete y después la estantería {target.expectedShelf}.
+        </Text>
+      ) : null}
 
       <View style={styles.camera}>
         <QrScanner active={focused} onScan={onScan} />
@@ -68,7 +65,7 @@ export default function PickerScanScreen({ navigation, route }: Props) {
         {processing ? (
           <Text style={styles.hint}>Procesando…</Text>
         ) : outcome ? (
-          <OutcomeCard outcome={outcome} warehouseLabel={warehouseLabel} />
+          <OutcomeCard outcome={outcome} warehouseLabel={warehouse} />
         ) : (
           <Text style={styles.hint}>Escaneá la etiqueta del paquete (Mercado Libre o Lynx).</Text>
         )}
@@ -139,9 +136,7 @@ function OutcomeCard({ outcome, warehouseLabel }: { outcome: ScanOutcome; wareho
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: AppTheme.spacing.md, paddingVertical: 12 },
-  headerTitle: { color: AppTheme.text.primary, fontSize: 18, fontWeight: "700" },
-  headerSub: { color: AppTheme.text.accent, fontSize: 13, fontWeight: "600" },
+  target: { color: AppTheme.colors.warning, fontSize: 13, fontWeight: "600", paddingHorizontal: AppTheme.spacing.md, paddingBottom: 10 },
   camera: { flex: 1 },
   panel: { minHeight: 190, padding: AppTheme.spacing.md, gap: 8, backgroundColor: AppTheme.surfaces.screen },
   hint: { color: AppTheme.text.secondary, fontSize: 15, textAlign: "center", marginTop: 16 },
