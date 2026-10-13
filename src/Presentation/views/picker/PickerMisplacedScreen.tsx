@@ -5,11 +5,12 @@
 // la lista se actualiza.
 
 import React from "react";
-import { FlatList, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../theme/AppTheme";
+import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { fetchMisplaced, MisplacedPackage } from "./warehouseApi";
 import { ListMessage, listStyles, PickerHeader, shortDate, StaleBanner, useFocusQuery, warehouseLabel } from "./pickerUi";
@@ -22,7 +23,7 @@ export default function PickerMisplacedScreen({ navigation }: Props) {
   const count = data?.deliveries.length ?? 0;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeScreen>
       <PickerHeader
         title="Descolocados"
         subtitle={warehouseLabel(warehouseId)}
@@ -53,7 +54,7 @@ export default function PickerMisplacedScreen({ navigation }: Props) {
           />
         )}
       />
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 
@@ -79,7 +80,6 @@ function MisplacedRow({ item, onPress }: { item: MisplacedPackage; onPress: () =
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen },
   help: { color: AppTheme.text.secondary, fontSize: 13, paddingHorizontal: AppTheme.spacing.md, paddingBottom: 10 },
   row: { flexDirection: "row", alignItems: "center" },
   info: { flex: 1, gap: 4 },

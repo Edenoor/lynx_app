@@ -3,16 +3,17 @@
 // avisa en vez de mandarlo a las pantallas de vendedor.
 
 import React, { useContext } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import AppTheme from "../../theme/AppTheme";
+import { SafeScreen } from "../../components/SafeScreen";
 import { UserContext } from "../../context/UserContext";
 
 export function AdminWebScreen() {
   const { user, removeUserSession } = useContext(UserContext);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeScreen style={styles.screen}>
       <View style={styles.content}>
         <Text style={AppTheme.typography.kicker}>LYNX · ADMINISTRACIÓN</Text>
         <Text style={styles.title}>Tu operación está en la Web</Text>
@@ -25,12 +26,12 @@ export function AdminWebScreen() {
       <Pressable style={styles.logout} onPress={removeUserSession}>
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </Pressable>
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen, justifyContent: "space-between" },
+  screen: { justifyContent: "space-between" },
   content: { padding: AppTheme.spacing.md, paddingTop: 48, gap: 12 },
   title: { color: AppTheme.text.primary, fontSize: 24, fontWeight: "800" },
   body: { color: AppTheme.text.secondary, fontSize: 15, lineHeight: 22 },

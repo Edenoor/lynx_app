@@ -5,8 +5,8 @@
 // otra, y el mismo código no se vuelve a procesar mientras siga a la vista:
 // recién cuando deja de leerse REPEAT_WINDOW_MS se puede escanear de nuevo.
 
-import React, { useEffect, useRef } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { LayoutChangeEvent, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from "expo-camera";
 
 import AppTheme from "../theme/AppTheme";
@@ -29,9 +29,19 @@ export function QrScanner({ active, onScan }: Props) {
     if (permission && !permission.granted && permission.canAskAgain) requestPermission();
   }, [permission, requestPermission]);
 
+  // El recuadro guía se ajusta al lado más corto del espacio de la cámara:
+  // en teléfonos chicos o con la tarjeta de resultado abierta no se sale.
+  const [frameSize, setFrameSize] = useState(0);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setFrameSize(Math.round(Math.min(width * 0.62, height * 0.8)));
+  };
+
+  // Lo leído se entrega tal cual (sin recortar ni normalizar): interpretar la
+  // etiqueta es cosa del servidor.
   const handle = async ({ data }: BarcodeScanningResult) => {
-    const raw = String(data ?? "").trim();
-    if (!raw || busy.current) return;
+    const raw = String(data ?? "");
+    if (!raw.trim() || busy.current) return;
     if (last.current?.raw === raw && Date.now() - last.current.at < REPEAT_WINDOW_MS) {
       last.current.at = Date.now();
       return;
@@ -63,7 +73,7 @@ export function QrScanner({ active, onScan }: Props) {
   }
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} onLayout={onLayout}>
       {active ? (
         <CameraView
           style={StyleSheet.absoluteFill}
@@ -72,7 +82,7 @@ export function QrScanner({ active, onScan }: Props) {
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         />
       ) : null}
-      <View pointerEvents="none" style={styles.frame} />
+      {frameSize > 0 ? <View pointerEvents="none" style={[styles.frame, { width: frameSize, height: frameSize }]} /> : null}
     </View>
   );
 }
@@ -80,8 +90,6 @@ export function QrScanner({ active, onScan }: Props) {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: AppTheme.colors.black, alignItems: "center", justifyContent: "center" },
   frame: {
-    width: "62%",
-    aspectRatio: 1,
     borderWidth: 3,
     borderRadius: AppTheme.radius.lg,
     borderColor: AppTheme.colors.white,

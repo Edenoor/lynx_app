@@ -2,10 +2,11 @@
 // Paquetes que están hoy en una estantería, del último estanteado al primero.
 
 import React, { useCallback } from "react";
-import { FlatList, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../theme/AppTheme";
+import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { fetchShelfContents, ShelfPackage } from "./warehouseApi";
 import { ListMessage, listStyles, PickerHeader, shortDate, StaleBanner, useFocusQuery, warehouseLabel } from "./pickerUi";
@@ -19,7 +20,7 @@ export default function PickerShelfDetailScreen({ navigation, route }: Props) {
   const count = data?.deliveries.length ?? null;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeScreen>
       <PickerHeader
         title={`Estantería ${data?.shelf.code ?? code}`}
         subtitle={warehouseLabel(warehouseId)}
@@ -40,7 +41,7 @@ export default function PickerShelfDetailScreen({ navigation, route }: Props) {
         ListEmptyComponent={<ListMessage loading={loading} error={data ? null : error} empty="No hay paquetes en esta estantería." />}
         renderItem={({ item }) => <PackageRow item={item} />}
       />
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 
@@ -67,7 +68,6 @@ function PackageRow({ item }: { item: ShelfPackage }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen },
   count: { color: AppTheme.text.secondary, fontSize: 13, paddingHorizontal: AppTheme.spacing.md, paddingBottom: 8 },
   flex: { color: AppTheme.text.accent, fontSize: 12, fontWeight: "800" },
 });

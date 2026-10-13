@@ -3,11 +3,12 @@
 // Tocar una abre su contenido.
 
 import React from "react";
-import { FlatList, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../theme/AppTheme";
+import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { fetchShelves, Shelf } from "./warehouseApi";
 import { ListMessage, listStyles, PickerHeader, StaleBanner, useFocusQuery, warehouseLabel } from "./pickerUi";
@@ -19,7 +20,7 @@ export default function PickerShelvesScreen({ navigation }: Props) {
   const warehouseId = data?.warehouse_id ?? null;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeScreen>
       <PickerHeader
         title="Estanterías"
         subtitle={warehouseLabel(warehouseId)}
@@ -43,7 +44,7 @@ export default function PickerShelvesScreen({ navigation }: Props) {
           />
         )}
       />
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 
@@ -68,7 +69,6 @@ function ShelfRow({ shelf, onPress }: { shelf: Shelf; onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen },
   row: { flexDirection: "row", alignItems: "center" },
   info: { flex: 1, gap: 4 },
   inactive: { opacity: 0.6 },

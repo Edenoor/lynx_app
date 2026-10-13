@@ -3,10 +3,11 @@
 // recepción en planta. Descolocados y estanterías siguen en la Web.
 
 import React, { useContext, useEffect, useState } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../theme/AppTheme";
+import { SafeScreen } from "../../components/SafeScreen";
 import { UserContext } from "../../context/UserContext";
 import { DriverActionCard } from "../../components/DriverActionCard";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
@@ -43,7 +44,7 @@ export default function PickerHomeScreen({ navigation }: Props) {
   const warehouseId = warehouse.status === "ok" ? warehouse.id : null;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeScreen style={styles.screen}>
       <View style={styles.content}>
         <Text style={AppTheme.typography.kicker}>LYNX · DEPÓSITO</Text>
         <Text style={styles.title}>Hola{user?.first_name ? `, ${user.first_name}` : ""}</Text>
@@ -95,12 +96,12 @@ export default function PickerHomeScreen({ navigation }: Props) {
       <Pressable style={styles.logout} onPress={removeUserSession}>
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </Pressable>
-    </SafeAreaView>
+    </SafeScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen, justifyContent: "space-between" },
+  screen: { justifyContent: "space-between" },
   content: { padding: AppTheme.spacing.md, paddingTop: 32, gap: 12 },
   title: { color: AppTheme.text.primary, fontSize: 26, fontWeight: "800" },
   warehouse: {
