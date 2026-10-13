@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
 
 import AppTheme from "../../../theme/AppTheme";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
@@ -41,13 +42,23 @@ export default function TurboOffersScreen({ navigation }: Props) {
 
   useEffect(() => {
     mounted.current = true;
-    load();
-    const poll = setInterval(() => load(true), REFRESH_MS);
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    const sub = AppState.addEventListener("change", (s) => { if (s === "active") load(true); });
-    return () => { mounted.current = false; clearInterval(poll); clearInterval(tick); sub.remove(); };
-  }, [load]);
-  useEffect(() => navigation.addListener("focus", () => load(true)), [navigation, load]);
+    return () => { mounted.current = false; };
+  }, []);
+
+  // Consulta y cuenta regresiva solo mientras la pantalla está a la vista: al
+  // aceptar se pasa al recorrido y esta queda montada debajo.
+  const loadedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      load(loadedOnce.current);
+      loadedOnce.current = true;
+      setNow(Date.now());
+      const poll = setInterval(() => load(true), REFRESH_MS);
+      const tick = setInterval(() => setNow(Date.now()), 1000);
+      const sub = AppState.addEventListener("change", (s) => { if (s === "active") load(true); });
+      return () => { clearInterval(poll); clearInterval(tick); sub.remove(); };
+    }, [load]),
+  );
 
   const drop = (routeId: number) => setOffers((prev) => prev.filter((o) => o.route_id !== routeId));
 

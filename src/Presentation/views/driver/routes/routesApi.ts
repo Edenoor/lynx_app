@@ -51,8 +51,17 @@ const unwrap = <T,>(res: any): T => {
   return res as T;
 };
 
-export const todayIso = () => new Date().toISOString().slice(0, 10);
-export const tomorrowIso = () => new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+// Fecha local del teléfono (YYYY-MM-DD). toISOString() da la de UTC, que en
+// Argentina ya es el día siguiente desde las 21:00.
+const localIso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export const todayIso = () => localIso(new Date());
+export const tomorrowIso = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return localIso(d);
+};
 
 export const fetchMyRoutes = async (date: string) =>
   unwrap<{ routes: RouteSummary[] }>(await getJson(`/v2/routes/mine?date=${date}`)).routes;

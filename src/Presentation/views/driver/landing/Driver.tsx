@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   AppState,
   Linking,
   Modal,
@@ -335,10 +336,24 @@ export const DriverScreen = ({ navigation }: Props) => {
             add({ title, body, kind, data });
           },
 
-          // Turbo ofrecido: se va derecho a la pantalla de ofertas, que tiene
-          // la cuenta regresiva y los botones. Si ya está ahí, ella se refresca sola.
-          onTurboOffer: () => {
-            navigation.navigate("TurboOffersScreen" as never);
+          // Turbo ofrecido. Si el chofer tocó la notificación, se abre la
+          // pantalla de ofertas (cuenta regresiva y botones); si llegó con la
+          // app abierta, solo se avisa: no se le cambia la pantalla a mitad de
+          // un escaneo o una entrega.
+          onTurboOffer: ({ source, raw }) => {
+            const openOffers = () => navigation.navigate("TurboOffersScreen" as never);
+            if (source === "response") {
+              openOffers();
+              return;
+            }
+            Alert.alert(
+              "Turbo disponible",
+              `${raw?.storeName ? `${raw.storeName}. ` : ""}Contestá antes de que venza: el primero que acepta se lo queda.`,
+              [
+                { text: "Ahora no", style: "cancel" },
+                { text: "Ver ofertas", onPress: openOffers },
+              ],
+            );
           },
         });
 

@@ -213,6 +213,11 @@ export function attachNotificationListeners({
     if (normalized === "ROUTE_CONFIRMATION") return "ROUTE_CONFIRMATION";
     if (normalized === "TURBO_OFFER") return "TURBO_OFFER";
 
+    // El servidor hoy manda el tipo fuera de `data` y Expo no lo entrega: estos
+    // dos se reconocen por los datos que traen hasta que viaje en `data.type`.
+    if (data?.offerId != null && data?.routeId != null) return "TURBO_OFFER";
+    if (data?.template_name != null && data?.routeId != null) return "ROUTE_CONFIRMATION";
+
     if (data?.deliveryId && titleNormalized.includes("NUEVO ENVÍO ASIGNADO")) {
       return "ASIGNACION";
     }
