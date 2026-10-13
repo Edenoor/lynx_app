@@ -11,7 +11,9 @@ export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null) => {
   unauthorizedHandler = handler;
 };
 
-const handleUnauthorized = async () => {
+// Único punto de entrada de los 401: lo usan axios (abajo) y los helpers de
+// fetch de config/Api.tsx, así el cierre de sesión se registra una sola vez.
+export const handleUnauthorized = async () => {
   if (isHandlingUnauthorized) return;
 
   isHandlingUnauthorized = true;

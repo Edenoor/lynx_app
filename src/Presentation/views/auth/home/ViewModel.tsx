@@ -148,6 +148,9 @@ const HomeViewModel = () => {
         rol,
       };
     } catch (error: any) {
+      // El token se aplicó a axios antes de guardar la sesión: si el login no
+      // terminó (por ejemplo, no se pudo guardar), no queda activo en memoria.
+      setAuthToken(null);
       const msg =
         error?.response?.data?.message ||
         error?.response?.data?.error ||

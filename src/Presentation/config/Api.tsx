@@ -1,32 +1,10 @@
 // src/Presentation/config/Api.tsx
 import { readSession } from "../../Data/sources/local/SessionStorage";
+import { handleUnauthorized } from "../../Data/sources/remote/api/ApiDelivery";
 
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.wynflex.com.ar"
 ).replace(/\/+$/, "");
-
-type UnauthorizedHandler = () => void | Promise<void>;
-
-let unauthorizedHandler: UnauthorizedHandler | null = null;
-let isHandlingUnauthorized = false;
-
-export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null) => {
-  unauthorizedHandler = handler;
-};
-
-export const handleUnauthorizedResponse = async () => {
-  if (isHandlingUnauthorized) return;
-
-  isHandlingUnauthorized = true;
-
-  try {
-    await unauthorizedHandler?.();
-  } finally {
-    setTimeout(() => {
-      isHandlingUnauthorized = false;
-    }, 1000);
-  }
-};
 
 const getStoredToken = async (): Promise<string | null> => {
   try {
@@ -77,7 +55,7 @@ const requestJson = async (
   if (typeof json?.status !== "number") json.status = res.status;
 
   if (res.status === 401) {
-    await handleUnauthorizedResponse();
+    await handleUnauthorized();
 
     return {
       ...json,
@@ -136,7 +114,7 @@ export const postJsonWithTimeout = async (path: string, body: any, timeoutMs: nu
     // Sin await: el manejador cierra la sesión llamando a stopDriverTracking,
     // que espera a la subida del GPS en curso, y esa subida es justamente la
     // que está acá. Esperarlo trababa las dos (N-APP-3).
-    void handleUnauthorizedResponse();
+    void handleUnauthorized();
     return {
       ...json,
       ok: false,

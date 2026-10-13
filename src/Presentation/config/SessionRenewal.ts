@@ -1,9 +1,10 @@
 // src/Presentation/config/SessionRenewal.ts
 //
-// Renovación de la sesión (C7). El JWT vence a las JWT_EXPIRES_IN horas (8 h
-// en prod) y antes, al vencer, el GPS se cortaba y la app deslogueaba al
-// chofer a mitad del turno. Ahora, cuando al token le quedan menos de
-// RENEW_BEFORE_MS, se pide uno nuevo a POST /v2/auth/renew.
+// Renovación de la sesión (C7). El JWT vence a las JWT_EXPIRES_IN del servidor
+// y antes, al vencer, el GPS se cortaba y la app deslogueaba al chofer a mitad
+// del turno. Ahora, cuando el token entra en la segunda mitad de su vida (y
+// como mucho RENEW_BEFORE_MS antes de vencer), se pide uno nuevo a
+// POST /v2/auth/renew.
 //
 // La llaman la tarea de GPS antes de cada subida (corre también en segundo
 // plano, sin React) y UserContext al abrir la app, al volver a primer plano y
@@ -11,7 +12,7 @@
 // fue revocada (baja, cambio de clave o de rol): postJsonWithTimeout ya avisa
 // al manejador de 401, que cierra la sesión.
 
-import { readSession, saveSession } from "../../Data/sources/local/SessionStorage";
+import { currentSessionEpoch, readSession, saveSession } from "../../Data/sources/local/SessionStorage";
 import { setAuthToken } from "../../Data/sources/remote/api/ApiDelivery";
 import { postJsonWithTimeout } from "./Api";
 
@@ -33,16 +34,27 @@ export const onSessionRenewed = (listener: RenewedListener) => {
   };
 };
 
-// Solo hace falta `exp`; la firma la valida el servidor.
-const tokenExpiresAt = (token: string): number | null => {
+// Solo hacen falta `iat` y `exp`; la firma la valida el servidor.
+const tokenLifetime = (token: string): { issuedAt: number; expiresAt: number } | null => {
   try {
     const part = token.split(".")[1];
     const base64 = part.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (part.length % 4)) % 4);
     const payload = JSON.parse(atob(base64));
-    return typeof payload?.exp === "number" ? payload.exp * 1000 : null;
+    if (typeof payload?.iat !== "number" || typeof payload?.exp !== "number") return null;
+    return { issuedAt: payload.iat * 1000, expiresAt: payload.exp * 1000 };
   } catch {
     return null;
   }
+};
+
+// Con un umbral fijo de 2 h, un token que dura 2 h o menos estaría siempre
+// "por vencer" y se renovaría en cada subida del GPS. La mitad de su vida
+// garantiza que el token recién renovado no vuelva a calificar enseguida.
+const shouldRenew = (lifetime: { issuedAt: number; expiresAt: number }, now: number) => {
+  const remaining = lifetime.expiresAt - now;
+  const threshold = Math.min(RENEW_BEFORE_MS, (lifetime.expiresAt - lifetime.issuedAt) / 2);
+  // Vencido ya no se puede renovar: el próximo pedido da 401 y pide login.
+  return remaining > 0 && remaining <= threshold;
 };
 
 const readToken = async (): Promise<{ session: any; token: string } | null> => {
@@ -72,11 +84,13 @@ export const renewSessionIfNeeded = (): Promise<void> => {
 const renew = async () => {
   if (Date.now() - lastFailAt < RETRY_AFTER_FAIL_MS) return;
 
+  // Si mientras viaja el pedido se cierra la sesión o entra otro usuario, la
+  // época cambia y el token renovado se descarta (ver SessionStorage).
+  const epoch = currentSessionEpoch();
   const stored = await readToken();
   if (!stored) return;
-  const expiresAt = tokenExpiresAt(stored.token);
-  // Vencido ya no se puede renovar: el próximo pedido da 401 y pide login.
-  if (expiresAt === null || expiresAt <= Date.now() || expiresAt - Date.now() > RENEW_BEFORE_MS) return;
+  const lifetime = tokenLifetime(stored.token);
+  if (!lifetime || !shouldRenew(lifetime, Date.now())) return;
 
   let res: any;
   try {
@@ -92,11 +106,17 @@ const renew = async () => {
     return;
   }
 
-  // Si mientras viajaba se cerró la sesión o entró otro usuario, no se pisa.
-  const current = await readToken();
-  if (!current || current.token !== stored.token) return;
+  // Si no se pudo guardar, el token actual sigue valiendo hasta que vence:
+  // no se usa uno nuevo que la tarea de GPS no puede leer.
+  let saved: boolean;
+  try {
+    saved = await saveSession(JSON.stringify({ ...stored.session, token: res.token }), epoch);
+  } catch {
+    lastFailAt = Date.now();
+    return;
+  }
+  if (!saved) return;
 
-  await saveSession(JSON.stringify({ ...current.session, token: res.token }));
   setAuthToken(res.token);
   listeners.forEach((listener) => listener(res.token));
   if (__DEV__) console.log("[Lynx Auth] Sesión renovada");

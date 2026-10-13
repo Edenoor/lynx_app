@@ -26,7 +26,12 @@ const RegisterViewModel = () => {
             const response = await RegisterAuthUseCase(values);
             setLoading(false)
             if(response.success){
-                await SaveUserLocalUseCase(response.data)
+                try {
+                    await SaveUserLocalUseCase(response.data)
+                } catch (error: any) {
+                    setErrorMessage(error?.message)
+                    return
+                }
                 getUserSession()
             }
             else{
