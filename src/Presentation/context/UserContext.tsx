@@ -4,6 +4,7 @@ import { User } from "../../Domain/entities/User";
 import { GetUserLocalUseCase } from "../../Domain/useCases/userLocal/GetUserLocal";
 import { SaveUserLocalUseCase } from "../../Domain/useCases/userLocal/SaveUserLocal";
 import { RemoveUserLocalUseCase } from "../../Domain/useCases/userLocal/RemoveUserLocal";
+import { GetAdminCapabilitiesUseCase } from "../../Domain/useCases/auth/GetAdminCapabilities";
 import {
   setAuthToken,
   setUnauthorizedHandler,
@@ -107,6 +108,22 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     };
   }, []);
 
+  // Al recuperar la sesión de un ADMIN se vuelve a pedir su perfil: lo pueden
+  // haber cambiado desde la Web. Sin red queda el último guardado. Un 401 ya
+  // cerró la sesión (manejador de ApiDelivery): no se la vuelve a abrir.
+  const refreshAdminProfile = async (stored: User): Promise<User | null> => {
+    if (stored.rol?.toUpperCase() !== "ADMIN") return stored;
+    try {
+      const profile = (await GetAdminCapabilitiesUseCase()).profile ?? null;
+      if (profile === (stored.profile ?? null)) return stored;
+      const updated = { ...stored, profile };
+      await SaveUserLocalUseCase(updated).catch(() => undefined);
+      return updated;
+    } catch (error: any) {
+      return error?.response?.status === 401 ? null : stored;
+    }
+  };
+
   useEffect(() => {
     const hydrateSession = async () => {
       try {
@@ -114,7 +131,7 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
 
         if (isValidSession(storedUser)) {
           setAuthToken(storedUser.token);
-          setUser(storedUser);
+          setUser(await refreshAdminProfile(storedUser));
         } else {
           setAuthToken(null);
           setUser(null);

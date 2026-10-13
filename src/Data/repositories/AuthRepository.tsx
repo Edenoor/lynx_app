@@ -1,8 +1,10 @@
 import { AxiosError } from "axios";
-import { AuthRepository } from "../../Domain/repositories/AuthRepository";
+import { AdminCapabilities, AuthRepository } from "../../Domain/repositories/AuthRepository";
 import { ResponseApiDelivery } from "../sources/remote/models/ResponseApiDelivery";
 import { ApiDelivery } from "../sources/remote/api/ApiDelivery";
 import { User } from "../../Domain/entities/User";
+
+const CAPABILITIES_TIMEOUT_MS = 8_000;
 
 export class AuthRepositoryImpl implements AuthRepository {
   async login(username: string, password: string): Promise<ResponseApiDelivery> {
@@ -64,5 +66,14 @@ export class AuthRepositoryImpl implements AuthRepository {
         }
       );
     }
+  }
+
+  // Solo para ADMIN. Tira error si no hay respuesta: quien llama decide qué
+  // hacer sin el perfil (el login no sigue; una sesión guardada usa el último).
+  async capabilities(): Promise<AdminCapabilities> {
+    const response = await ApiDelivery.get("/v2/auth/capabilities", {
+      timeout: CAPABILITIES_TIMEOUT_MS,
+    });
+    return response.data?.capabilities ?? {};
   }
 }

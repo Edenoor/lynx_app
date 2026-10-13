@@ -80,14 +80,21 @@ export const getJson = async (path: string) => {
 // aplica OkHttp (callTimeout) del lado nativo, así que corta aunque los timers
 // de JS estén dormidos, que es justo el caso en segundo plano. Devuelve el
 // mismo shape que `postJson` y rechaza (throw) ante timeout o falta de red.
-export const postJsonWithTimeout = async (path: string, body: any, timeoutMs: number) => {
+// Un rechazo no dice si el servidor llegó a ejecutar el pedido.
+export const postJsonWithTimeout = (path: string, body: any, timeoutMs: number) =>
+  sendJsonWithTimeout("POST", path, body, timeoutMs);
+
+export const putJsonWithTimeout = (path: string, body: any, timeoutMs: number) =>
+  sendJsonWithTimeout("PUT", path, body, timeoutMs);
+
+const sendJsonWithTimeout = async (method: "POST" | "PUT", path: string, body: any, timeoutMs: number) => {
   const finalPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${API_URL}${finalPath}`;
   const token = await getStoredToken();
 
   const json: any = await new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
+    xhr.open(method, url);
     xhr.timeout = timeoutMs;
     xhr.setRequestHeader("Content-Type", "application/json");
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);

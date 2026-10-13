@@ -25,6 +25,13 @@ export interface User {
   token: string;
 
   /**
+   * Perfil de un ADMIN (admin_data.profile), por ejemplo "PICKER". El token no
+   * lo trae: se consulta en GET /v2/auth/capabilities y decide a qué parte de
+   * la app entra el usuario.
+   */
+  profile?: string | null;
+
+  /**
    * Nombre usado para consultar envíos legacy de driver.
    * Hoy legacy filtra por cadete, aunque el body se llame username.
    */

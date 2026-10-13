@@ -9,6 +9,9 @@ import { RecuperarScreen } from "../views/auth/recuperar/Recuperar";
 import { RegisterScreen } from "../views/auth/register/Register";
 import { DriverStackNavigator } from "./DriverStackNavigator";
 import { SellerStackNavigator } from "./SellerStackNavigator";
+import { PickerStackNavigator } from "./PickerStackNavigator";
+import { AdminWebScreen } from "../views/admin/AdminWebScreen";
+import { resolveAppArea } from "./appArea";
 
 export type RootStackParamList = {
   HomeScreen: undefined;
@@ -16,6 +19,8 @@ export type RootStackParamList = {
   RecuperarScreen: undefined;
   DriverStackNavigator: undefined;
   SellerStackNavigator: undefined;
+  PickerStackNavigator: undefined;
+  AdminWebScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -42,11 +47,11 @@ export const MainStackNavigator = () => {
     return <AuthLoadingScreen />;
   }
 
-  const normalizedRol = user?.rol?.toUpperCase();
+  const area = resolveAppArea(user);
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!user ? (
+      {area === "auth" ? (
         <>
           <Stack.Screen name="HomeScreen" component={HomeScreen} />
 
@@ -62,11 +67,18 @@ export const MainStackNavigator = () => {
             options={{ headerShown: true, title: "Recuperar contraseña" }}
           />
         </>
-      ) : normalizedRol === "DRIVER" ? (
+      ) : area === "driver" ? (
         <Stack.Screen
           name="DriverStackNavigator"
           component={DriverStackNavigator}
         />
+      ) : area === "picker" ? (
+        <Stack.Screen
+          name="PickerStackNavigator"
+          component={PickerStackNavigator}
+        />
+      ) : area === "adminWeb" ? (
+        <Stack.Screen name="AdminWebScreen" component={AdminWebScreen} />
       ) : (
         <Stack.Screen
           name="SellerStackNavigator"

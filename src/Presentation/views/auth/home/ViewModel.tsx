@@ -1,6 +1,7 @@
 import { useContext, useState } from "react";
 import { UserContext } from "../../../context/UserContext";
 import { LoginAuthUseCase } from "../../../../Domain/useCases/auth/LoginAuth";
+import { GetAdminCapabilitiesUseCase } from "../../../../Domain/useCases/auth/GetAdminCapabilities";
 import { User } from "../../../../Domain/entities/User";
 import {
   ApiDelivery,
@@ -118,6 +119,17 @@ const HomeViewModel = () => {
 
       const rol = normalizeRole(rawUser?.rol ?? authUser?.rol);
 
+      // El perfil de un ADMIN (por ejemplo PICKER) no viene en el token y
+      // decide a qué parte de la app entra: sin confirmarlo no se inicia sesión.
+      let profile: string | null = null;
+      if (rol === "ADMIN") {
+        try {
+          profile = (await GetAdminCapabilitiesUseCase()).profile ?? null;
+        } catch {
+          throw new Error("No se pudo verificar tu perfil. Revisá la conexión y volvé a intentar.");
+        }
+      }
+
       const firstName = rawUser?.first_name ?? "";
       const lastName = rawUser?.last_name ?? "";
       const fallbackName =
@@ -137,6 +149,7 @@ const HomeViewModel = () => {
         email: rawUser?.email ?? "",
         phone: rawUser?.phone ?? "",
         rol,
+        profile,
         token,
         legacyDriverName: buildFullName(firstName, lastName),
       };
