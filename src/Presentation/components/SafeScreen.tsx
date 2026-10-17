@@ -6,13 +6,21 @@
 
 import React from "react";
 import { StyleProp, StyleSheet, ViewStyle } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Edge, SafeAreaView } from "react-native-safe-area-context";
 
 import AppTheme from "../theme/AppTheme";
 
-export function SafeScreen({ children, style }: React.PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
+const ALL_EDGES: Edge[] = ["top", "bottom", "left", "right"];
+
+// `edges` sin "bottom" en pantallas con barra inferior: la barra ya se corre
+// sobre la barra de gestos.
+export function SafeScreen({
+  children,
+  style,
+  edges = ALL_EDGES,
+}: React.PropsWithChildren<{ style?: StyleProp<ViewStyle>; edges?: Edge[] }>) {
   return (
-    <SafeAreaView edges={["top", "bottom", "left", "right"]} style={[styles.screen, style]}>
+    <SafeAreaView edges={edges} style={[styles.screen, style]}>
       {children}
     </SafeAreaView>
   );

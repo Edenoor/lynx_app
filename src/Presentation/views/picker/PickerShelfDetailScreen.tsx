@@ -8,7 +8,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
-import { fetchShelfContents, ShelfPackage } from "./warehouseApi";
+import { OPS_LABEL } from "../driver/routes/routesApi";
+import { activeShelfPackages, fetchShelfContents, ShelfPackage } from "./warehouseApi";
 import { ListMessage, listStyles, PickerHeader, shortDate, StaleBanner, useFocusQuery, warehouseLabel } from "./pickerUi";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerShelfDetailScreen">;
@@ -17,25 +18,20 @@ export default function PickerShelfDetailScreen({ navigation, route }: Props) {
   const { shelfId, code, warehouseId } = route.params;
   const fetcher = useCallback(() => fetchShelfContents(shelfId), [shelfId]);
   const { data, error, loading, refreshing, refresh } = useFocusQuery(fetcher);
-  const count = data?.deliveries.length ?? null;
+  const packages = activeShelfPackages(data?.deliveries ?? []);
 
   return (
     <SafeScreen>
-      <PickerHeader
-        title={`Estantería ${data?.shelf.code ?? code}`}
-        subtitle={warehouseLabel(warehouseId)}
-        onBack={() => navigation.goBack()}
-        onScan={() => navigation.navigate("PickerScanScreen", { warehouseId })}
-      />
+      <PickerHeader title={`Estantería ${data?.shelf.code ?? code}`} subtitle={warehouseLabel(warehouseId)} onBack={() => navigation.goBack()} />
       {data ? <StaleBanner error={error} /> : null}
-      {count !== null && count > 0 ? (
+      {data ? (
         <Text style={styles.count}>
-          {count} {count === 1 ? "paquete" : "paquetes"}
-          {data?.shelf.name ? ` · ${data.shelf.name}` : ""}
+          {packages.length ? `${packages.length} ${packages.length === 1 ? "paquete" : "paquetes"}` : "Vacía"}
+          {data.shelf.name ? ` · ${data.shelf.name}` : ""}
         </Text>
       ) : null}
       <FlatList
-        data={data?.deliveries ?? []}
+        data={packages}
         keyExtractor={(d) => String(d.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={AppTheme.text.accent} />}
         ListEmptyComponent={<ListMessage loading={loading} error={data ? null : error} empty="No hay paquetes en esta estantería." />}
@@ -48,6 +44,7 @@ export default function PickerShelfDetailScreen({ navigation, route }: Props) {
 function PackageRow({ item }: { item: ShelfPackage }) {
   const cp = item.postal_code_norm ?? item.codigo_postal;
   const shelved = shortDate(item.shelved_at);
+  const ops = item.ops_status ? OPS_LABEL[item.ops_status] ?? item.ops_status : null;
   return (
     <View style={listStyles.row}>
       <Text style={listStyles.rowTitle}>
@@ -59,9 +56,7 @@ function PackageRow({ item }: { item: ShelfPackage }) {
         {[cp ? `CP ${cp}` : null, item.direccion].filter(Boolean).join(" · ")}
       </Text>
       <Text style={listStyles.rowMeta}>
-        {[shelved ? `Estanteado ${shelved}` : null, item.ops_status && item.ops_status !== "SHELVED" ? item.ops_status : null]
-          .filter(Boolean)
-          .join(" · ")}
+        {[shelved ? `Estanteado ${shelved}` : null, ops && item.ops_status !== "SHELVED" ? ops : null].filter(Boolean).join(" · ")}
       </Text>
     </View>
   );

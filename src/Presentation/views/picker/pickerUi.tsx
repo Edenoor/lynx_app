@@ -90,6 +90,56 @@ export function ListMessage({ loading, error, empty }: { loading: boolean; error
   );
 }
 
+// Pantallas de maqueta: lo que se ve es el flujo futuro; nada se guarda.
+export function MockNotice({ missing }: { missing: string }) {
+  return (
+    <View style={styles.mock}>
+      <Ionicons name="construct-outline" size={18} color={AppTheme.colors.warning} />
+      <Text style={styles.mockText}>
+        Maqueta: no guarda ni modifica nada. {missing}
+      </Text>
+    </View>
+  );
+}
+
+// Elección única (estado local de la pantalla, sin persistencia).
+export function OptionList<K extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: K; label: string }[];
+  value: K | null;
+  onChange: (key: K) => void;
+}) {
+  return (
+    <View style={styles.options}>
+      {options.map((o) => {
+        const selected = o.key === value;
+        return (
+          <Pressable key={o.key} style={[styles.option, selected && styles.optionSelected]} onPress={() => onChange(o.key)}>
+            <Ionicons
+              name={selected ? "radio-button-on" : "radio-button-off"}
+              size={20}
+              color={selected ? AppTheme.text.accent : AppTheme.text.muted}
+            />
+            <Text style={styles.optionText}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function DisabledAction({ label }: { label: string }) {
+  return (
+    <View style={styles.disabledAction}>
+      <Text style={styles.disabledActionText}>{label}</Text>
+      <Text style={styles.disabledActionNote}>No disponible todavía</Text>
+    </View>
+  );
+}
+
 // Aviso arriba de una lista que ya tiene datos y no se pudo actualizar.
 export function StaleBanner({ error }: { error: string | null }) {
   if (!error) return null;
@@ -122,4 +172,38 @@ const styles = StyleSheet.create({
   messageText: { color: AppTheme.text.secondary, fontSize: 15, textAlign: "center" },
   retry: { color: AppTheme.text.muted, fontSize: 13 },
   stale: { color: AppTheme.colors.warning, fontSize: 13, paddingHorizontal: AppTheme.spacing.md, paddingBottom: 8 },
+  mock: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    padding: AppTheme.spacing.md,
+    borderRadius: AppTheme.radius.lg,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.warning,
+    backgroundColor: AppTheme.surfaces.card,
+  },
+  mockText: { flex: 1, color: AppTheme.text.primary, fontSize: 13, lineHeight: 18 },
+  options: { gap: 8 },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: AppTheme.radius.md,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.default,
+    backgroundColor: AppTheme.surfaces.card,
+  },
+  optionSelected: { borderColor: AppTheme.text.accent },
+  optionText: { color: AppTheme.text.primary, fontSize: 15, fontWeight: "600" },
+  disabledAction: {
+    alignItems: "center",
+    padding: 14,
+    gap: 2,
+    borderRadius: AppTheme.radius.md,
+    backgroundColor: AppTheme.surfaces.muted,
+    opacity: 0.6,
+  },
+  disabledActionText: { color: AppTheme.text.secondary, fontWeight: "800", fontSize: 15 },
+  disabledActionNote: { color: AppTheme.text.muted, fontSize: 12 },
 });

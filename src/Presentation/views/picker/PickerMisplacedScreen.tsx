@@ -28,7 +28,6 @@ export default function PickerMisplacedScreen({ navigation }: Props) {
         title="Descolocados"
         subtitle={warehouseLabel(warehouseId)}
         onBack={() => navigation.goBack()}
-        onScan={() => navigation.navigate("PickerScanScreen", { warehouseId })}
       />
       {data ? <StaleBanner error={error} /> : null}
       {count > 0 ? (

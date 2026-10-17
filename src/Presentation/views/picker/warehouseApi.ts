@@ -14,6 +14,32 @@ const MOVE_TIMEOUT_MS = 15_000;
 const SHELF_QR_PREFIX = "LYNX:SHELF:";
 export const isShelfQr = (raw: string) => raw.trim().startsWith(SHELF_QR_PREFIX);
 
+// Token del QR de estantería, con la misma regla que el servidor
+// (shelfService.parseShelfQr): prefijo + UUID. Cualquier otra cosa, null.
+const SHELF_TOKEN = /^[0-9a-f-]{36}$/i;
+export const shelfQrToken = (raw: string) => {
+  const s = raw.trim();
+  if (!s.startsWith(SHELF_QR_PREFIX)) return null;
+  const token = s.slice(SHELF_QR_PREFIX.length);
+  return SHELF_TOKEN.test(token) ? token.toLowerCase() : null;
+};
+
+// Texto del QR impreso en la estantería (shelfService.shelfQrPayload del
+// servidor). null si no hay un token válido: nunca se arma otro formato.
+export const shelfQrPayload = (shelf: Pick<Shelf, "qr_token">) =>
+  typeof shelf.qr_token === "string" && SHELF_TOKEN.test(shelf.qr_token) ? `${SHELF_QR_PREFIX}${shelf.qr_token}` : null;
+
+// Busca la estantería escaneada SOLO entre las del Warehouse del Picker (las
+// que devuelve /shelves). Coincidencia exacta de token: nunca por código ni
+// por texto parecido.
+export type ShelfQrMatch = { kind: "shelf"; shelf: Shelf } | { kind: "not_shelf" } | { kind: "unknown" };
+export const matchShelfQr = (shelves: Shelf[], raw: string): ShelfQrMatch => {
+  const token = shelfQrToken(raw);
+  if (!token) return { kind: "not_shelf" };
+  const shelf = shelves.find((s) => typeof s.qr_token === "string" && s.qr_token.toLowerCase() === token);
+  return shelf ? { kind: "shelf", shelf } : { kind: "unknown" };
+};
+
 export type ReceiveAlert = { code: string; text: string };
 
 export type ReceiveResult = {
@@ -42,9 +68,37 @@ export type Shelf = {
   active: boolean;
   unclassified: boolean;
   postal_codes_count: number;
+  // Cuenta todo lo que tiene la estantería asignada, cerrados incluidos: no
+  // se muestra como cantidad de paquetes.
   deliveries_count: number;
+  // Paquetes presentes (sin entregados ni cancelados). Lo agrega el contrato
+  // acordado con backend: mientras no llegue, no se muestra ninguna cifra.
+  present_count?: number;
+  // Token del QR impreso en la estantería. Solo para reconocerla al escanear:
+  // no se muestra ni se registra.
+  qr_token: string | null;
 };
-export type ShelvesResult = { warehouse_id: number; shelves: Shelf[] };
+export type ShelvesResult = { warehouse_id: number; warehouse_name?: string | null; shelves: Shelf[] };
+
+export const presentCount = (s: Shelf) =>
+  typeof s.present_count === "number" && Number.isFinite(s.present_count) ? s.present_count : null;
+
+// Para buscar sin distinguir mayúsculas ni acentos ("Morón" = "moron").
+// Sin normalize (motor JS sin Intl completo) igual busca, solo que distingue
+// acentos.
+const fold = (s: string) =>
+  (typeof s.normalize === "function" ? s.normalize("NFD") : s).replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+// Filtra por nombre o código y deja primero las que tienen paquetes. Dentro
+// de cada grupo respeta el orden del servidor. Sin present_count no se
+// reordena: no hay cómo saber cuáles están vacías.
+export const visibleShelves = (shelves: Shelf[], query: string) => {
+  const q = fold(query);
+  const found = q ? shelves.filter((s) => fold(s.name ?? "").includes(q) || fold(s.code).includes(q)) : shelves;
+  const withPackages = found.filter((s) => (presentCount(s) ?? 0) > 0);
+  const rest = found.filter((s) => (presentCount(s) ?? 0) === 0);
+  return [...withPackages, ...rest];
+};
 
 export type ShelfPackage = {
   id: number;
@@ -62,6 +116,14 @@ export type ShelfContents = {
   shelf: { id: number; code: string; name: string | null; active: boolean; unclassified: boolean };
   deliveries: ShelfPackage[];
 };
+
+// Una estantería muestra solo lo que está físicamente en el depósito. El
+// cierre que informa Mercado Libre no les quita la estantería a los envíos
+// entregados o cancelados, así que /shelves/:id/deliveries los sigue
+// devolviendo: se descartan.
+const CLOSED_OPS = new Set(["DELIVERED", "CANCELLED"]);
+export const activeShelfPackages = (list: ShelfPackage[]) =>
+  list.filter((p) => !CLOSED_OPS.has(String(p.ops_status ?? "")));
 
 // Estanteado donde no le toca por su CP (la misma regla que el escáner).
 export type MisplacedPackage = {
