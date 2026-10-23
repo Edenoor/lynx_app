@@ -5,6 +5,7 @@ import { DriverScreen } from "../views/driver/landing/Driver";
 import { EnviosScreen } from "../views/driver/Envios/EnviosScreen";
 import NotificationsScreen from "../views/common/NotificationScreen";
 import DriverAccountScreen from "../views/driver/account/DriverAccountScreen";
+import DriverHomeScreen from "../views/driver/account/DriverHomeScreen";
 
 import { OnboardingStackNavigator } from "../navigator/OnboardingStackNavigator";
 import { useOnboarding } from "../onboarding/OnboardingContext";
@@ -23,6 +24,7 @@ export type DriverStackParamList = {
   EnviosScreen: undefined;
   NotificationsScreen: undefined;
   DriverAccountScreen: undefined;
+  DriverHomeScreen: undefined;
   DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
   RoutesScreen: undefined;
@@ -53,6 +55,7 @@ export const DriverStackNavigator = () => {
             name="DriverAccountScreen"
             component={DriverAccountScreen}
           />
+          <Stack.Screen name="DriverHomeScreen" component={DriverHomeScreen} />
           <Stack.Screen
             name="DriverScanOptionsScreen"
             component={DriverScanOptionsScreen}
