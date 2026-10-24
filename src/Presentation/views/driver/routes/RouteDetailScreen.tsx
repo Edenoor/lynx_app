@@ -15,6 +15,8 @@ import {
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
+import OutcomeForm from "./OutcomeForm";
+import { buildDeclaration, cobranzaOf, OutcomeDraft } from "./outcomeDeclaration";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -167,6 +169,21 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
   }, [open, isPickup, stop.status, stop.id, routeId, stop.collected_count]);
 
   const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value, notes || undefined));
+  // Entregado / No entregado abren el cierre con la declaración del Baúl.
+  const [closing, setClosing] = useState<{ deliveryId: number; outcome: "DELIVERED" | "NOT_DELIVERED" } | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const openClose = (deliveryId: number, value: "DELIVERED" | "NOT_DELIVERED") => { setCloseError(null); setClosing({ deliveryId, outcome: value }); };
+  const confirmClose = (draft: OutcomeDraft) => {
+    if (!closing) return;
+    const built = buildDeclaration(closing.outcome, draft);
+    if (!built.ok) { setCloseError(built.error); return; }
+    setCloseError(null);
+    act(async () => {
+      // El error del servidor (p. ej. un 400 de la declaración) se muestra en el cierre, no arriba de todo.
+      try { await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, notes || undefined, built.declaration); setClosing(null); }
+      catch (e: any) { setCloseError(e?.message ?? "No se pudo registrar el resultado"); }
+    });
+  };
   // Los Flex se cierran desde Envíos Flex: no cuentan como «sin resultado».
   const withoutOutcome = stop.deliveries.filter((d) => !d.outcome && d.tipo_envio !== "flex");
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
@@ -205,10 +222,14 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
                   ) : d.tipo_envio === "flex" ? (
                     <Text style={styles.stopMeta}>Entregado: se registra en Envíos Flex</Text>
                   ) : (
-                    <Pressable onPress={() => outcome(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregado</Text></Pressable>
+                    <Pressable onPress={() => openClose(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregado</Text></Pressable>
                   )}
-                  <Pressable onPress={() => outcome(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No entregado</Text></Pressable>
+                  <Pressable onPress={() => openClose(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No entregado</Text></Pressable>
                 </View>
+              ) : null}
+              {inProgress && !d.outcome && closing?.deliveryId === d.delivery_id ? (
+                <OutcomeForm key={closing.outcome} outcome={closing.outcome} cobranza={cobranzaOf(d.importe_cobranza)} busy={busy} error={closeError}
+                  onConfirm={confirmClose} onCancel={() => setClosing(null)} />
               ) : null}
             </View>
           ))}
