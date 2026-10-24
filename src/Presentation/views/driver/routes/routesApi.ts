@@ -21,8 +21,9 @@ export type RouteSummary = {
 export type StopDelivery = {
   delivery_id: number; tracking: string | number | null; nombre_destinatario: string | null; direccion: string | null;
   codigo_postal: string | null; tipo_envio: string | null; ops_status: string; outcome: string | null; outcome_at: string | null; notes: string | null;
-  // Cobranza del envío (delivery_financials). El servidor todavía no la manda
-  // en el detalle del recorrido: sin ella, la app no muestra «Cobrar $X».
+  // Cobranza del envío (delivery_financials), con la que la app muestra
+  // «Cobrar $X». La manda el servidor desde feat/integracion-20261024; uno
+  // anterior no la trae y el cierre funciona igual, sin el importe.
   importe_cobranza?: number | string | null;
 };
 export type Stop = {
