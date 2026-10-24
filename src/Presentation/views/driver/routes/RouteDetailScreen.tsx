@@ -4,7 +4,7 @@
 // completar el recorrido. Sin mapa en esta etapa.
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ImageBackground, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, ImageBackground, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -97,58 +97,62 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.page}>
-          <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
-              <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
-              <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos{route.started_at ? ` · salida ${time(route.started_at)}` : ""}</Text>
-              {route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
-            </View>
-          </View>
-
-          {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
-
-          {canConfirm ? (
-            <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Control de carga</Text>
-              <Text style={styles.panelText}>
-                {route.load_expected_count === null
-                  ? "El depósito todavía no cargó cuántos bultos preparó. Pedile que lo haga antes de salir."
-                  : `El depósito preparó ${route.load_expected_count} bultos. Contá los que recibiste y confirmá.`}
-              </Text>
-              <View style={styles.row}>
-                <TextInput value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="Cantidad" placeholderTextColor={AppTheme.text.muted} style={styles.input} editable={!busy && route.load_expected_count !== null} />
-                <Pressable onPress={onConfirmLoad} disabled={busy || route.load_expected_count === null} style={[styles.btn, (busy || route.load_expected_count === null) && styles.btnDisabled]}>
-                  <Text style={styles.btnText}>Confirmar</Text>
-                </Pressable>
+        {/* «handled»: con el teclado abierto, el primer toque en «Confirmar» confirma (no solo cierra el teclado).
+            En iOS el teclado tapa el campo si no se corre el contenido. */}
+        <KeyboardAvoidingView style={styles.safeArea} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+            <View style={styles.header}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
+                <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
+                <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos{route.started_at ? ` · salida ${time(route.started_at)}` : ""}</Text>
+                {route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
               </View>
-              {route.load_confirmed_count !== null && route.load_expected_count !== null && route.load_confirmed_count !== route.load_expected_count ? (
-                <Text style={styles.warn}>Última confirmación: {route.load_confirmed_count} de {route.load_expected_count}. Con diferencia el recorrido no sale.</Text>
-              ) : null}
             </View>
-          ) : null}
 
-          {canStart ? (
-            <Pressable onPress={onStart} disabled={busy} style={[styles.btn, styles.btnBig, busy && styles.btnDisabled]}>
-              <Ionicons name="play" size={18} color={AppTheme.text.inverse} />
-              <Text style={styles.btnText}>Salir a la calle</Text>
-            </Pressable>
-          ) : null}
+            {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
-          {route.stops.map((s) => (
-            <StopCard key={s.id} routeId={route.id} stop={s} routeType={route.type} inProgress={inProgress} busy={busy}
-              open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} />
-          ))}
+            {canConfirm ? (
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Control de carga</Text>
+                <Text style={styles.panelText}>
+                  {route.load_expected_count === null
+                    ? "El depósito todavía no cargó cuántos bultos preparó. Pedile que lo haga antes de salir."
+                    : `El depósito preparó ${route.load_expected_count} bultos. Contá los que recibiste y confirmá.`}
+                </Text>
+                <View style={styles.row}>
+                  <TextInput value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="Cantidad" placeholderTextColor={AppTheme.text.muted} style={styles.input} editable={!busy && route.load_expected_count !== null} />
+                  <Pressable onPress={onConfirmLoad} disabled={busy || route.load_expected_count === null} style={[styles.btn, (busy || route.load_expected_count === null) && styles.btnDisabled]}>
+                    <Text style={styles.btnText}>Confirmar</Text>
+                  </Pressable>
+                </View>
+                {route.load_confirmed_count !== null && route.load_expected_count !== null && route.load_confirmed_count !== route.load_expected_count ? (
+                  <Text style={styles.warn}>Última confirmación: {route.load_confirmed_count} de {route.load_expected_count}. Con diferencia el recorrido no sale.</Text>
+                ) : null}
+              </View>
+            ) : null}
 
-          {inProgress ? (
-            <Pressable onPress={onComplete} disabled={busy || !allClosed} style={[styles.btn, styles.btnBig, (busy || !allClosed) && styles.btnDisabled]}>
-              <Ionicons name="checkmark-done" size={18} color={AppTheme.text.inverse} />
-              <Text style={styles.btnText}>{allClosed ? "Completar recorrido" : "Cerrá todas las paradas para completar"}</Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
+            {canStart ? (
+              <Pressable onPress={onStart} disabled={busy} style={[styles.btn, styles.btnBig, busy && styles.btnDisabled]}>
+                <Ionicons name="play" size={18} color={AppTheme.text.inverse} />
+                <Text style={styles.btnText}>Salir a la calle</Text>
+              </Pressable>
+            ) : null}
+
+            {route.stops.map((s) => (
+              <StopCard key={s.id} routeId={route.id} stop={s} routeType={route.type} inProgress={inProgress} busy={busy}
+                open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} />
+            ))}
+
+            {inProgress ? (
+              <Pressable onPress={onComplete} disabled={busy || !allClosed} style={[styles.btn, styles.btnBig, (busy || !allClosed) && styles.btnDisabled]}>
+                <Ionicons name="checkmark-done" size={18} color={AppTheme.text.inverse} />
+                <Text style={styles.btnText}>{allClosed ? "Completar recorrido" : "Cerrá todas las paradas para completar"}</Text>
+              </Pressable>
+            ) : null}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </ImageBackground>
   );

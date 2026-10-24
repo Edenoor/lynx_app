@@ -26,8 +26,24 @@ eq("1.000.000", value("1.000.000"), 1000000);
 eq("0", value("0"), 0);
 eq("0,50", value("0,50"), 0.5);
 eq("negativo", value("-100"), "error");
-eq("punto decimal 1500.50", value("1500.50"), "error");
-eq("1.50 (grupo corto)", value("1.50"), "error");
+// Punto como separador decimal (teclados que solo ofrecen «.»): un punto
+// seguido de 1 o 2 dígitos son centavos; de 3, miles.
+eq("punto decimal 1500.50", value("1500.50"), 1500.5);
+eq("punto decimal 1500.5", value("1500.5"), 1500.5);
+eq("punto decimal 12.50", value("12.50"), 12.5);
+eq("punto decimal 0.5", value("0.5"), 0.5);
+eq("1.50 = 1,50", value("1.50"), 1.5);
+eq("1.500 siguen siendo miles", value("1.500"), 1500);
+eq("1.234,56 sigue igual", value("1.234,56"), 1234.56);
+eq("miles y punto decimal mezclados", value("1.234.56"), "error");
+eq("miles con punto decimal al final", value("1.500.5"), "error");
+eq("punto con 4 dígitos", value("1.5000"), "error");
+eq("grupo de 3 tras 4 dígitos", value("1500.505"), "error");
+eq("formato de EE.UU.", value("1,500.50"), "error");
+eq("punto y coma", value("1.5,00"), "error");
+eq("punto suelto al final", value("1500."), "error");
+eq("sin parte entera con punto", value(".5"), "error");
+eq("dos puntos decimales", value("1.5.5"), "error");
 eq("tres decimales", value("1,234"), "error");
 eq("letras", value("abc"), "error");
 eq("dos comas", value("1,2,3"), "error");
@@ -54,7 +70,15 @@ eq("no entregado sin nada", buildDeclaration("NOT_DELIVERED", emptyDraft()), { o
 eq("cobro completo", buildDeclaration("DELIVERED", draft({ paymentMethod: "CASH", amountText: "1.234,56" })),
   { ok: true, declaration: { payment_method: "CASH", collected_amount: 1234.56 } });
 eq("solo medio", buildDeclaration("DELIVERED", draft({ paymentMethod: "TRANSFER" })), { ok: true, declaration: { payment_method: "TRANSFER" } });
-eq("importe inválido frena", buildDeclaration("DELIVERED", draft({ amountText: "12.5" })).ok, false);
+eq("importe inválido frena", buildDeclaration("DELIVERED", draft({ paymentMethod: "CASH", amountText: "12.5000" })).ok, false);
+eq("punto decimal viaja como número", buildDeclaration("DELIVERED", draft({ paymentMethod: "TRANSFER", amountText: "1500.50" })),
+  { ok: true, declaration: { payment_method: "TRANSFER", collected_amount: 1500.5 } });
+// Sin medio de pago no se declara cobro: la cobranza precargada no viaja sola.
+eq("cobranza precargada sin medio no declara cobro", buildDeclaration("DELIVERED", draft({ amountText: "2.500" })), { ok: true, declaration: {} });
+eq("importe escrito sin medio no viaja", buildDeclaration("DELIVERED", draft({ amountText: "1.234,56" })), { ok: true, declaration: {} });
+eq("importe inválido sin medio no frena", buildDeclaration("DELIVERED", draft({ amountText: "basura" })), { ok: true, declaration: {} });
+eq("medio con cobranza precargada", buildDeclaration("DELIVERED", draft({ paymentMethod: "CASH", amountText: "2.500" })),
+  { ok: true, declaration: { payment_method: "CASH", collected_amount: 2500 } });
 eq("cambio sin qué trae frena", buildDeclaration("DELIVERED", draft({ returnKind: "CAMBIO", returnItem: "  " })),
   { ok: false, error: "Contá qué traés de vuelta" });
 eq("cambio con qué trae", buildDeclaration("DELIVERED", draft({ returnKind: "CAMBIO", returnItem: " zapatillas talle 40 " })),

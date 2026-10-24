@@ -38,16 +38,20 @@ export type OutcomeDeclaration = {
 export type AmountResult = { ok: true; value: number | null } | { ok: false; error: string };
 
 // Importe en formato argentino: el punto separa miles y la coma, decimales
-// («1.500», «1500», «1.234,56»). Un punto que no agrupa de a tres («1500.50»)
-// se rechaza en vez de adivinar. Vacío = no declaró importe.
+// («1.500», «1500», «1.234,56»). Como muchos teclados numéricos de Android
+// solo ofrecen «.», un único punto seguido de 1 o 2 dígitos también vale como
+// decimal («1500.50», «0.5»): no se confunde con miles, que siempre van de a
+// tres. Lo demás («1.5000», «1.234.56») se rechaza en vez de adivinar.
+// Vacío = no declaró importe.
 export function parseAmountAr(raw: string): AmountResult {
   const text = String(raw ?? "").replace(/\$/g, "").replace(/\s+/g, "");
   if (!text) return { ok: true, value: null };
   if (text.startsWith("-")) return { ok: false, error: "El importe no puede ser negativo" };
-  if (!/^(\d{1,3}(\.\d{3})+|\d+)(,\d{1,2})?$/.test(text)) {
-    return { ok: false, error: "Importe inválido: usá punto para los miles y coma para los centavos (ej. 1.500 o 1.234,56)" };
+  const dotDecimal = /^\d+\.\d{1,2}$/.test(text);
+  if (!dotDecimal && !/^(\d{1,3}(\.\d{3})+|\d+)(,\d{1,2})?$/.test(text)) {
+    return { ok: false, error: "Importe inválido: usá punto para los miles y coma o punto para los centavos (ej. 1.500 o 1.234,56)" };
   }
-  const value = Number(text.replace(/\./g, "").replace(",", "."));
+  const value = Number(dotDecimal ? text : text.replace(/\./g, "").replace(",", "."));
   if (!Number.isFinite(value)) return { ok: false, error: "Importe inválido" };
   if (value > MAX_AMOUNT) return { ok: false, error: "El importe es demasiado grande" };
   return { ok: true, value };
@@ -73,14 +77,18 @@ export function cobranzaOf(raw: unknown): number | null {
 export type DeclarationResult = { ok: true; declaration: OutcomeDeclaration } | { ok: false; error: string };
 
 // Arma la declaración para `outcome`. Lo que no corresponde al resultado
-// (por ejemplo, el cobro en un no entregado) se ignora.
+// (por ejemplo, el cobro en un no entregado) se ignora. El importe solo viaja
+// con un medio de pago elegido: la cobranza viene precargada por comodidad y,
+// sin medio, el Baúl registraría «cobró todo» aunque el cliente no pagó.
 export function buildDeclaration(outcome: string, draft: OutcomeDraft): DeclarationResult {
   const out: OutcomeDeclaration = {};
   if (outcome === "DELIVERED") {
-    if (draft.paymentMethod) out.payment_method = draft.paymentMethod;
-    const amount = parseAmountAr(draft.amountText);
-    if (!amount.ok) return amount;
-    if (amount.value !== null) out.collected_amount = amount.value;
+    if (draft.paymentMethod) {
+      out.payment_method = draft.paymentMethod;
+      const amount = parseAmountAr(draft.amountText);
+      if (!amount.ok) return amount;
+      if (amount.value !== null) out.collected_amount = amount.value;
+    }
     if (draft.returnKind) {
       const item = draft.returnItem.trim();
       if (!item) return { ok: false, error: "Contá qué traés de vuelta" };

@@ -5,7 +5,7 @@
 // colecta o fin de un reparto.
 
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -20,6 +20,20 @@ type Pending = { address: string; latitude: number; longitude: number; source: "
 const fromPlace = (p: Location.LocationGeocodedAddress | undefined) =>
   p ? [[p.street, p.streetNumber].filter(Boolean).join(" "), p.city || p.subregion || p.district].filter(Boolean).join(", ") : "";
 
+// Adentro de una casa el GPS puede no fijar nunca: se corta a los 15 s y se
+// usa la última ubicación conocida, si es reciente y razonablemente precisa.
+const GPS_TIMEOUT_MS = 15000;
+const LAST_KNOWN = { maxAge: 10 * 60 * 1000, requiredAccuracy: 150 };
+const NO_FIX = "No se pudo obtener la ubicación. Probá de nuevo o escribí la dirección.";
+const SERVICES_OFF = "La ubicación del teléfono está apagada. Activala o escribí la dirección.";
+
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+};
+const servicesOff = (e: any) => e?.code === "E_LOCATION_SERVICES_DISABLED" || /location services/i.test(String(e?.message ?? ""));
+
 export default function DriverHomeScreen() {
   const navigation = useNavigation<any>();
   const [home, setHome] = useState<DriverHome | null>(null);
@@ -28,6 +42,8 @@ export default function DriverHomeScreen() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState<"load" | "search" | "gps" | "save" | null>("load");
   const [error, setError] = useState("");
+  // Permiso negado para siempre: el sistema ya no lo pregunta, solo desde Ajustes.
+  const [needsSettings, setNeedsSettings] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -54,27 +70,43 @@ export default function DriverHomeScreen() {
   };
 
   const useMyLocation = async () => {
-    setBusy("gps"); setError(""); setCandidates(null); setPending(null);
+    setBusy("gps"); setError(""); setNeedsSettings(false); setCandidates(null); setPending(null);
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== "granted") throw new Error("Sin permiso de ubicación. Podés escribir la dirección.");
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      if (perm.status !== "granted") {
+        setNeedsSettings(!perm.canAskAgain);
+        throw new Error(perm.canAskAgain
+          ? "Sin permiso de ubicación. Podés escribir la dirección."
+          : "La app no tiene permiso de ubicación. Habilitalo en Ajustes o escribí la dirección.");
+      }
+      if (!(await Location.hasServicesEnabledAsync())) throw new Error(SERVICES_OFF);
+      let pos: Location.LocationObject | null = null;
+      try {
+        pos = await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }), GPS_TIMEOUT_MS);
+      } catch (e) {
+        if (servicesOff(e)) throw new Error(SERVICES_OFF);
+        /* sin señal: se prueba con la última conocida */
+      }
+      if (!pos) pos = await Location.getLastKnownPositionAsync(LAST_KNOWN).catch(() => null);
+      if (!pos) throw new Error(NO_FIX);
       const { latitude, longitude } = pos.coords;
       let address = "";
-      try { address = fromPlace((await Location.reverseGeocodeAsync({ latitude, longitude }))[0]); } catch { /* sin geocoder: queda el texto de abajo */ }
-      setPending({ address: address || "Mi ubicación actual", latitude, longitude, source: "gps" });
+      try { address = fromPlace((await Location.reverseGeocodeAsync({ latitude, longitude }))[0]); } catch { /* sin geocoder: la escribe el chofer */ }
+      setPending({ address, latitude, longitude, source: "gps" });
       setText(address);
     } catch (e: any) {
-      setError(e?.message || "No se pudo obtener la ubicación");
+      setError(servicesOff(e) ? SERVICES_OFF : e?.code ? NO_FIX : e?.message || NO_FIX);
     } finally { setBusy(null); }
   };
 
   const save = async () => {
     if (!pending) return;
+    // Con GPS se guarda lo que dice el campo (el chofer pudo corregirlo). Si el
+    // teléfono no devolvió dirección, la tiene que escribir: no se guarda un punto sin dirección.
+    if (pending.source === "gps" && text.trim().length < 3) { setError("Escribí la dirección de tu casa para guardarla."); return; }
     setBusy("save"); setError("");
     try {
-      // Con GPS, si el chofer corrigió el texto, se guarda lo que escribió.
-      const address = pending.source === "gps" && text.trim().length >= 3 ? text.trim() : pending.address;
+      const address = pending.source === "gps" ? text.trim() : pending.address;
       setHome(await saveMyHome({ address, latitude: pending.latitude, longitude: pending.longitude }));
       setPending(null); setCandidates(null); setText("");
       Alert.alert("Domicilio guardado", "Ya lo ve la operación.");
@@ -166,7 +198,9 @@ export default function DriverHomeScreen() {
             <View style={styles.confirm}>
               <Text style={styles.hint}>
                 {pending.source === "gps"
-                  ? "Se guarda el punto donde estás ahora. Si la dirección de arriba no es exacta, corregila antes de guardar."
+                  ? pending.address
+                    ? "Se guarda el punto donde estás ahora. Si la dirección de arriba no es exacta, corregila antes de guardar."
+                    : "Se guarda el punto donde estás ahora, pero el teléfono no encontró la dirección: escribila arriba y tocá «Guardar domicilio»."
                   : `Se guarda: ${pending.address}`}
               </Text>
               <Pressable style={styles.button} onPress={save} disabled={!!busy}>
@@ -177,6 +211,12 @@ export default function DriverHomeScreen() {
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {needsSettings ? (
+          <Pressable style={[styles.button, styles.buttonSecondary]} onPress={() => Linking.openSettings()}>
+            <Ionicons name="settings-outline" size={18} color={AppTheme.colors.primary} />
+            <Text style={styles.buttonSecondaryText}>Abrir configuración</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </SafeScreen>
   );

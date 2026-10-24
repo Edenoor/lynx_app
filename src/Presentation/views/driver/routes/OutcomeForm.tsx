@@ -1,7 +1,8 @@
 // src/Presentation/views/driver/routes/OutcomeForm.tsx
 // Cierre de un envío con la declaración del Baúl. Todo es opcional: con
 // «Confirmar» sin tocar nada se cierra igual que antes. Plegar una sección
-// borra lo que tenía, así no viaja nada que el chofer no ve.
+// borra lo que tenía, así no viaja nada que el chofer no ve. El importe
+// (precargado con la cobranza) solo viaja si el chofer marca cómo le pagaron.
 
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -29,9 +30,18 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
   const [draft, setDraft] = useState<OutcomeDraft>(() => emptyDraft(cobranza !== null ? formatAmountAr(cobranza) : ""));
   const [payOpen, setPayOpen] = useState(cobranza !== null);
   const [returnOpen, setReturnOpen] = useState(false);
+  // El error del importe se muestra al salir del campo o al confirmar, no
+  // mientras se escribe («1.5» camino a «1.500»).
+  const [showAmountError, setShowAmountError] = useState(false);
   const set = (patch: Partial<OutcomeDraft>) => setDraft((d) => ({ ...d, ...patch }));
   const amount = parseAmountAr(draft.amountText);
   const delivered = outcome === "DELIVERED";
+  // Igual que buildDeclaration: el importe solo cuenta con un medio de pago elegido.
+  const amountBlocks = delivered && draft.paymentMethod !== null && !amount.ok;
+  const confirm = () => {
+    if (amountBlocks) { setShowAmountError(true); return; }
+    onConfirm(draft);
+  };
 
   return (
     <View style={styles.box}>
@@ -42,7 +52,7 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
           {cobranza !== null ? (
             <View style={styles.cobrar}>
               <Text style={styles.cobrarText}>Cobrar $ {formatAmountAr(cobranza)}</Text>
-              <Text style={styles.hint}>Marcá cómo te pagó y revisá el importe.</Text>
+              <Text style={styles.hint}>Si te pagó, marcá cómo y revisá el importe. Sin medio de pago no se registra el cobro.</Text>
             </View>
           ) : (
             <Toggle label="¿Cobraste? (opcional)" open={payOpen} onPress={() => { if (payOpen) set({ paymentMethod: null, amountText: "" }); setPayOpen(!payOpen); }} />
@@ -51,8 +61,12 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
             <>
               <Chips options={PAYMENTS} labels={PAYMENT_LABEL} value={draft.paymentMethod} onChange={(v) => set({ paymentMethod: v })} />
               <TextInput value={draft.amountText} onChangeText={(t) => set({ amountText: t })} keyboardType="decimal-pad"
+                onFocus={() => setShowAmountError(false)} onBlur={() => setShowAmountError(true)}
                 placeholder="Importe cobrado (ej. 1.500 o 1.234,56)" placeholderTextColor={AppTheme.text.muted} style={styles.input} />
-              {!amount.ok ? <Text style={styles.warn}>{amount.error}</Text> : null}
+              {showAmountError && !amount.ok && draft.paymentMethod ? <Text style={styles.warn}>{amount.error}</Text> : null}
+              {cobranza === null && !draft.paymentMethod && draft.amountText.trim() ? (
+                <Text style={styles.hint}>Marcá Efectivo o Transferencia para que se registre el importe.</Text>
+              ) : null}
             </>
           ) : null}
 
@@ -69,16 +83,16 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
         </>
       ) : (
         <>
-          <Text style={styles.label}>¿Qué pasa con el paquete?</Text>
-          <Chips options={DESTINATIONS} labels={DESTINATION_LABEL} value={draft.destination ?? "REENTREGA"}
-            onChange={(v) => set({ destination: v ?? "REENTREGA" })} />
+          <Text style={styles.label}>¿Qué pasa con el paquete? (opcional)</Text>
+          <Chips options={DESTINATIONS} labels={DESTINATION_LABEL} value={draft.destination}
+            onChange={(v) => set({ destination: v })} />
           <Text style={styles.hint}>Devolución y Cancelación lo mandan de vuelta a la tienda: no vuelve a salir.</Text>
         </>
       )}
 
       {error ? <Text style={styles.warn}>{error}</Text> : null}
       <View style={styles.row}>
-        <Pressable onPress={() => onConfirm(draft)} disabled={busy || !amount.ok} style={[styles.btn, (busy || !amount.ok) && styles.btnDisabled]}>
+        <Pressable onPress={confirm} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
           <Text style={styles.btnText}>{delivered ? "Confirmar entrega" : "Confirmar no entregado"}</Text>
         </Pressable>
         <Pressable onPress={onCancel} disabled={busy} style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}>
