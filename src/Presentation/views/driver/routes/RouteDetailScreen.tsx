@@ -17,6 +17,7 @@ import {
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
 import OutcomeForm from "./OutcomeForm";
 import { buildDeclaration, cobranzaOf, OutcomeDraft } from "./outcomeDeclaration";
+import { errorMessage } from "../errorMessage";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -34,7 +35,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
   const load = useCallback(async () => {
     try { const r = await fetchRoute(routeId); setRoute(r); setError(null); }
-    catch (e: any) { setError(e?.message ?? "No se pudo cargar el recorrido"); }
+    catch (e: any) { setError(errorMessage(e, "No se pudo cargar el recorrido")); }
   }, [routeId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -42,10 +43,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     fetchDispatch(routeId).then((d) => setDeadline(d?.deadline_at ?? null)).catch(() => setDeadline(null));
   }, [route?.type, routeId]);
 
-  // Ejecuta una acción, recarga y muestra el error del servidor si lo hay.
-  const act = async (fn: () => Promise<unknown>) => {
+  // Ejecuta una acción, recarga y muestra el error del servidor si lo hay
+  // (arriba de todo, o donde diga `onError`). Si la acción falla no se recarga.
+  const act = async (fn: () => Promise<unknown>, onError?: (message: string) => void) => {
     setBusy(true); setError(null);
-    try { await fn(); await load(); } catch (e: any) { setError(e?.message ?? "No se pudo completar la acción"); } finally { setBusy(false); }
+    try { await fn(); await load(); } catch (e: any) { (onError ?? setError)(errorMessage(e, "No se pudo completar la acción")); } finally { setBusy(false); }
   };
 
   const onConfirmLoad = () =>
@@ -159,7 +161,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 }
 
 function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, act }: {
-  routeId: number; stop: Stop; routeType: RouteDetail["type"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void; act: (fn: () => Promise<unknown>) => Promise<void>;
+  routeId: number; stop: Stop; routeType: RouteDetail["type"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void; act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>;
 }) {
   const [pending, setPending] = useState<PendingDelivery[] | null>(null);
   const [notes, setNotes] = useState("");
@@ -182,11 +184,11 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
     const built = buildDeclaration(closing.outcome, draft);
     if (!built.ok) { setCloseError(built.error); return; }
     setCloseError(null);
+    // El error (un 400 de la declaración, o sin red) se muestra solo en el cierre: no arriba de todo, ni se recarga.
     act(async () => {
-      // El error del servidor (p. ej. un 400 de la declaración) se muestra en el cierre, no arriba de todo.
-      try { await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, notes || undefined, built.declaration); setClosing(null); }
-      catch (e: any) { setCloseError(e?.message ?? "No se pudo registrar el resultado"); }
-    });
+      await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, notes || undefined, built.declaration);
+      setClosing(null);
+    }, setCloseError);
   };
   // Los Flex se cierran desde Envíos Flex: no cuentan como «sin resultado».
   const withoutOutcome = stop.deliveries.filter((d) => !d.outcome && d.tipo_envio !== "flex");
@@ -231,7 +233,7 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
                   <Pressable onPress={() => openClose(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No entregado</Text></Pressable>
                 </View>
               ) : null}
-              {inProgress && !d.outcome && closing?.deliveryId === d.delivery_id ? (
+              {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !d.outcome && closing?.deliveryId === d.delivery_id ? (
                 <OutcomeForm key={closing.outcome} outcome={closing.outcome} cobranza={cobranzaOf(d.importe_cobranza)} busy={busy} error={closeError}
                   onConfirm={confirmClose} onCancel={() => setClosing(null)} />
               ) : null}

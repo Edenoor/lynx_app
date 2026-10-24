@@ -77,7 +77,7 @@ export default function DriverAccountScreen() {
   const { user, removeUserSession } = useViewModel();
 
   const [documentsLoading] = useState(false);
-  // Domicilio: se relee al volver de «Mi domicilio». null = cargando o sin red.
+  // Domicilio: se relee al volver de «Mi domicilio». undefined = cargando o sin red; null = sin domicilio.
   const [homeAddress, setHomeAddress] = useState<string | null | undefined>(undefined);
   useFocusEffect(
     useCallback(() => {

@@ -13,6 +13,7 @@ import * as Location from "expo-location";
 import AppTheme from "../../../theme/AppTheme";
 import { SafeScreen } from "../../../components/SafeScreen";
 import { DriverHome, HomeCandidate, clearMyHome, fetchMyHome, saveMyHome, searchHomeAddress, shortAddress } from "./homeApi";
+import { errorMessage } from "../errorMessage";
 
 type Pending = { address: string; latitude: number; longitude: number; source: "search" | "gps" };
 
@@ -42,6 +43,9 @@ export default function DriverHomeScreen() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState<"load" | "search" | "gps" | "save" | null>("load");
   const [error, setError] = useState("");
+  // Sin red no se sabe si hay domicilio: no se dice «Todavía no cargaste» ni se esconde «Borrar».
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   // Permiso negado para siempre: el sistema ya no lo pregunta, solo desde Ajustes.
   const [needsSettings, setNeedsSettings] = useState(false);
 
@@ -50,11 +54,11 @@ export default function DriverHomeScreen() {
       let alive = true;
       setBusy("load");
       fetchMyHome()
-        .then((h) => { if (alive) { setHome(h); setError(""); } })
-        .catch((e) => { if (alive) setError(e.message); })
+        .then((h) => { if (alive) { setHome(h); setLoadError(""); } })
+        .catch((e) => { if (alive) setLoadError(errorMessage(e, "No se pudo cargar tu domicilio.")); })
         .finally(() => { if (alive) setBusy(null); });
       return () => { alive = false; };
-    }, [])
+    }, [reloadKey])
   );
 
   const search = async () => {
@@ -65,7 +69,7 @@ export default function DriverHomeScreen() {
       setCandidates(found);
       if (found.length === 1) setPending({ address: shortAddress(found[0], text), latitude: found[0].latitude, longitude: found[0].longitude, source: "search" });
     } catch (e: any) {
-      setCandidates(null); setError(e.message);
+      setCandidates(null); setError(errorMessage(e, "No se pudo buscar la dirección."));
     } finally { setBusy(null); }
   };
 
@@ -108,9 +112,9 @@ export default function DriverHomeScreen() {
     try {
       const address = pending.source === "gps" ? text.trim() : pending.address;
       setHome(await saveMyHome({ address, latitude: pending.latitude, longitude: pending.longitude }));
-      setPending(null); setCandidates(null); setText("");
+      setLoadError(""); setPending(null); setCandidates(null); setText("");
       Alert.alert("Domicilio guardado", "Ya lo ve la operación.");
-    } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+    } catch (e: any) { setError(errorMessage(e, "No se pudo guardar el domicilio.")); } finally { setBusy(null); }
   };
 
   const remove = () =>
@@ -120,7 +124,7 @@ export default function DriverHomeScreen() {
         text: "Borrar", style: "destructive",
         onPress: async () => {
           setBusy("save"); setError("");
-          try { setHome(await clearMyHome()); } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+          try { setHome(await clearMyHome()); setLoadError(""); } catch (e: any) { setError(errorMessage(e, "No se pudo borrar el domicilio.")); } finally { setBusy(null); }
         },
       },
     ]);
@@ -142,10 +146,17 @@ export default function DriverHomeScreen() {
           <Text style={styles.label}>Domicilio cargado</Text>
           {busy === "load" ? (
             <ActivityIndicator color={AppTheme.colors.primary} style={{ marginTop: 8 }} />
+          ) : loadError ? (
+            <>
+              <Text style={styles.hint}>{loadError}</Text>
+              <Pressable onPress={() => setReloadKey((k) => k + 1)} disabled={!!busy} accessibilityRole="button">
+                <Text style={styles.retry}>Reintentar</Text>
+              </Pressable>
+            </>
           ) : (
             <Text style={styles.value}>{home?.address || "Todavía no cargaste tu domicilio"}</Text>
           )}
-          {home?.address ? (
+          {home?.address && !loadError ? (
             <Pressable onPress={remove} disabled={!!busy}>
               <Text style={styles.link}>Borrar</Text>
             </Pressable>
@@ -168,12 +179,14 @@ export default function DriverHomeScreen() {
               placeholder="Calle y número, localidad"
               placeholderTextColor={AppTheme.text.muted}
               style={styles.input}
-              returnKeyType="search"
-              onSubmitEditing={search}
+              // Con un punto del GPS sin guardar, «Enter» solo cierra el teclado: buscar lo descartaría.
+              returnKeyType={pending?.source === "gps" ? "done" : "search"}
+              onSubmitEditing={() => { if (pending?.source !== "gps") search(); }}
               editable={!busy}
             />
-            <Pressable style={[styles.button, styles.searchButton]} onPress={search} disabled={!!busy}>
-              {busy === "search" ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={18} color="#fff" />}
+            <Pressable style={[styles.button, styles.searchButton]} onPress={search} disabled={!!busy}
+              accessibilityRole="button" accessibilityLabel="Buscar dirección" accessibilityState={{ disabled: !!busy, busy: busy === "search" }}>
+              {busy === "search" ? <ActivityIndicator color={AppTheme.colors.white} /> : <Ionicons name="search" size={18} color={AppTheme.colors.white} />}
             </Pressable>
           </View>
 
@@ -184,7 +197,7 @@ export default function DriverHomeScreen() {
                 {candidates.map((c, i) => {
                   const chosen = pending?.source === "search" && pending.latitude === c.latitude && pending.longitude === c.longitude;
                   return (
-                    <Pressable key={i} style={[styles.candidate, chosen && styles.candidateOn]}
+                    <Pressable key={i} style={[styles.candidate, chosen && styles.candidateOn]} accessibilityRole="button" accessibilityState={{ selected: chosen }}
                       onPress={() => setPending({ address: shortAddress(c, text), latitude: c.latitude, longitude: c.longitude, source: "search" })}>
                       <Text style={styles.candidateText}>{c.displayName || shortAddress(c, text)}</Text>
                     </Pressable>
@@ -204,7 +217,7 @@ export default function DriverHomeScreen() {
                   : `Se guarda: ${pending.address}`}
               </Text>
               <Pressable style={styles.button} onPress={save} disabled={!!busy}>
-                {busy === "save" ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar domicilio</Text>}
+                {busy === "save" ? <ActivityIndicator color={AppTheme.colors.white} /> : <Text style={styles.buttonText}>Guardar domicilio</Text>}
               </Pressable>
             </View>
           ) : null}
@@ -250,6 +263,7 @@ const styles = StyleSheet.create({
   label: { color: AppTheme.text.muted, fontSize: 12, fontWeight: AppTheme.font.weight.black, textTransform: "uppercase", letterSpacing: 0.6 },
   value: { color: AppTheme.text.primary, fontSize: 17, fontWeight: AppTheme.font.weight.black },
   link: { color: AppTheme.colors.danger, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
+  retry: { color: AppTheme.colors.primary, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
   or: { color: AppTheme.text.muted, fontSize: 12, fontWeight: AppTheme.font.weight.bold, textAlign: "center" },
   row: { flexDirection: "row", gap: AppTheme.spacing.sm, alignItems: "center" },
   input: {
@@ -274,7 +288,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: AppTheme.spacing.md,
   },
   searchButton: { width: 52, paddingHorizontal: 0 },
-  buttonText: { color: "#fff", fontSize: 15, fontWeight: AppTheme.font.weight.black },
+  buttonText: { color: AppTheme.colors.white, fontSize: 15, fontWeight: AppTheme.font.weight.black },
   buttonSecondary: { backgroundColor: AppTheme.overlays.primary, borderWidth: 1, borderColor: AppTheme.borders.medium },
   buttonSecondaryText: { color: AppTheme.colors.primary, fontSize: 15, fontWeight: AppTheme.font.weight.black },
   hint: { color: AppTheme.text.secondary, fontSize: 13, lineHeight: 18, fontWeight: AppTheme.font.weight.bold },

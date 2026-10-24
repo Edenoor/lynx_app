@@ -4,6 +4,7 @@
 // mapa de operación y se puede usar como inicio o fin de un recorrido.
 
 import { getJson, putJson } from "../../../config/Api";
+import { splitAddressQuery } from "./addressQuery";
 
 export type DriverHome = {
   address: string | null;
@@ -27,10 +28,12 @@ const unwrap = <T,>(res: any): T => {
 
 export const fetchMyHome = async () => unwrap<{ home: DriverHome }>(await getJson("/v2/driver-home/me")).home;
 
-export const searchHomeAddress = async (text: string) =>
-  unwrap<{ candidates: HomeCandidate[] }>(
-    await getJson(`/v2/driver-home/geo/search?direccion=${encodeURIComponent(text.trim())}`)
-  ).candidates;
+// «Calle y número, localidad» viaja en dos campos (ver addressQuery.ts).
+export const searchHomeAddress = async (text: string) => {
+  const { direccion, localidad } = splitAddressQuery(text);
+  const query = `direccion=${encodeURIComponent(direccion)}${localidad ? `&localidad=${encodeURIComponent(localidad)}` : ""}`;
+  return unwrap<{ candidates: HomeCandidate[] }>(await getJson(`/v2/driver-home/geo/search?${query}`)).candidates;
+};
 
 export const saveMyHome = async (home: { address: string; latitude: number; longitude: number }) =>
   unwrap<{ home: DriverHome }>(await putJson("/v2/driver-home/me", home)).home;

@@ -105,7 +105,7 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
 
 function Toggle({ label, open, onPress }: { label: string; open: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={styles.toggle} hitSlop={6}>
+    <Pressable onPress={onPress} style={styles.toggle} hitSlop={6} accessibilityRole="button" accessibilityState={{ expanded: open }}>
       <Text style={styles.label}>{label}</Text>
       <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={AppTheme.text.muted} />
     </Pressable>
@@ -119,7 +119,8 @@ function Chips<T extends string>({ options, labels, value, onChange }: {
   return (
     <View style={styles.row}>
       {options.map((o) => (
-        <Pressable key={o} onPress={() => onChange(value === o ? null : o)} style={[styles.chip, value === o && styles.chipActive]}>
+        <Pressable key={o} onPress={() => onChange(value === o ? null : o)} style={[styles.chip, value === o && styles.chipActive]}
+          accessibilityRole="button" accessibilityState={{ selected: value === o }}>
           <Text style={[styles.chipText, value === o && styles.chipTextActive]}>{labels[o]}</Text>
         </Pressable>
       ))}
