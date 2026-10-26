@@ -3,6 +3,7 @@
 // el token: acá no viaja ningún id de chofer.
 
 import { getJson, postJson, putJson } from "../../../config/Api";
+import type { OutcomeDeclaration } from "./outcomeDeclaration";
 
 export type RouteType = "PICKUP" | "DELIVERY" | "TURBO";
 export type RouteStatus = "PLANNED" | "ASSIGNED" | "LOADED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
@@ -20,6 +21,10 @@ export type RouteSummary = {
 export type StopDelivery = {
   delivery_id: number; tracking: string | number | null; nombre_destinatario: string | null; direccion: string | null;
   codigo_postal: string | null; tipo_envio: string | null; ops_status: string; outcome: string | null; outcome_at: string | null; notes: string | null;
+  // Cobranza del envío (delivery_financials), con la que la app muestra
+  // «Cobrar $X». La manda el servidor desde feat/integracion-20261024; uno
+  // anterior no la trae y el cierre funciona igual, sin el importe.
+  importe_cobranza?: number | string | null;
 };
 export type Stop = {
   id: number; route_id: number; sequence: number; type: "PICKUP" | "DELIVERY"; status: StopStatus;
@@ -86,8 +91,9 @@ export const completeRoute = async (id: number) => unwrap<{ route: RouteDetail }
 export const stopAction = async (routeId: number, stopId: number, action: "arrive" | "done" | "skip" | "store-ready", notes?: string) =>
   unwrap<{ stop: Stop }>(await putJson(`/v2/routes/${routeId}/stops/${stopId}/${action}`, notes ? { notes } : {})).stop;
 
-export const recordOutcome = async (routeId: number, stopId: number, deliveryId: number, outcome: string, notes?: string) =>
-  unwrap<{ stop: Stop }>(await postJson(`/v2/routes/${routeId}/stops/${stopId}/outcomes`, { delivery_id: deliveryId, outcome, notes: notes ?? null })).stop;
+// `declaration` (Baúl) trae solo los campos que el chofer completó.
+export const recordOutcome = async (routeId: number, stopId: number, deliveryId: number, outcome: string, notes?: string, declaration?: OutcomeDeclaration) =>
+  unwrap<{ stop: Stop }>(await postJson(`/v2/routes/${routeId}/stops/${stopId}/outcomes`, { delivery_id: deliveryId, outcome, notes: notes ?? null, ...declaration })).stop;
 
 export const fetchPendingAtStore = async (routeId: number, stopId: number) =>
   unwrap<{ deliveries: PendingDelivery[] }>(await getJson(`/v2/routes/${routeId}/stops/${stopId}/pending`)).deliveries;

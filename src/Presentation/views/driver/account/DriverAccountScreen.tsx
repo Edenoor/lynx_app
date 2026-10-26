@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppTheme from "../../../theme/AppTheme";
@@ -21,6 +21,7 @@ import {
   DriverBottomNavigation,
   DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
+import { fetchMyHome } from "./homeApi";
 
 const DEFAULT_AVATAR = require("../../../../../assets/user.png");
 
@@ -76,6 +77,17 @@ export default function DriverAccountScreen() {
   const { user, removeUserSession } = useViewModel();
 
   const [documentsLoading] = useState(false);
+  // Domicilio: se relee al volver de «Mi domicilio». undefined = cargando o sin red; null = sin domicilio.
+  const [homeAddress, setHomeAddress] = useState<string | null | undefined>(undefined);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      fetchMyHome()
+        .then((h) => { if (alive) setHomeAddress(h.address); })
+        .catch(() => { if (alive) setHomeAddress(undefined); });
+      return () => { alive = false; };
+    }, [])
+  );
 
   const driverName = useMemo(() => getDriverDisplayName(user), [user]);
   const username = (user as any)?.username || user?.email || user?.name || "";
@@ -164,6 +176,13 @@ if (tab === "scan") {
             icon="person-outline"
             title="Datos personales"
             description={username || "Usuario no disponible"}
+          />
+
+          <AccountItem
+            icon="home-outline"
+            title="Mi domicilio"
+            description={homeAddress === undefined ? "Para el mapa y los recorridos" : homeAddress || "Sin cargar: tocá para cargarlo"}
+            onPress={() => navigation.navigate("DriverHomeScreen")}
           />
 
           <AccountItem
