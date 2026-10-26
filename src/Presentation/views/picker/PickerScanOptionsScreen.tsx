@@ -1,7 +1,8 @@
 // src/Presentation/views/picker/PickerScanOptionsScreen.tsx
 // Qué operación de escaneo quiere hacer el Picker (misma pantalla que la del
-// chofer, con sus propias acciones). Recepcionar es la única real; Consultar
-// espera un endpoint de consulta y las otras dos son maquetas sin guardado.
+// chofer, con sus propias acciones). Recepcionar y Mover de estantería son
+// reales; Consultar espera un endpoint de consulta y las otras dos son
+// maquetas sin guardado.
 // Colectar se agrega cuando exista su contrato en el servidor.
 
 import React from "react";
@@ -46,6 +47,14 @@ export default function PickerScanOptionsScreen({ navigation, route }: Props) {
                 icon: "file-tray-stacked-outline",
                 label: "Recepcionar",
                 onPress: () => navigation.navigate("PickerScanScreen", { warehouseId }),
+              },
+              {
+                // Se escanea la estantería de origen y se elige el paquete:
+                // sin consulta por QR del paquete, no se recepciona para mover.
+                key: "move",
+                icon: "swap-horizontal-outline",
+                label: "Mover de estantería",
+                onPress: () => navigation.navigate("PickerShelfScanScreen", { warehouseId, purpose: "move" }),
               },
               {
                 // Sin un endpoint de consulta de solo lectura daría falsos

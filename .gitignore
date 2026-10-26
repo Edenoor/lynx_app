@@ -61,3 +61,6 @@ Thumbs.db
 android/app/*.jks
 
 
+
+# Compilación de los módulos nativos locales
+modules/*/android/build/

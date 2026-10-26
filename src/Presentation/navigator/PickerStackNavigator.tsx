@@ -11,12 +11,14 @@ import PickerNotificationsScreen from "../views/picker/PickerNotificationsScreen
 import PickerShelfScanScreen from "../views/picker/PickerShelfScanScreen";
 import PickerBulkyMockScreen from "../views/picker/PickerBulkyMockScreen";
 import PickerReportMockScreen from "../views/picker/PickerReportMockScreen";
+import PickerMoveShelfScreen from "../views/picker/PickerMoveShelfScreen";
 
 export type PickerStackParamList = {
   PickerHomeScreen: undefined;
   PickerScanOptionsScreen: { warehouseId: number | null };
   PickerNotificationsScreen: { warehouseId: number | null };
-  PickerShelfScanScreen: { warehouseId: number | null };
+  // purpose "move": se escanea la estantería de origen para mover un paquete.
+  PickerShelfScanScreen: { warehouseId: number | null; purpose?: "move" };
   // Maquetas: no guardan nada.
   PickerBulkyMockScreen: { warehouseId: number | null };
   PickerReportMockScreen: { warehouseId: number | null };
@@ -29,6 +31,13 @@ export type PickerStackParamList = {
   PickerShelvesScreen: undefined;
   PickerShelfDetailScreen: { shelfId: number; code: string; warehouseId: number | null };
   PickerMisplacedScreen: undefined;
+  // deliveryId: id interno del envío (no el tracking).
+  PickerMoveShelfScreen: {
+    deliveryId: number;
+    tracking: string | null;
+    fromShelf: { id: number; code: string; name: string | null };
+    warehouseId: number | null;
+  };
 };
 
 const Stack = createNativeStackNavigator<PickerStackParamList>();
@@ -45,5 +54,6 @@ export const PickerStackNavigator = () => (
     <Stack.Screen name="PickerShelvesScreen" component={PickerShelvesScreen} />
     <Stack.Screen name="PickerShelfDetailScreen" component={PickerShelfDetailScreen} />
     <Stack.Screen name="PickerMisplacedScreen" component={PickerMisplacedScreen} />
+    <Stack.Screen name="PickerMoveShelfScreen" component={PickerMoveShelfScreen} />
   </Stack.Navigator>
 );

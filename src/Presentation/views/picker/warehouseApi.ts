@@ -170,6 +170,13 @@ export const moveToShelf = async (deliveryId: number, shelfQr: string) =>
     await putJsonWithTimeout(`/v2/warehouse/deliveries/${deliveryId}/shelf`, { shelf_qr: shelfQr }, MOVE_TIMEOUT_MS),
   );
 
+// Mismo endpoint, eligiendo la estantería destino de la lista ({ shelf_id }).
+// deliveryId es el id interno del envío (deliveries.id), no el tracking.
+export const moveToShelfById = async (deliveryId: number, shelfId: number) =>
+  unwrap<MoveResult>(
+    await putJsonWithTimeout(`/v2/warehouse/deliveries/${deliveryId}/shelf`, { shelf_id: shelfId }, MOVE_TIMEOUT_MS),
+  );
+
 // Consultas: piden warehouse_access. Para un Picker el servidor resuelve
 // siempre SU Warehouse (el mismo donde recibe) y no deja ver estanterías de
 // otro.

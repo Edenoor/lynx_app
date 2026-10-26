@@ -334,6 +334,26 @@ Es un parche sobre un dato inconsistente del servidor: `shelf_id` no se limpia e
 - volver a mostrar el número de paquetes en la lista, a partir de un conteo que el servidor calcule con la misma regla;
 - mostrar el marcador de cancelado.
 
+## 8.1 Actualización (octubre 2026) — `present_count`/`cancelled_count` ya están en el backend
+
+**Esto NO es la custodia formal de las secciones 1-7** (eso sigue sin implementarse, decisión de MVP vigente). Es solo el prerequisito de backend que la sección 8 pedía para poder sacar el filtro transitorio de Mobile, implementado en `integration/circuito-mvp` (`server/current/warehouse/shelfService.js:listShelves()`), ya probado contra una base real.
+
+`GET /v2/warehouse/shelves` ahora devuelve, además de `deliveries_count` (sin cambios, sigue incluyendo cerrados):
+
+```ts
+present_count: number;   // shelf_id = S AND ops_status NOT IN ('DELIVERED','CANCELLED') (NULL cuenta como presente)
+cancelled_count: number; // shelf_id = S AND ops_status = 'CANCELLED'
+```
+
+Importante: la regla definitiva de la sección 8 (`shelf_id = S` sin custodia de Driver) **todavía no es la regla implementada** — hoy sigue siendo `shelf_id = S` filtrado por `ops_status`, porque la custodia formal (sección 1-7) no existe todavía. Un `CANCELLED` sigue teniendo `shelf_id` (confirmado: `opsService.js` nunca lo limpia al cancelar), así que `cancelled_count` ya refleja exactamente el caso que la sección 8 quería resolver, sin esperar al resto del diseño.
+
+**Cambio pendiente en Mobile** (no aplicado desde este repositorio — lo hace quien edite `lynx_app`):
+
+- `warehouseApi.ts`: el tipo `Shelf` ya tenía `present_count?: number` previsto ("mientras no llegue, no se muestra ninguna cifra") — ya llega. Agregar `cancelled_count: number` al tipo.
+- `activeShelfPackages` (el filtro transitorio que oculta `DELIVERED`/`CANCELLED` en cliente): puede reemplazarse por leer directamente `present_count` del servidor en vez de filtrar la lista a mano — mismo resultado, una sola fuente de verdad.
+- Mostrar una alerta cuando `cancelled_count > 0` en la lista de estanterías del Picker, igual que WebApp (`src/pages/ShelvesPage.tsx`, mismo patrón: badge de advertencia junto al conteo, clickeable, y en el detalle de contenido resaltar la fila con `ops_status === 'CANCELLED'` para que el Picker identifique cuál es y la retire o gestione).
+- `GET /v2/warehouse/shelves/:id/deliveries` (detalle) ya incluye los `CANCELLED` sin filtrar (`shelfContents()` en el backend no filtra por `ops_status`) — confirmado, no hace falta ningún cambio de backend para que el detalle los muestre.
+
 ## 9. Riesgos
 
 - **Recepción** es el cambio más sensible (`receive` con custodia abierta y `SHELVED` sin estantería). Necesita pruebas propias y una validación en el depósito antes de activarlo.

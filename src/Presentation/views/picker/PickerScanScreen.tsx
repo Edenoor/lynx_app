@@ -17,6 +17,7 @@ import type { PickerStackParamList } from "../../navigator/PickerStackNavigator"
 import { PendingPackage, processScan, ScanOutcome } from "./pickerScan";
 import { OutcomeTone, OutcomeView, presentOutcome } from "./pickerOutcome";
 import { PickerHeader, warehouseLabel } from "./pickerUi";
+import { playScanError, playScanSuccess } from "../../config/ScanSound";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerScanScreen">;
 
@@ -56,7 +57,11 @@ export default function PickerScanScreen({ navigation, route }: Props) {
         const r = await processScan(raw, pending);
         setOutcome(r.outcome);
         setPending(r.pending);
-        Vibration.vibrate(VIBRATION[presentOutcome(r.outcome, warehouse).tone]);
+        const tone = presentOutcome(r.outcome, warehouse).tone;
+        Vibration.vibrate(VIBRATION[tone]);
+        // Éxito solo si se recibió o se movió; cualquier otro resultado avisa.
+        if (tone === "success") playScanSuccess();
+        else playScanError();
       } finally {
         setProcessing(false);
       }

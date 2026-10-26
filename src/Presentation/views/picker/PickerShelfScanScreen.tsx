@@ -14,6 +14,7 @@ import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { fetchShelves, matchShelfQr } from "./warehouseApi";
 import { PickerHeader, useFocusQuery, warehouseLabel } from "./pickerUi";
+import { playScanError, playScanSuccess } from "../../config/ScanSound";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerShelfScanScreen">;
 
@@ -35,9 +36,11 @@ export default function PickerShelfScanScreen({ navigation, route }: Props) {
       const result = matchShelfQr(data.shelves, raw);
       if (result.kind !== "shelf") {
         setMessage(MESSAGES[result.kind]);
+        playScanError();
         return;
       }
       navigated.current = true;
+      playScanSuccess();
       navigation.replace("PickerShelfDetailScreen", { shelfId: result.shelf.id, code: result.shelf.code, warehouseId });
     },
     [data, navigation, warehouseId],
@@ -47,11 +50,14 @@ export default function PickerShelfScanScreen({ navigation, route }: Props) {
     ? "Cargando las estanterías de tu warehouse…"
     : !data
     ? error ?? "No se pudieron cargar las estanterías."
-    : message ?? "Escaneá el QR de la estantería para ver qué tiene.";
+    : message ??
+      (route.params.purpose === "move"
+        ? "Escaneá la estantería donde está el paquete y tocá «Mover» en él."
+        : "Escaneá el QR de la estantería para ver qué tiene.");
 
   return (
     <SafeScreen>
-      <PickerHeader title="Escanear estantería" subtitle={warehouseLabel(warehouseId)} onBack={() => navigation.goBack()} />
+      <PickerHeader title={route.params.purpose === "move" ? "Mover de estantería" : "Escanear estantería"} subtitle={warehouseLabel(warehouseId)} onBack={() => navigation.goBack()} />
       <View style={styles.camera}>
         <QrScanner active={focused && !!data} onScan={onScan} />
       </View>

@@ -40,6 +40,10 @@ import {
   postJson,
   putJson,
 } from "../../../config/Api";
+import {
+  playScanError,
+  playScanSuccess,
+} from "../../../config/ScanSound";
 
 type Props = StackScreenProps<
   DriverStackParamList,
@@ -654,6 +658,8 @@ export default function DriverScanScreen({
           120,
         ]);
 
+        playScanSuccess();
+
         Alert.alert(
           "Envío asignado ✅",
           [
@@ -896,6 +902,8 @@ export default function DriverScanScreen({
           120,
         ]);
 
+        playScanSuccess();
+
         Alert.alert(
           "Colecta procesada ✅",
           [
@@ -995,6 +1003,8 @@ export default function DriverScanScreen({
             80
           );
 
+          playScanSuccess();
+
           Alert.alert(
             `→ ${
               moved?.shelf
@@ -1086,6 +1096,22 @@ export default function DriverScanScreen({
             ? [0, 120, 80, 120]
             : 80
         );
+
+        // Éxito solo si quedó en planta (ingresó o ya estaba). Cerrado o en
+        // recorrido: el servidor respondió, pero el bulto no se recibió.
+        if (
+          (r?.ops?.transitions?.length ||
+            r?.ops?.already_here) &&
+          !alerts.some(
+            (a) =>
+              a.code === "CLOSED" ||
+              a.code === "IN_ROUTE"
+          )
+        ) {
+          playScanSuccess();
+        } else {
+          playScanError();
+        }
 
         const lines: string[] =
           [
@@ -1270,6 +1296,8 @@ export default function DriverScanScreen({
           );
 
           console.log(e);
+
+          playScanError();
 
           const errorMessage =
             e?.message ||
