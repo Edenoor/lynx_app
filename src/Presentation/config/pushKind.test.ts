@@ -23,12 +23,12 @@ eq("Turbo sin tipo (push viejo)", normalizeKind(undefined, { routeId: 5, offerId
 eq("Turbo sin tipo con kind TURBO", normalizeKind(undefined, { routeId: 5, offerId: 9, kind: "TURBO" }), "TURBO_OFFER");
 
 // Lo que ya existía sigue igual
-eq("ronda de mañana sin tipo", normalizeKind(undefined, { routeId: 3, template_name: "Norte" }), "ROUTE_CONFIRMATION");
+eq("confirmación de colecta sin tipo", normalizeKind(undefined, { routeId: 3, template_name: "Norte" }), "ROUTE_CONFIRMATION");
 eq("asignación por título", normalizeKind(undefined, { deliveryId: 4 }, "Nuevo envío asignado"), "ASIGNACION");
 eq("aviso del coordinador", normalizeKind("ALERTA", { ping: true }), "ALERT");
 eq("desconocido", normalizeKind("ALGO", {}), "INFO");
 
-eq("isRouteNotice", ["PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_UPDATED", "ROUTE_OFFER", "TURBO_OFFER", "ROUTE_CONFIRMATION"].map((k) => isRouteNotice(k as any)), [true, true, true, true, false, false]);
+eq("isRouteNotice", ["PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_UPDATED", "ROUTE_OFFER", "ROUTE_CONFIRMATION", "TURBO_OFFER", "ASIGNACION"].map((k) => isRouteNotice(k as any)), [true, true, true, true, true, false, false]);
 eq("routeIdOf", [routeIdOf({ routeId: 12 }), routeIdOf({ routeId: "12" }), routeIdOf({ route_id: 7 }), routeIdOf({}), routeIdOf({ routeId: "x" }), routeIdOf(null)], [12, 12, 7, null, null, null]);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }

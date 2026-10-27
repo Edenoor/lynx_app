@@ -36,8 +36,10 @@ const EXPLICIT: NotiKind[] = [
   "ROUTE_OFFER",
 ];
 
-export type RouteNoticeKind = "PICKUP_ASSIGNED" | "PICKUP_REASSIGNED" | "ROUTE_UPDATED" | "ROUTE_OFFER";
-const ROUTE_NOTICES = new Set<NotiKind>(["PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_UPDATED", "ROUTE_OFFER"]);
+// Avisos que abren un recorrido (data.routeId). ROUTE_CONFIRMATION es el
+// pedido de confirmar una colecta habitual.
+export type RouteNoticeKind = "PICKUP_ASSIGNED" | "PICKUP_REASSIGNED" | "ROUTE_UPDATED" | "ROUTE_OFFER" | "ROUTE_CONFIRMATION";
+const ROUTE_NOTICES = new Set<NotiKind>(["PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_UPDATED", "ROUTE_OFFER", "ROUTE_CONFIRMATION"]);
 export const isRouteNotice = (kind: NotiKind): kind is RouteNoticeKind => ROUTE_NOTICES.has(kind);
 
 export function normalizeKind(type?: unknown, data?: any, title?: string | null): NotiKind {

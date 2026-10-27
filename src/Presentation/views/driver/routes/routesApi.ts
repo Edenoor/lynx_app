@@ -13,8 +13,9 @@ export type ConfirmationState = "ACCEPTED" | "DECLINED" | "PENDING" | "OVERDUE";
 export type RouteSummary = {
   id: number; type: RouteType; status: RouteStatus; scheduled_date: string;
   stops_count: number; deliveries_count: number; load_expected_count: number | null; load_confirmed_count: number | null;
-  // Solo en recorridos que vienen de una ronda fija: cómo se llama, a qué hora
-  // sale y qué contestó el chofer al aviso de la noche anterior.
+  // Solo en colectas que salen de una plantilla (habituales): cómo se llama
+  // (solo en la lista; el detalle no trae el nombre), a qué hora sale y qué
+  // contestó el chofer. driver_confirmation viene en toda colecta.
   template_id?: number | null; template_name?: string | null; departure_time?: string | null;
   driver_confirmation?: "ACCEPTED" | "DECLINED" | null; confirmation_state?: ConfirmationState | null;
 };
@@ -31,6 +32,9 @@ export type Stop = {
   arrived_at: string | null; completed_at: string | null; notes: string | null;
   store_id?: number; store_name?: string; store_address?: string; cutoff_snapshot?: string | null; window_snapshot?: number | null;
   collected_count?: number; store_ready_at?: string | null;
+  // Retiro: coordenadas congeladas al armar la parada (pg las manda como texto)
+  // y, si el origen es un Dropoff en vez de una tienda, su nombre.
+  latitude_snapshot?: number | string | null; longitude_snapshot?: number | string | null; warehouse_name?: string | null;
   address?: string | null; postal_code?: string | null; latitude?: number | null; longitude?: number | null; receiver_name?: string | null;
   deliveries: StopDelivery[];
 };
@@ -71,7 +75,7 @@ export const tomorrowIso = () => {
 export const fetchMyRoutes = async (date: string) =>
   unwrap<{ routes: RouteSummary[] }>(await getJson(`/v2/routes/mine?date=${date}`)).routes;
 
-// ¿Puede hacer la ronda? Se contesta la noche anterior; contestar de nuevo pisa la respuesta.
+// Confirmación de una colecta (de ese día): contestar de nuevo pisa la respuesta.
 export const respondConfirmation = async (id: number, response: "ACCEPTED" | "DECLINED") =>
   unwrap<{ route: RouteDetail }>(await putJson(`/v2/routes/${id}/confirmation`, { response })).route;
 

@@ -96,8 +96,6 @@ export default function DriverAccountScreen() {
 
   const handleTabPress = useCallback(
     (tab: DriverTabKey) => {
-      if (tab === "profile") return;
-
       if (tab === "home") {
         navigation.navigate("DriverScreen");
         return;
@@ -231,7 +229,8 @@ if (tab === "scan") {
         </Pressable>
       </ScrollView>
 
-      <DriverBottomNavigation activeTab="profile" onPress={handleTabPress} />
+      {/* Perfil se abre desde Inicio: la barra lo muestra como parte de Inicio. */}
+      <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
     </View>
   );
 }

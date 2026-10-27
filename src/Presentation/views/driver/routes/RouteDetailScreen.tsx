@@ -4,7 +4,7 @@
 // completar el recorrido. Sin mapa en esta etapa.
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ImageBackground, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, ImageBackground, Linking, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -18,14 +18,19 @@ import { fetchDispatch, hhmm } from "../turbo/turboApi";
 import OutcomeForm from "./OutcomeForm";
 import { buildDeclaration, cobranzaOf, OutcomeDraft } from "./outcomeDeclaration";
 import { errorMessage } from "../errorMessage";
-import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer } from "./pickupConfirmation";
+import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from "./pickupConfirmation";
+import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
+import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
-const time = (v: string | null | undefined) => (v ? new Date(v).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : null);
+// Las horas de llegada, salida, «tienda lista» y entrega (arrived_at,
+// started_at, store_ready_at, outcome_at) se guardan sin zona horaria y en una
+// prueba se vieron corridas: no se muestran hasta que el servidor lo corrija.
+// Los registros no se tocan. El corte (cutoff_snapshot) es una hora fija y sí.
 
 export default function RouteDetailScreen({ navigation, route: nav }: Props) {
-  const { routeId } = nav.params;
+  const { routeId, name } = nav.params;
   const [route, setRoute] = useState<RouteDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,12 +71,6 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
   const onStart = () =>
     act(async () => {
-      // La ronda de mañana se ve hoy (para confirmarla), pero no se arranca hoy.
-      // El servidor también lo rechaza; acá se explica antes de mandar nada.
-      const fecha = route?.scheduled_date?.slice(0, 10);
-      if (fecha && fecha > todayIso()) {
-        throw new Error(`Este recorrido es del ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}: se inicia ese día.`);
-      }
       const r = await startRoute(routeId);
       // Flex que no figura «En camino» en Mercado Libre: se avisa, no se frena.
       if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
@@ -92,11 +91,16 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   }
 
   const isDelivery = route.type === "DELIVERY";
+  const isPickup = route.type === "PICKUP";
   const canConfirm = isDelivery && route.status === "ASSIGNED";
   // Una colecta asignada sale recién cuando el chofer la acepta (el servidor
   // la rechaza sin aceptar): mientras tanto se muestra para contestar.
   const answer = pickupAnswer(route);
   const canStart = canStartRoute(route);
+  // La colecta de mañana se ve hoy (para confirmarla), pero se comienza ese día.
+  const today = todayIso();
+  const later = startsLater(route, today);
+  const day = executionDayLabel(route.scheduled_date, today);
   const inProgress = route.status === "IN_PROGRESS";
   const allClosed = route.stops.every((s) => s.status === "DONE" || s.status === "SKIPPED");
 
@@ -107,12 +111,23 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
-              <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
-              <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos{route.started_at ? ` · salida ${time(route.started_at)}` : ""}</Text>
-              {route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
-            </View>
+            {isPickup ? (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.eyebrow}>Colecta {route.template_id ? "habitual" : "extraordinaria"} · #{route.id}</Text>
+                <Text style={styles.title}>{name || collectionName(route)}</Text>
+                <Text style={styles.meta}>{capitalize(day)} · {COLLECTION_STATUS_LABEL[route.status] ?? route.status}</Text>
+                <Text style={styles.meta}>
+                  {route.stops.length} {route.stops.length === 1 ? "parada" : "paradas"}{route.departure_time ? ` · sale ${route.departure_time.slice(0, 5)}` : ""}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
+                <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
+                <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos</Text>
+                {route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
+              </View>
+            )}
           </View>
 
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
@@ -139,14 +154,15 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
           {answer ? (
             <View style={[styles.panel, answer === "DECLINED" && styles.panelDanger]}>
-              <Text style={styles.panelTitle}>Colecta · {PICKUP_ANSWER_LABEL[answer]}</Text>
+              <Text style={styles.panelTitle}>Confirmación · {PICKUP_ANSWER_LABEL[answer]}</Text>
               <Text style={styles.panelText}>
                 {answer === "ACCEPTED"
-                  ? "La aceptaste. Cuando estés listo, salí a la calle."
+                  ? later ? "La aceptaste. Se comienza el día de la colecta." : "La aceptaste. Cuando estés listo, comenzá la colecta."
                   : answer === "DECLINED"
                   ? "Dijiste que no podés hacerla: el coordinador ya fue avisado. Si cambiaste de idea, aceptala."
-                  : "Confirmá si podés hacer esta colecta. Sin aceptarla no se puede iniciar."}
+                  : "Confirmá si podés hacer esta colecta. Sin aceptarla no se puede comenzar."}
               </Text>
+              {answer === "PENDING" && route.confirmation_state === "OVERDUE" ? <Text style={styles.warn}>Venció el plazo para confirmar.</Text> : null}
               {answer !== "ACCEPTED" ? (
                 <View style={styles.row}>
                   <Pressable onPress={() => act(() => respondConfirmation(routeId, "ACCEPTED"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
@@ -165,14 +181,17 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
           {answer && answer !== "ACCEPTED" ? (
             <View style={[styles.btn, styles.btnBig, styles.btnDisabled]}>
               <Ionicons name="lock-closed" size={18} color={AppTheme.text.inverse} />
-              <Text style={styles.btnText}>Aceptá la colecta para salir</Text>
+              <Text style={styles.btnText}>Aceptá la colecta para comenzarla</Text>
             </View>
-          ) : null}
-
-          {canStart ? (
+          ) : canStart && later ? (
+            <View style={[styles.btn, styles.btnBig, styles.btnDisabled]}>
+              <Ionicons name="lock-closed" size={18} color={AppTheme.text.inverse} />
+              <Text style={styles.btnText}>Se comienza {day}</Text>
+            </View>
+          ) : canStart ? (
             <Pressable onPress={onStart} disabled={busy} style={[styles.btn, styles.btnBig, busy && styles.btnDisabled]}>
               <Ionicons name="play" size={18} color={AppTheme.text.inverse} />
-              <Text style={styles.btnText}>Salir a la calle</Text>
+              <Text style={styles.btnText}>{isPickup ? "Comenzar colecta" : "Salir a la calle"}</Text>
             </Pressable>
           ) : null}
 
@@ -200,12 +219,18 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
   const [notes, setNotes] = useState("");
   const isPickup = stop.type === "PICKUP";
   const closed = stop.status === "DONE" || stop.status === "SKIPPED";
+  // Marcar envíos como colectados: en una colecta (PICKUP) eso se hace en
+  // LightData durante este MVP; el retiro de un Turbo se sigue marcando acá.
+  const collectsHere = isPickup && (routeType !== "PICKUP" || LYNX_COLLECT_ENABLED);
+  const directions = isPickup
+    ? directionsUrl({ latitude: stop.latitude_snapshot, longitude: stop.longitude_snapshot, address: stop.store_address })
+    : null;
 
   useEffect(() => {
-    if (open && isPickup && stop.status === "ARRIVED") {
+    if (open && collectsHere && stop.status === "ARRIVED") {
       fetchPendingAtStore(routeId, stop.id).then(setPending).catch(() => setPending([]));
     }
-  }, [open, isPickup, stop.status, stop.id, routeId, stop.collected_count]);
+  }, [open, collectsHere, stop.status, stop.id, routeId, stop.collected_count]);
 
   const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value, notes || undefined));
   // Entregado / No entregado abren el cierre con la declaración del Baúl.
@@ -232,15 +257,19 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
       <Pressable onPress={onToggle} style={styles.stopHead}>
         <View style={styles.seq}><Text style={styles.seqText}>{stop.sequence}</Text></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.stopTitle}>{isPickup ? `Retiro · ${stop.store_name ?? `tienda ${stop.store_id}`}` : `Entrega · ${stop.receiver_name ?? stop.address ?? "destino"}`}</Text>
+          <Text style={styles.stopTitle}>{isPickup ? `Retiro · ${stop.store_name ?? stop.warehouse_name ?? `tienda ${stop.store_id}`}` : `Entrega · ${stop.receiver_name ?? stop.address ?? "destino"}`}</Text>
           <Text style={styles.stopMeta}>
             {isPickup ? (stop.store_address ?? "") : `${stop.address ?? ""}${stop.postal_code ? ` · CP ${stop.postal_code}` : ""}`}
           </Text>
+          {isPickup && stop.cutoff_snapshot ? (
+            <View style={styles.cutoffRow}>
+              <Ionicons name="time-outline" size={14} color={AppTheme.text.accent} />
+              <Text style={styles.cutoffText}>Corte de la tienda: {stop.cutoff_snapshot.slice(0, 5)}</Text>
+            </View>
+          ) : null}
           <Text style={styles.stopMeta}>
             {STOP_STATUS_LABEL[stop.status]}
-            {stop.arrived_at ? ` · llegaste ${time(stop.arrived_at)}` : ""}
-            {isPickup && stop.cutoff_snapshot ? ` · corte ${stop.cutoff_snapshot.slice(0, 5)}` : ""}
-            {isPickup ? ` · ${stop.collected_count ?? 0} colectados` : ` · ${stop.deliveries.length} envíos`}
+            {isPickup ? (stop.collected_count ? ` · ${stop.collected_count} colectados en Lynx` : "") : ` · ${stop.deliveries.length} envíos`}
           </Text>
         </View>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={AppTheme.text.muted} />
@@ -252,7 +281,7 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
             <View key={d.delivery_id} style={styles.deliveryRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.deliveryTitle}>{d.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(d.tracking ?? d.delivery_id)}</Text></Text>
-                <Text style={styles.stopMeta}>{OPS_LABEL[d.ops_status] ?? d.ops_status}{d.outcome ? ` · ${d.outcome === "DELIVERED" ? "entregado" : "no entregado"} ${time(d.outcome_at) ?? ""}` : ""}</Text>
+                <Text style={styles.stopMeta}>{OPS_LABEL[d.ops_status] ?? d.ops_status}{d.outcome ? ` · ${d.outcome === "DELIVERED" ? "entregado" : "no entregado"}` : ""}</Text>
               </View>
               {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !d.outcome ? (
                 <View style={styles.row}>
@@ -273,7 +302,29 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
             </View>
           ))}
 
-          {isPickup && stop.status === "ARRIVED" ? (
+          {directions ? (
+            <Pressable onPress={() => Linking.openURL(directions).catch(() => Alert.alert("Cómo llegar", "No se pudo abrir Google Maps."))} style={[styles.btnSmall, styles.btnGhost, styles.rowBtn]}>
+              <Ionicons name="navigate-outline" size={16} color={AppTheme.text.primary} />
+              <Text style={styles.btnGhostText}>Cómo llegar</Text>
+            </Pressable>
+          ) : null}
+
+          {isPickup && !collectsHere && stop.status === "ARRIVED" ? (
+            <>
+              <Pressable onPress={showCollectInLightData} style={[styles.btnSmall, styles.rowBtn]}>
+                <Ionicons name="qr-code-outline" size={16} color={AppTheme.text.inverse} />
+                <Text style={styles.btnText}>Escanear paquetes</Text>
+              </Pressable>
+              {stop.deliveries.length ? <Text style={styles.stopMeta}>Colectados en Lynx en esta parada: {stop.deliveries.map((d) => String(d.tracking ?? d.delivery_id)).join(", ")}</Text> : null}
+              {!stop.store_ready_at ? (
+                <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "store-ready"))} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}>
+                  <Text style={styles.btnGhostText}>La tienda tenía todo listo</Text>
+                </Pressable>
+              ) : <Text style={styles.stopMeta}>La tienda tenía todo listo.</Text>}
+            </>
+          ) : null}
+
+          {collectsHere && stop.status === "ARRIVED" ? (
             <>
               <Text style={styles.panelText}>Envíos de la tienda pendientes de retiro. Marcá cada bulto que te entregan.</Text>
               {pending === null ? <ActivityIndicator color={AppTheme.text.accent} /> : pending.filter((p) => !collectedIds.has(p.delivery_id)).length === 0 ? (
@@ -292,7 +343,7 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
                 <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "store-ready"))} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}>
                   <Text style={styles.btnGhostText}>La tienda tenía todo listo</Text>
                 </Pressable>
-              ) : <Text style={styles.stopMeta}>Tienda lista a las {time(stop.store_ready_at)}</Text>}
+              ) : <Text style={styles.stopMeta}>La tienda tenía todo listo.</Text>}
             </>
           ) : null}
 
@@ -352,6 +403,9 @@ const styles = StyleSheet.create({
   btnBig: { minHeight: 52, marginVertical: 4 },
   btnSmall: { backgroundColor: AppTheme.colors.primary, borderRadius: AppTheme.radius.md, paddingHorizontal: 12, minHeight: 38, justifyContent: "center" },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: AppTheme.borders.default },
+  rowBtn: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6 },
+  cutoffRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  cutoffText: { color: AppTheme.text.accent, fontSize: 12, fontWeight: "600" },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: AppTheme.text.inverse, fontWeight: "700" },
   btnGhostText: { color: AppTheme.text.primary, fontWeight: "600" },

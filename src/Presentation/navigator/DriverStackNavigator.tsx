@@ -13,6 +13,7 @@ import { useOnboarding } from "../onboarding/OnboardingContext";
 import DriverScanScreen from "../views/driver/scan/DriverScanScreen";
 import DriverScanOptionsScreen from "../views/driver/scan/DriverScanOptionsScreen";
 import RoutesScreen from "../views/driver/routes/RoutesScreen";
+import CollectionsScreen from "../views/driver/routes/CollectionsScreen";
 import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
 import TurboOffersScreen from "../views/driver/turbo/TurboOffersScreen";
 
@@ -27,8 +28,12 @@ export type DriverStackParamList = {
   DriverHomeScreen: undefined;
   DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
+  // Recorridos de reparto, Turbo y ofertas (se entra desde Envíos).
   RoutesScreen: undefined;
-  RouteDetailScreen: { routeId: number };
+  // Colectas (PICKUP): pestaña de la barra.
+  CollectionsScreen: undefined;
+  // name: el de la colecta, cuando se conoce (el detalle no lo trae).
+  RouteDetailScreen: { routeId: number; name?: string };
   TurboOffersScreen: undefined;
 };
 
@@ -62,6 +67,7 @@ export const DriverStackNavigator = () => {
           />
           <Stack.Screen name="DriverScanScreen" component={DriverScanScreen} />
           <Stack.Screen name="RoutesScreen" component={RoutesScreen} />
+          <Stack.Screen name="CollectionsScreen" component={CollectionsScreen} />
           <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
           <Stack.Screen name="TurboOffersScreen" component={TurboOffersScreen} />
         </>

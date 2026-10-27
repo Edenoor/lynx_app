@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/routes/pickupConfirmation.ts src/Presentation/views/driver/routes/pickupConfirmation.test.ts
 //   node /tmp/pickup/pickupConfirmation.test.js
 
-import { awaitsPickupAnswer, canStartRoute, needsAnswer, pickupAnswer } from "./pickupConfirmation";
+import { awaitsPickupAnswer, canStartRoute, needsAnswer, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from "./pickupConfirmation";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -32,6 +32,15 @@ eq("turbo asignado sale sin aceptar", canStartRoute(r({ type: "TURBO" })), true)
 eq("reparto asignado no sale (falta la carga)", canStartRoute(r({ type: "DELIVERY" })), false);
 eq("reparto cargado sale", canStartRoute(r({ type: "DELIVERY", status: "LOADED" })), true);
 eq("en curso no vuelve a salir", canStartRoute(r({ status: "IN_PROGRESS", driver_confirmation: "ACCEPTED" })), false);
+
+// Fecha: la de mañana se ve hoy pero se comienza ese día
+eq("colecta de mañana: se comienza mañana", startsLater({ scheduled_date: "2026-10-27" }, "2026-10-26"), true);
+eq("colecta de hoy", startsLater({ scheduled_date: "2026-10-26" }, "2026-10-26"), false);
+eq("colecta de ayer (vencida): no se bloquea por fecha", startsLater({ scheduled_date: "2026-10-25" }, "2026-10-26"), false);
+eq("sin fecha", startsLater({ scheduled_date: null }, "2026-10-26"), false);
+
+// Estados que ve el chofer
+eq("etiquetas", Object.values(PICKUP_ANSWER_LABEL), ["Pendiente de confirmación", "Aceptada", "Rechazada"]);
 
 // Lo de mañana que pide respuesta
 eq("ronda fija sin aceptar (como antes)", needsAnswer(r({ type: "DELIVERY", status: "ASSIGNED", template_id: 3, confirmation_state: "PENDING" })), true);

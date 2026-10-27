@@ -37,6 +37,8 @@ import {
 } from "./acceptApi";
 
 import AppTheme from "../../../theme/AppTheme";
+import { confirmationNoticeText } from "../routes/collectionLabels";
+import { todayIso } from "../routes/routesApi";
 import {
   DriverBottomNavigation,
   DriverTabKey,
@@ -343,25 +345,33 @@ export const DriverScreen = ({ navigation }: Props) => {
           // Avisos de recorridos: al tocar la notificación se abre lo que
           // corresponde; con la app abierta solo se avisa, sin cambiarle la
           // pantalla en medio de un escaneo o una entrega.
-          onRouteNotice: ({ kind, routeId, source }) => {
+          onRouteNotice: ({ kind, routeId, source, raw }) => {
             const nav = navigation as any;
-            const openRoute = () => (routeId ? nav.navigate("RouteDetailScreen", { routeId }) : nav.navigate("RoutesScreen"));
-            const openRoutes = () => nav.navigate("RoutesScreen");
-            // Quitada: el detalle ya no es suyo (403). Ofrecido: se contesta en Rutas.
-            const open = kind === "PICKUP_REASSIGNED" || kind === "ROUTE_OFFER" ? openRoutes : openRoute;
+            const isCollection = kind === "PICKUP_ASSIGNED" || kind === "PICKUP_REASSIGNED" || kind === "ROUTE_CONFIRMATION";
+            // Sin routeId, o una colecta quitada (el detalle ya no es suyo:
+            // 403), se abre la lista. Un recorrido ofrecido se contesta en
+            // Recorridos de reparto. El detalle consulta el estado vigente.
+            const openList = () => nav.navigate(isCollection ? "CollectionsScreen" : "RoutesScreen");
+            const open =
+              kind === "PICKUP_REASSIGNED" || kind === "ROUTE_OFFER" || !routeId
+                ? openList
+                : () => nav.navigate("RouteDetailScreen", { routeId, name: raw?.template_name ? String(raw.template_name) : undefined });
             if (source === "response") {
               open();
               return;
             }
-            if (kind === "PICKUP_ASSIGNED" || kind === "ROUTE_OFFER") {
+            if (kind === "PICKUP_ASSIGNED" || kind === "ROUTE_CONFIRMATION" || kind === "ROUTE_OFFER") {
+              const confirmation = kind === "ROUTE_CONFIRMATION" ? confirmationNoticeText(raw, todayIso()) : null;
               Alert.alert(
-                kind === "PICKUP_ASSIGNED" ? "Colecta asignada" : "Recorrido ofrecido",
+                kind === "PICKUP_ASSIGNED" ? "Colecta asignada" : kind === "ROUTE_CONFIRMATION" ? "Confirmación de colecta" : "Recorrido ofrecido",
                 kind === "PICKUP_ASSIGNED"
                   ? `Se te asignó la colecta${routeId ? ` #${routeId}` : ""}. Confirmá si podés hacerla.`
-                  : "Contestá desde Rutas antes de que venza.",
+                  : confirmation
+                  ? `${confirmation.title}. ${confirmation.body}`
+                  : "Contestá desde Envíos › Recorridos de reparto antes de que venza.",
                 [
                   { text: "Ahora no", style: "cancel" },
-                  { text: kind === "PICKUP_ASSIGNED" ? "Ver colecta" : "Ver en Rutas", onPress: open },
+                  { text: kind === "ROUTE_OFFER" ? "Ver ofertas" : "Ver colecta", onPress: open },
                 ],
               );
             }
@@ -570,11 +580,6 @@ export const DriverScreen = ({ navigation }: Props) => {
 
     if (tab === "activity") {
       navigation.navigate("NotificationsScreen");
-      return;
-    }
-
-    if (tab === "profile") {
-      navigation.navigate("DriverAccountScreen");
     }
   };
 
@@ -639,12 +644,22 @@ export const DriverScreen = ({ navigation }: Props) => {
             </Text>
           </Pressable>
         ) : null}
-        <View style={styles.hero}>
-          <Text style={styles.kicker}>LYNX DRIVER</Text>
-          <Text style={styles.title}>Hola {driverDisplayName}</Text>
-          <Text style={styles.subtitle}>
-            Todo listo para operar tus envíos.
-          </Text>
+        <View style={styles.heroRow}>
+          <View style={styles.hero}>
+            <Text style={styles.kicker}>LYNX DRIVER</Text>
+            <Text style={styles.title}>Hola {driverDisplayName}</Text>
+            <Text style={styles.subtitle}>
+              Todo listo para operar tus envíos.
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => navigation.navigate("DriverAccountScreen")}
+            style={styles.profileButton}
+            hitSlop={8}
+            accessibilityLabel="Perfil"
+          >
+            <Ionicons name="person-outline" size={22} color={AppTheme.text.primary} />
+          </Pressable>
         </View>
 
         <View style={styles.bottomCards}>
@@ -846,8 +861,26 @@ const styles = StyleSheet.create({
     paddingBottom: 108,
   },
 
-  hero: {
+  heroRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: AppTheme.spacing.sm,
+  },
+
+  hero: {
+    flex: 1,
+    gap: AppTheme.spacing.sm,
+  },
+
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: AppTheme.surfaces.card,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.default,
   },
 
   kicker: {

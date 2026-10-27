@@ -181,8 +181,8 @@ export function attachNotificationListeners({
   }) => void;
   // Un turbo ofrecido: se llama tanto al llegar como al tocar la notificación.
   onTurboOffer?: (payload: { routeId: number | null; source: "received" | "response"; raw?: any }) => void;
-  // Avisos de recorridos (colecta asignada o quitada, cambios, recorrido
-  // ofrecido): al llegar y al tocar la notificación.
+  // Avisos de recorridos (colecta asignada, quitada o por confirmar, cambios,
+  // recorrido ofrecido): al llegar y al tocar la notificación.
   onRouteNotice?: (payload: { kind: RouteNoticeKind; routeId: number | null; source: "received" | "response"; raw?: any }) => void;
   onAny?: (payload: {
     kind: NotiKind;
@@ -214,7 +214,7 @@ export function attachNotificationListeners({
           : kind === "ASSIGNMENT_REJECTED"
           ? "Asignación rechazada"
           : kind === "ROUTE_CONFIRMATION"
-          ? "Ronda de mañana"
+          ? "Confirmación de colecta"
           : kind === "TURBO_OFFER"
           ? "Turbo disponible"
           : kind === "PICKUP_ASSIGNED"

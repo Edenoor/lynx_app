@@ -380,11 +380,6 @@ export const EnviosScreen = ({ navigation }: any) => {
 
       if (tabKey === "activity") {
         navigation.navigate("NotificationsScreen");
-        return;
-      }
-
-      if (tabKey === "profile") {
-        navigation.navigate("DriverAccountScreen");
       }
     },
     [navigation]
@@ -504,6 +499,17 @@ export const EnviosScreen = ({ navigation }: any) => {
             </Pressable>
           </View>
         </View>
+
+        {/* Recorridos de reparto, Turbo y recorridos ofrecidos (las colectas
+            están en su pestaña). */}
+        <Pressable
+          style={styles.routesLink}
+          onPress={() => navigation.navigate("RoutesScreen")}
+        >
+          <Ionicons name="map-outline" size={18} color={AppTheme.text.accent} />
+          <Text style={styles.routesLinkText}>Recorridos de reparto, Turbo y ofertas</Text>
+          <Ionicons name="chevron-forward" size={18} color={AppTheme.text.muted} />
+        </Pressable>
 
         <View style={styles.segmented}>
           <SegmentButton
@@ -916,6 +922,26 @@ const styles = StyleSheet.create({
 
   iconButtonDisabled: {
     opacity: 0.58,
+  },
+
+  routesLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: AppTheme.spacing.sm,
+    paddingHorizontal: AppTheme.spacing.md,
+    paddingVertical: 10,
+    borderRadius: AppTheme.radius.lg,
+    backgroundColor: AppTheme.surfaces.muted,
+    borderWidth: 1,
+    borderColor: AppTheme.borders.soft,
+    marginBottom: AppTheme.spacing.md,
+  },
+
+  routesLinkText: {
+    flex: 1,
+    color: AppTheme.text.primary,
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   segmented: {

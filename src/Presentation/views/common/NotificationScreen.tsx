@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNotifications, Noti } from "../../context/NotificationContext";
 import AppTheme from "../../theme/AppTheme";
 import { routeIdOf } from "../../config/pushKind";
+import { fetchRoute, RouteDetail, STATUS_LABEL, todayIso, TYPE_LABEL } from "../driver/routes/routesApi";
+import { PICKUP_ANSWER_LABEL, pickupAnswer } from "../driver/routes/pickupConfirmation";
+import { capitalize, COLLECTION_STATUS_LABEL, collectionName, confirmationNoticeText, executionDayLabel } from "../driver/routes/collectionLabels";
+import { errorMessage } from "../driver/errorMessage";
 import {
   DriverBottomNavigation,
   DriverTabKey,
@@ -31,7 +35,7 @@ const kindLabel: Record<Noti["kind"], string> = {
   DRIVER_ASIGNADO: "Driver asignado",
   ASSIGNMENT_ACCEPTED: "Aceptada",
   ASSIGNMENT_REJECTED: "Rechazada",
-  ROUTE_CONFIRMATION: "Ronda de mañana",
+  ROUTE_CONFIRMATION: "Confirmación de colecta",
   TURBO_OFFER: "Turbo",
   PICKUP_ASSIGNED: "Colecta asignada",
   PICKUP_REASSIGNED: "Colecta quitada",
@@ -158,6 +162,16 @@ const getVisualLabel = (item: Noti) => {
   return kindLabel[item.kind] ?? "Notificación";
 };
 
+// El aviso de confirmación de colecta llega con «Ronda … hoy/mañana»: se
+// muestra rearmado con la fecha de la colecta, calculado al verlo.
+const displayText = (item: Noti) =>
+  item.kind === "ROUTE_CONFIRMATION" ? confirmationNoticeText(item.data, todayIso()) : { title: item.title, body: item.body };
+
+// Avisos de un recorrido puntual: al abrirlos se consulta cómo está ahora,
+// en vez de confiar en lo que decía el push.
+const LIVE_ROUTE_KINDS: Noti["kind"][] = ["PICKUP_ASSIGNED", "ROUTE_CONFIRMATION", "ROUTE_UPDATED"];
+type LiveRoute = { loading: true } | { route: RouteDetail } | { error: string };
+
 const DetailRow = ({ label, value }: { label: string; value?: string }) => {
   if (!value) return null;
 
@@ -207,12 +221,12 @@ const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
         </View>
 
         <Text style={styles.itemTitle} numberOfLines={1}>
-          {item.title}
+          {displayText(item).title}
         </Text>
 
-        {!!item.body && (
+        {!!displayText(item).body && (
           <Text style={styles.itemBody} numberOfLines={2}>
-            {item.body}
+            {displayText(item).body}
           </Text>
         )}
 
@@ -232,6 +246,39 @@ const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { items, markRead, markAllRead, remove, clear } = useNotifications();
   const [selected, setSelected] = useState<Noti | null>(null);
+  const [live, setLive] = useState<LiveRoute | null>(null);
+
+  const selectedRouteId = selected && LIVE_ROUTE_KINDS.includes(selected.kind) ? routeIdOf(selected.data) : null;
+  useEffect(() => {
+    if (!selectedRouteId) { setLive(null); return; }
+    let cancelled = false;
+    setLive({ loading: true });
+    fetchRoute(selectedRouteId)
+      .then((route) => { if (!cancelled) setLive({ route }); })
+      .catch((e) => { if (!cancelled) setLive({ error: errorMessage(e, "No se pudo consultar") }); });
+    return () => { cancelled = true; };
+  }, [selectedRouteId, selected?.id]);
+
+  const liveRoute = live && "route" in live ? live.route : null;
+  const liveAnswer = liveRoute ? pickupAnswer(liveRoute) : null;
+  const liveName = selected?.data?.template_name
+    ? String(selected.data.template_name)
+    : liveRoute ? (liveRoute.type === "PICKUP" ? collectionName(liveRoute) : `${TYPE_LABEL[liveRoute.type]} #${liveRoute.id}`) : "";
+  const liveState = !live ? "" : "loading" in live ? "Consultando…" : "error" in live
+    ? `No disponible (${live.error})`
+    : (liveRoute!.type === "PICKUP" ? COLLECTION_STATUS_LABEL[liveRoute!.status] : STATUS_LABEL[liveRoute!.status]) ?? liveRoute!.status;
+  const openRoute = (fallback: "CollectionsScreen" | "RoutesScreen") => {
+    const routeId = selected ? routeIdOf(selected.data) : null;
+    if (selected) markRead(selected.id);
+    setSelected(null);
+    if (routeId) (navigation as any).navigate("RouteDetailScreen", { routeId, name: liveName || undefined });
+    else (navigation as any).navigate(fallback);
+  };
+  const openList = (screen: "CollectionsScreen" | "RoutesScreen") => {
+    if (selected) markRead(selected.id);
+    setSelected(null);
+    (navigation as any).navigate(screen);
+  };
 
   const data = useMemo(
     () => [...items].sort((a, b) => b.createdAt - a.createdAt),
@@ -293,7 +340,6 @@ const NotificationsScreen: React.FC = () => {
 
   const selectedType = selected
     ? pickDataValue(selected.data, [
-        "type",
         "delivery_type",
         "deliveryType",
         "metodo_envio",
@@ -319,11 +365,6 @@ const NotificationsScreen: React.FC = () => {
 
       if (tab === "scan") {
         navigation.navigate("DriverScanOptionsScreen");
-        return;
-      }
-
-      if (tab === "profile") {
-        navigation.navigate("DriverAccountScreen");
       }
     },
     [navigation]
@@ -438,15 +479,24 @@ const NotificationsScreen: React.FC = () => {
                 {selectedStatus}
               </Text>
 
-              <Text style={styles.modalTitle}>{selected?.title}</Text>
+              <Text style={styles.modalTitle}>{selected ? displayText(selected).title : ""}</Text>
 
-              {!!selected?.body && (
-                <Text style={styles.modalBody}>{selected.body}</Text>
+              {!!selected && !!displayText(selected).body && (
+                <Text style={styles.modalBody}>{displayText(selected).body}</Text>
               )}
             </View>
 
             <View style={styles.detailBox}>
-              <DetailRow label="Estado" value={selectedStatus} />
+              {live ? (
+                <>
+                  <DetailRow label={liveRoute && liveRoute.type !== "PICKUP" ? "Recorrido" : "Colecta"} value={liveName} />
+                  <DetailRow label="Día" value={liveRoute ? capitalize(executionDayLabel(liveRoute.scheduled_date, todayIso())) : ""} />
+                  <DetailRow label="Estado actual" value={liveState} />
+                  <DetailRow label="Confirmación" value={liveAnswer ? PICKUP_ANSWER_LABEL[liveAnswer] : ""} />
+                </>
+              ) : (
+                <DetailRow label="Estado" value={selectedStatus} />
+              )}
               <DetailRow label="Tracking" value={selectedTracking} />
               <DetailRow label="Tienda / Seller" value={selectedStore} />
               <DetailRow label="Tipo" value={selectedType} />
@@ -471,42 +521,24 @@ const NotificationsScreen: React.FC = () => {
                   <Text style={styles.btnTxtPrimary}>Ver ofertas</Text>
                 </Pressable>
               )}
-              {selected?.kind === "ROUTE_CONFIRMATION" && (
-                <Pressable
-                  style={[styles.btn, styles.btnPrimary]}
-                  onPress={() => {
-                    markRead(selected.id);
-                    setSelected(null);
-                    (navigation as any).navigate("RoutesScreen");
-                  }}
-                >
-                  <Text style={styles.btnTxtPrimary}>Contestar en Rutas</Text>
+              {(selected?.kind === "PICKUP_ASSIGNED" || selected?.kind === "ROUTE_CONFIRMATION") && (
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openRoute("CollectionsScreen")}>
+                  <Text style={styles.btnTxtPrimary}>Ver colecta</Text>
                 </Pressable>
               )}
-              {(selected?.kind === "PICKUP_ASSIGNED" || selected?.kind === "ROUTE_UPDATED") && (
-                <Pressable
-                  style={[styles.btn, styles.btnPrimary]}
-                  onPress={() => {
-                    const routeId = routeIdOf(selected.data);
-                    markRead(selected.id);
-                    setSelected(null);
-                    if (routeId) (navigation as any).navigate("RouteDetailScreen", { routeId });
-                    else (navigation as any).navigate("RoutesScreen");
-                  }}
-                >
+              {selected?.kind === "ROUTE_UPDATED" && (
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openRoute("RoutesScreen")}>
                   <Text style={styles.btnTxtPrimary}>Ver recorrido</Text>
                 </Pressable>
               )}
-              {(selected?.kind === "ROUTE_OFFER" || selected?.kind === "PICKUP_REASSIGNED") && (
-                <Pressable
-                  style={[styles.btn, styles.btnPrimary]}
-                  onPress={() => {
-                    markRead(selected.id);
-                    setSelected(null);
-                    (navigation as any).navigate("RoutesScreen");
-                  }}
-                >
-                  <Text style={styles.btnTxtPrimary}>{selected.kind === "ROUTE_OFFER" ? "Contestar en Rutas" : "Ver Rutas"}</Text>
+              {selected?.kind === "PICKUP_REASSIGNED" && (
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openList("CollectionsScreen")}>
+                  <Text style={styles.btnTxtPrimary}>Ver colectas</Text>
+                </Pressable>
+              )}
+              {selected?.kind === "ROUTE_OFFER" && (
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openList("RoutesScreen")}>
+                  <Text style={styles.btnTxtPrimary}>Ver ofertas</Text>
                 </Pressable>
               )}
               {!!selected && (

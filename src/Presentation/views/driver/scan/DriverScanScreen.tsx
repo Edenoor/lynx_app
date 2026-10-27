@@ -305,8 +305,7 @@ export default function DriverScanScreen({
 
         if (
           tab ===
-            "deliveries" ||
-          tab === "activity"
+          "deliveries"
         ) {
           navigation.navigate(
             "EnviosScreen"
@@ -316,10 +315,10 @@ export default function DriverScanScreen({
         }
 
         if (
-          tab === "profile"
+          tab === "activity"
         ) {
           navigation.navigate(
-            "DriverAccountScreen"
+            "NotificationsScreen"
           );
         }
       },

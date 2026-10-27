@@ -1,5 +1,7 @@
 // src/Presentation/views/driver/routes/RoutesScreen.tsx
-// Recorridos del chofer para una fecha (hoy por defecto).
+// Recorridos de reparto y Turbo del chofer para una fecha (hoy por defecto),
+// con los Turbo y los recorridos que le ofrecieron. Se entra desde Envíos; las
+// colectas tienen su pantalla (CollectionsScreen).
 
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
@@ -9,7 +11,11 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppTheme from "../../../theme/AppTheme";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
-import { fetchMyRoutes, respondConfirmation, RouteSummary, STATUS_LABEL, todayIso, tomorrowIso, TYPE_LABEL } from "./routesApi";
+import {
+  acceptRouteOffer, declineRouteOffer, fetchMyRoutes, fetchRouteOffers, RouteOffer, RouteSummary, STATUS_LABEL,
+  todayIso, TYPE_LABEL,
+} from "./routesApi";
+import { errorMessage } from "../errorMessage";
 import { fetchMyOffers } from "../turbo/turboApi";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
@@ -26,27 +32,31 @@ export default function RoutesScreen({ navigation }: Props) {
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Las rondas de mañana que esperan respuesta: el aviso llega de noche y se
-  // contesta acá (también sirve si la notificación se perdió).
-  const [porConfirmar, setPorConfirmar] = useState<RouteSummary[]>([]);
   const [respondiendo, setRespondiendo] = useState<number | null>(null);
   // Turbos ofrecidos y todavía sin respuesta: el push puede perderse, el banner no.
   const [ofertas, setOfertas] = useState(0);
+  // Recorridos que ofreció el coordinador (no Turbo): se aceptan o rechazan acá.
+  const [ofrecidos, setOfrecidos] = useState<RouteOffer[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      setRoutes(await fetchMyRoutes(date));
-      const manana = await fetchMyRoutes(tomorrowIso()).catch(() => [] as RouteSummary[]);
-      setPorConfirmar(manana.filter((r) => r.template_id && r.confirmation_state && r.confirmation_state !== "ACCEPTED"));
-      setOfertas((await fetchMyOffers().catch(() => [])).length);
+      const [mine, turbos, offered] = await Promise.all([
+        fetchMyRoutes(date),
+        fetchMyOffers().catch(() => []),
+        fetchRouteOffers().catch(() => [] as RouteOffer[]),
+      ]);
+      setRoutes(mine.filter((r) => r.type !== "PICKUP"));
+      setOfertas(turbos.length);
+      setOfrecidos(offered);
     } catch (e: any) { setError(e?.message ?? "No se pudieron cargar los recorridos"); } finally { setLoading(false); }
   }, [date]);
 
-  const responder = async (r: RouteSummary, response: "ACCEPTED" | "DECLINED") => {
-    setRespondiendo(r.id);
-    try { await respondConfirmation(r.id, response); await load(); } catch (e: any) { setError(e?.message ?? "No se pudo enviar la respuesta"); } finally { setRespondiendo(null); }
+  const responderOferta = async (o: RouteOffer, accept: boolean) => {
+    setRespondiendo(o.route_id);
+    try { await (accept ? acceptRouteOffer : declineRouteOffer)(o.route_id); await load(); }
+    catch (e: any) { setError(errorMessage(e, "No se pudo enviar la respuesta")); await load(); }
+    finally { setRespondiendo(null); }
   };
 
   useEffect(() => { load(); }, [load]);
@@ -58,7 +68,6 @@ export default function RoutesScreen({ navigation }: Props) {
       case "deliveries": navigation.navigate("EnviosScreen"); break;
       case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
       case "activity": navigation.navigate("NotificationsScreen"); break;
-      case "profile": navigation.navigate("DriverAccountScreen"); break;
       default: break;
     }
   };
@@ -68,7 +77,10 @@ export default function RoutesScreen({ navigation }: Props) {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.page}>
           <View style={styles.header}>
-            <Text style={styles.eyebrow}>Recorridos</Text>
+            <View style={styles.headerTop}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
+              <Text style={styles.eyebrow}>Recorridos de reparto</Text>
+            </View>
             <View style={styles.dateRow}>
               <Pressable onPress={() => setDate(shiftDate(date, -1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-back" size={22} color={AppTheme.text.primary} /></Pressable>
               <Text style={styles.title}>{prettyDate(date)}</Text>
@@ -92,19 +104,19 @@ export default function RoutesScreen({ navigation }: Props) {
             </Pressable>
           ) : null}
 
-          {porConfirmar.length ? (
+          {ofrecidos.length ? (
             <View style={styles.confirmBox}>
-              <Text style={styles.confirmTitle}>Mañana tenés {porConfirmar.length === 1 ? "una ronda" : `${porConfirmar.length} rondas`}. ¿Podés hacerla?</Text>
-              {porConfirmar.map((r) => (
-                <View key={r.id} style={styles.confirmRow}>
+              <Text style={styles.confirmTitle}>Te {ofrecidos.length === 1 ? "ofrecieron un recorrido" : `ofrecieron ${ofrecidos.length} recorridos`}</Text>
+              {ofrecidos.map((o) => (
+                <View key={o.route_id} style={styles.confirmRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.confirmName}>{r.template_name ?? `Colecta #${r.id}`} · {r.departure_time?.slice(0, 5)}</Text>
-                    <Text style={styles.cardMeta}>{r.stops_count} {r.stops_count === 1 ? "tienda" : "tiendas"}{r.confirmation_state === "DECLINED" ? " · dijiste que no" : ""}</Text>
+                    <Text style={styles.confirmName}>Recorrido #{o.route_id} · {o.deliveries} {o.deliveries === 1 ? "envío" : "envíos"}</Text>
+                    <Text style={styles.cardMeta} numberOfLines={2}>
+                      {[o.first_addresses?.filter(Boolean).join(" · "), `vence ${new Date(o.expires_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`].filter(Boolean).join(" — ")}
+                    </Text>
                   </View>
-                  <Pressable style={[styles.confirmBtn, styles.confirmYes]} disabled={respondiendo === r.id} onPress={() => responder(r, "ACCEPTED")}><Text style={styles.confirmBtnText}>Sí</Text></Pressable>
-                  {r.confirmation_state !== "DECLINED" ? (
-                    <Pressable style={[styles.confirmBtn, styles.confirmNo]} disabled={respondiendo === r.id} onPress={() => responder(r, "DECLINED")}><Text style={styles.confirmBtnText}>No</Text></Pressable>
-                  ) : null}
+                  <Pressable style={[styles.confirmBtn, styles.confirmYes]} disabled={respondiendo === o.route_id} onPress={() => responderOferta(o, true)}><Text style={styles.confirmBtnText}>Aceptar</Text></Pressable>
+                  <Pressable style={[styles.confirmBtn, styles.confirmNo]} disabled={respondiendo === o.route_id} onPress={() => responderOferta(o, false)}><Text style={styles.confirmBtnText}>No</Text></Pressable>
                 </View>
               ))}
             </View>
@@ -115,7 +127,7 @@ export default function RoutesScreen({ navigation }: Props) {
             keyExtractor={(r) => String(r.id)}
             refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={AppTheme.text.accent} />}
             ListEmptyComponent={loading ? <ActivityIndicator color={AppTheme.text.accent} style={{ marginTop: 40 }} /> : (
-              <View style={styles.empty}><Ionicons name="map-outline" size={36} color={AppTheme.text.muted} /><Text style={styles.emptyText}>No tenés recorridos asignados para este día.</Text></View>
+              <View style={styles.empty}><Ionicons name="map-outline" size={36} color={AppTheme.text.muted} /><Text style={styles.emptyText}>No tenés recorridos de reparto ni Turbo para este día.</Text></View>
             )}
             renderItem={({ item }) => (
               <Pressable style={styles.card} onPress={() => navigation.navigate("RouteDetailScreen", { routeId: item.id })}>
@@ -125,7 +137,6 @@ export default function RoutesScreen({ navigation }: Props) {
                     <Text style={styles.badgeText}>{STATUS_LABEL[item.status]}</Text>
                   </View>
                 </View>
-                {item.template_name ? <Text style={styles.cardMeta}>Ronda {item.template_name} · sale {item.departure_time?.slice(0, 5)}{item.driver_confirmation === "ACCEPTED" ? " · confirmaste" : item.driver_confirmation === "DECLINED" ? " · dijiste que no podías" : ""}</Text> : null}
                 <Text style={styles.cardMeta}>
                   {item.stops_count} {item.stops_count === 1 ? "parada" : "paradas"} · {item.deliveries_count} {item.deliveries_count === 1 ? "envío" : "envíos"}
                   {item.type === "DELIVERY" && item.load_expected_count !== null ? ` · carga ${item.load_confirmed_count ?? "–"}/${item.load_expected_count}` : ""}
@@ -136,7 +147,7 @@ export default function RoutesScreen({ navigation }: Props) {
             contentContainerStyle={{ paddingBottom: 24 }}
           />
         </View>
-        <DriverBottomNavigation activeTab="routes" onPress={handleTabPress} />
+        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
       </SafeAreaView>
     </ImageBackground>
   );
@@ -148,6 +159,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   page: { flex: 1, paddingHorizontal: AppTheme.layout.screenPadding, paddingTop: AppTheme.spacing.lg, paddingBottom: 112 },
   header: { marginBottom: AppTheme.spacing.lg, paddingTop: AppTheme.spacing.lg, gap: AppTheme.spacing.xs },
+  headerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   eyebrow: { ...AppTheme.typography.kicker },
   dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   dateBtn: { padding: 6 },

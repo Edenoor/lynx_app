@@ -14,6 +14,7 @@ import AppTheme from "../../../theme/AppTheme";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import DriverQrActionGrid from "../../../components/DriverQrActionGrid";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
+import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 
 type Props = NativeStackScreenProps<
   DriverStackParamList,
@@ -33,9 +34,6 @@ export default function DriverScanOptionsScreen({ navigation }: Props) {
         break;
       case "activity":
         navigation.navigate("NotificationsScreen");
-        break;
-      case "profile":
-        navigation.navigate("DriverAccountScreen");
         break;
       default:
         break;
@@ -66,7 +64,9 @@ export default function DriverScanOptionsScreen({ navigation }: Props) {
             <DriverQrActionGrid
               pendingCount={0}
               onCollect={() =>
-                navigation.navigate("DriverScanScreen", { mode: "colecta" })
+                LYNX_COLLECT_ENABLED
+                  ? navigation.navigate("DriverScanScreen", { mode: "colecta" })
+                  : showCollectInLightData()
               }
               onAssign={() =>
                 navigation.navigate("DriverScanScreen", { mode: "asignarme" })

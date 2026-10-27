@@ -2,13 +2,14 @@ import React from "react";
 import { useNavigation } from "@react-navigation/native";
 import { BottomNavigationBar, BottomNavigationItem } from "./BottomNavigationBar";
 
+// Perfil se abre desde Inicio (arriba a la derecha); los recorridos de reparto
+// y las ofertas, desde Envíos.
 export type DriverTabKey =
   | "home"
   | "deliveries"
   | "scan"
-  | "routes"
-  | "activity"
-  | "profile";
+  | "collections"
+  | "activity";
 
 type DriverBottomNavigationProps = {
   activeTab: DriverTabKey;
@@ -33,19 +34,14 @@ const tabs: BottomNavigationItem<DriverTabKey>[] = [
     isPrimary: true,
   },
   {
-    key: "routes",
-    label: "Rutas",
-    icon: "map-outline",
+    key: "collections",
+    label: "Colectas",
+    icon: "storefront-outline",
   },
   {
     key: "activity",
     label: "Alertas",
     icon: "notifications-outline",
-  },
-  {
-    key: "profile",
-    label: "Perfil",
-    icon: "person-outline",
   },
 ];
 
@@ -53,11 +49,11 @@ export function DriverBottomNavigation({
   activeTab,
   onPress,
 }: DriverBottomNavigationProps) {
-  // "Rutas" navega desde acá para no tocar el handler de cada pantalla.
+  // "Colectas" navega desde acá para no tocar el handler de cada pantalla.
   const navigation = useNavigation<any>();
   const handlePress = (tab: DriverTabKey) => {
-    if (tab === "routes") {
-      if (activeTab !== "routes") navigation.navigate("RoutesScreen");
+    if (tab === "collections") {
+      if (activeTab !== "collections") navigation.navigate("CollectionsScreen");
       return;
     }
     onPress(tab);

@@ -87,9 +87,7 @@ export default function TurboOffersScreen({ navigation }: Props) {
       case "home": navigation.navigate("DriverScreen"); break;
       case "deliveries": navigation.navigate("EnviosScreen"); break;
       case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "routes": navigation.navigate("RoutesScreen"); break;
       case "activity": navigation.navigate("NotificationsScreen"); break;
-      case "profile": navigation.navigate("DriverAccountScreen"); break;
       default: break;
     }
   };
@@ -150,7 +148,8 @@ export default function TurboOffersScreen({ navigation }: Props) {
             contentContainerStyle={{ paddingBottom: 24 }}
           />
         </View>
-        <DriverBottomNavigation activeTab="routes" onPress={handleTabPress} />
+        {/* Los Turbo son recorridos de reparto: se llega desde Envíos. */}
+        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
       </SafeAreaView>
     </ImageBackground>
   );
