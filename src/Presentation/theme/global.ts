@@ -109,7 +109,7 @@ export const DARK_COLORS = {
   ...BASE_COLORS,
   mode: "dark" as ThemeMode,
 
-  danger: "#EC5D62",
+  danger: "#EE6C70",
   successText: "#5FA843",
   accent: "#86A4E8",
   // Indicadores de la tarjeta de performance (no son estados operativos).
@@ -202,12 +202,13 @@ export const LIGHT_COLORS = {
   ...BASE_COLORS,
   mode: "light" as ThemeMode,
 
-  success: "#3A7524",
-  warning: "#8A6100",
-  successText: "#3A7524",
-  accent: "#3862B5",
-  highlightGold: "#8A6100",
-  highlightGreen: "#3A7524",
+  // Estados y acento legibles también sobre su tinte en cualquier fondo (≥ 4.5:1).
+  success: "#356A21",
+  warning: "#7C5700",
+  successText: "#356A21",
+  accent: "#355CAA",
+  highlightGold: "#7C5700",
+  highlightGreen: "#356A21",
 
   background: "#F4F6FA",
   backgroundAlt: "#EEF2F8",
@@ -299,12 +300,13 @@ export const MARBLE_DARK_COLORS = {
 export const MARBLE_LIGHT_COLORS = {
   ...LIGHT_COLORS,
 
-  success: "#346A20",
-  warning: "#7D5800",
-  successText: "#346A20",
-  accent: "#2F55A3",
-  highlightGold: "#7D5800",
-  highlightGreen: "#346A20",
+  success: "#2F601D",
+  warning: "#725000",
+  successText: "#2F601D",
+  danger: "#992F32",
+  accent: "#2E53A0",
+  highlightGold: "#725000",
+  highlightGreen: "#2F601D",
 
   background: "#ECEAE6",
   backgroundAlt: "#E7E4DF",

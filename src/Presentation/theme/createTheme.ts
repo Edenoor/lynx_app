@@ -25,8 +25,9 @@ import type { RadiusPreset, VisualStyle } from "./appearance";
 export type ThemeOptions = { scheme: ThemeMode; style?: VisualStyle; radius?: RadiusPreset };
 
 // Estados operativos. Sus colores salen de la paleta del esquema: ni el estilo
-// ni el usuario los cambian.
-export type StatusKey = "delivered" | "pending" | "confirmed" | "incident" | "rejected" | "cancelled" | "inTransit";
+// ni el usuario los cambian. neutral: estados sin carga operativa (asignado,
+// planificado, desconocido), que antes se veían en gris.
+export type StatusKey = "delivered" | "pending" | "confirmed" | "incident" | "rejected" | "cancelled" | "inTransit" | "neutral";
 
 const PALETTES = {
   dark: { classic: DARK_COLORS, minimal: DARK_COLORS, marble: MARBLE_DARK_COLORS },
@@ -122,7 +123,8 @@ function buildTheme(scheme: ThemeMode, style: VisualStyle, radiusPreset: RadiusP
   const separator = { color: minimal ? c.border : c.borderSoft, width: StyleSheet.hairlineWidth };
 
   // Contenedor genérico (paneles) y fila de lista. En Minimal la fila no es
-  // tarjeta: es una franja con separador inferior.
+  // tarjeta: es una franja con separador inferior. El panel no fija el borde
+  // inferior aparte: un borderColor propio (destacado, error) lo cubre entero.
   const cardBorderWidth = minimal ? 0 : 1;
   const cardBorderColor = marble ? c.borderSoft : c.border;
   const card = {
@@ -130,8 +132,6 @@ function buildTheme(scheme: ThemeMode, style: VisualStyle, radiusPreset: RadiusP
     borderRadius: radius.lg,
     borderWidth: cardBorderWidth,
     borderColor: cardBorderColor,
-    borderBottomWidth: cardBorderWidth,
-    borderBottomColor: cardBorderColor,
     ...(marble ? shadows.card : NO_SHADOW),
   };
 
@@ -145,7 +145,7 @@ function buildTheme(scheme: ThemeMode, style: VisualStyle, radiusPreset: RadiusP
         borderBottomColor: separator.color,
         ...NO_SHADOW,
       }
-    : card;
+    : { ...card, borderBottomWidth: cardBorderWidth, borderBottomColor: cardBorderColor };
 
   // text/icon: el color sobre superficies; solid: relleno (botones, contadores).
   const tone = (fg: string, solid: string) => ({
@@ -161,6 +161,7 @@ function buildTheme(scheme: ThemeMode, style: VisualStyle, radiusPreset: RadiusP
   // Relleno rojo profundo de marca: el rojo de texto es claro para fondos oscuros.
   const danger = tone(c.danger, c.red);
   const info = tone(c.accent, c.primary);
+  const neutral = tone(c.textSecondary, c.textMuted);
   const status: Record<StatusKey, ReturnType<typeof tone>> = {
     delivered: success,
     confirmed: success,
@@ -169,6 +170,7 @@ function buildTheme(scheme: ThemeMode, style: VisualStyle, radiusPreset: RadiusP
     rejected: danger,
     cancelled: danger,
     inTransit: info,
+    neutral,
   };
 
   // Marble: títulos un poco menos pesados y menos apretados.

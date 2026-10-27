@@ -100,7 +100,7 @@ const surfacesOf = (t: any): [string, string][] => {
 const worstOver = (fg: string, bgs: [string, string][]) =>
   bgs.reduce((m, [k, bg]) => { const r = contrast(fg, bg); return r < m.r ? { r, k } : m; }, { r: Infinity, k: "" });
 
-const STATUS_KEYS = ["delivered", "pending", "confirmed", "incident", "rejected", "cancelled", "inTransit"];
+const STATUS_KEYS = ["delivered", "pending", "confirmed", "incident", "rejected", "cancelled", "inTransit", "neutral"];
 
 for (const o of COMBOS.filter((c) => c.radius === "balanced")) {
   const t = createTheme(o);
@@ -121,16 +121,17 @@ for (const o of COMBOS.filter((c) => c.radius === "balanced")) {
 
   for (const key of STATUS_KEYS) {
     const tone = t.status[key];
-    const tint: [string, string] = ["su tinte", over(tone.background, over(t.surfaces.cardElevated, t.colors.background))];
-    expect(`estado ${key}`, tone.text, [...bgs, tint], 4.5);
+    // Sobre su propio tinte, puesto en cualquiera de los fondos (en Minimal las filas son transparentes).
+    const tints = bgs.map(([k, bg]) => [`su tinte sobre ${k}`, over(tone.background, bg)] as [string, string]);
+    expect(`estado ${key}`, tone.text, [...bgs, ...tints], 4.5);
     // Rellenos: botón «Aceptar», contador de la barra y avisos.
     const min = 4.5;
     check(`${n}: texto sobre relleno ${key} ≥ ${min}:1`, contrast(tone.onSolid, tone.solid) >= min, contrast(tone.onSolid, tone.solid).toFixed(2));
   }
 
   // Los estados se distinguen: pendiente, positivo, negativo y en camino tienen colores distintos
-  const families = ["pending", "confirmed", "rejected", "inTransit"].map((k) => t.status[k].text);
-  check(`${n}: pendiente, confirmado, rechazado y en camino son distintos`, new Set(families).size === 4);
+  const families = ["pending", "confirmed", "rejected", "inTransit", "neutral"].map((k) => t.status[k].text);
+  check(`${n}: pendiente, confirmado, rechazado, en camino y neutro son distintos`, new Set(families).size === 5);
 }
 
 // Los colores de estado no dependen del estilo ni de los bordes (salvo la paleta Marble clara, más profunda)
@@ -153,6 +154,12 @@ check("Recto < Equilibrado < Redondeado (md y lg)", sq.md < bal.md && bal.md < r
 check("botones (md) nunca pasan la mitad de 44 px", [sq, bal, rnd].every((r) => r.md <= 22));
 check("el preset llega a los tokens de componentes", createTheme({ scheme: "dark", radius: "square" }).card.borderRadius === sq.lg);
 
+// Un panel con borde propio (destacado, error) lo cambia en los cuatro lados
+for (const o of COMBOS) {
+  const card = createTheme(o).card;
+  check(`${nameOf(o)}: el panel no fija el borde inferior aparte`, !("borderBottomColor" in card) && !("borderBottomWidth" in card));
+}
+
 // Estilos: diferencias reales, no solo de color
 for (const scheme of ["dark", "light"]) {
   const classic = createTheme({ scheme, style: "classic" });
@@ -161,7 +168,7 @@ for (const scheme of ["dark", "light"]) {
   check(`${scheme}: Minimal sin sombras`, minimal.shadows.card.elevation === 0 && minimal.shadows.glow.elevation === 0 && minimal.card.elevation === 0);
   check(`${scheme}: Minimal sin contorno de card`, minimal.card.borderWidth === 0 && minimal.borders.medium === "transparent");
   check(`${scheme}: Minimal lista en filas con separador`, minimal.list.gap === 0 && minimal.listItem.borderBottomWidth === minimal.separator.width && minimal.listItem.backgroundColor === "transparent");
-  check(`${scheme}: Classic lista en tarjetas`, classic.list.gap > 0 && JSON.stringify(classic.listItem) === JSON.stringify(classic.card));
+  check(`${scheme}: Classic lista en tarjetas`, classic.list.gap > 0 && JSON.stringify(classic.listItem) === JSON.stringify({ ...classic.card, borderBottomWidth: classic.card.borderWidth, borderBottomColor: classic.card.borderColor }));
   check(`${scheme}: Marble con superficies opacas`, ["card", "cardStrong", "cardElevated"].every((k) => rgb(marble.surfaces[k])[3] === 1));
   check(`${scheme}: Marble con sombra difusa y elevación baja`, marble.card.shadowRadius >= 12 && marble.card.elevation <= 2 && marble.card.shadowOpacity <= 0.3);
   check(`${scheme}: Marble con bordes de bajo contraste`, rgb(marble.borders.medium)[3] < rgb(classic.borders.medium)[3]);

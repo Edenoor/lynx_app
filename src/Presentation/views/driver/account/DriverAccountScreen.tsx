@@ -14,7 +14,9 @@ import {
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import useViewModel from "../landing/ViewModel";
 import {
@@ -74,6 +76,8 @@ const getDriverSelfieSource = (user: any): ImageSourcePropType => {
 
 export default function DriverAccountScreen() {
   const navigation = useNavigation<any>();
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const { user, removeUserSession } = useViewModel();
 
   const [documentsLoading] = useState(false);
@@ -139,6 +143,7 @@ if (tab === "scan") {
   if (!user) {
     return (
       <View style={styles.center}>
+        <ThemedStatusBar />
         <LynxPulseLoader message="Cargando cuenta..." />
       </View>
     );
@@ -146,6 +151,7 @@ if (tab === "scan") {
 
   return (
     <View style={styles.screen}>
+      <ThemedStatusBar />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -224,7 +230,7 @@ if (tab === "scan") {
           <Ionicons
             name="log-out-outline"
             size={18}
-            color={AppTheme.colors.danger}
+            color={theme.status.rejected.icon}
           />
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </Pressable>
@@ -249,6 +255,8 @@ function AccountItem({
   loading?: boolean;
   onPress?: () => void;
 }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Pressable
       style={styles.item}
@@ -259,7 +267,7 @@ function AccountItem({
         {loading ? (
           <LynxPulseLoader compact showLogo={false} message="" />
         ) : (
-          <Ionicons name={icon} size={18} color={AppTheme.colors.primary} />
+          <Ionicons name={icon} size={18} color={theme.text.accent} />
         )}
       </View>
 
@@ -273,75 +281,75 @@ function AccountItem({
       <Ionicons
         name="chevron-forward"
         size={17}
-        color={AppTheme.text.muted}
+        color={theme.text.muted}
       />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   center: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
     alignItems: "center",
     justifyContent: "center",
   },
 
   content: {
-    paddingTop: AppTheme.layout.headerTopPadding,
-    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingTop: t.layout.headerTopPadding,
+    paddingHorizontal: t.layout.screenPadding,
     paddingBottom: 132,
   },
 
   header: {
-    marginBottom: AppTheme.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 42,
     lineHeight: 46,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -1.2,
-    marginTop: AppTheme.spacing.xs,
+    marginTop: t.spacing.xs,
   },
 
   subtitle: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 15,
     lineHeight: 21,
-    fontWeight: AppTheme.font.weight.bold,
-    marginTop: AppTheme.spacing.xs,
+    fontWeight: t.font.weight.bold,
+    marginTop: t.spacing.xs,
   },
 
   profileCard: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    paddingVertical: AppTheme.spacing.sm,
-    paddingHorizontal: AppTheme.spacing.md,
+    borderColor: t.borders.medium,
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
-    marginBottom: AppTheme.spacing.md,
-    ...AppTheme.shadows.card,
+    gap: t.spacing.md,
+    marginBottom: t.spacing.md,
+    ...t.shadows.card,
   },
 
   avatar: {
     width: 50,
     height: 50,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.surfaces.cardStrong,
+    borderRadius: t.radius.full,
+    backgroundColor: t.surfaces.cardStrong,
   },
 
   profileInfo: {
@@ -349,45 +357,45 @@ const styles = StyleSheet.create({
   },
 
   name: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 24,
     lineHeight: 28,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.6,
   },
 
   email: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 13,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     marginTop: 2,
   },
 
   section: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
+    borderColor: t.borders.medium,
     overflow: "hidden",
   },
 
   item: {
     minHeight: 56,
-    paddingHorizontal: AppTheme.spacing.md,
+    paddingHorizontal: t.spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: AppTheme.borders.soft,
+    gap: t.spacing.md,
+    borderBottomWidth: t.separator.width,
+    borderBottomColor: t.separator.color,
   },
 
   itemIcon: {
     width: 34,
     height: 34,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.overlays.primary,
+    backgroundColor: t.overlays.primary,
   },
 
   itemText: {
@@ -395,34 +403,34 @@ const styles = StyleSheet.create({
   },
 
   itemTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 15,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   itemDescription: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 12,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     marginTop: 1,
   },
 
   logoutButton: {
-    marginTop: AppTheme.spacing.md,
+    marginTop: t.spacing.md,
     minHeight: 48,
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: "rgba(239, 68, 68, 0.10)",
+    borderRadius: t.radius.xl,
+    backgroundColor: t.status.rejected.background,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.28)",
+    borderColor: t.status.rejected.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   logoutText: {
-    color: AppTheme.colors.danger,
+    color: t.status.rejected.text,
     fontSize: 15,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 });

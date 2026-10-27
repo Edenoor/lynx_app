@@ -65,7 +65,7 @@ export default function AppearanceScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>CONFIGURACIÓN</Text>
             <Text style={styles.title}>Apariencia</Text>
-            <Text style={styles.subtitle}>Se aplica al instante. Por ahora, en Inicio y Colectas; el resto de la app sigue oscura.</Text>
+            <Text style={styles.subtitle}>Se aplica al instante en Inicio, Colectas, Envíos, Recorridos y Mi cuenta; el resto de la app sigue oscura.</Text>
           </View>
         </View>
 
@@ -120,6 +120,7 @@ export default function AppearanceScreen() {
             <StatusChip status="incident" label="Incidencia" />
             <StatusChip status="rejected" label="Rechazado" />
             <StatusChip status="cancelled" label="Cancelado" />
+            <StatusChip status="neutral" label="Asignado" />
           </View>
           <Separator />
           <View style={styles.buttons}>

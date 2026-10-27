@@ -198,7 +198,7 @@ const provide = (prefs: any) => {
 
   const ICONS = new Set<string>();
   for (const [theme, label] of [[classic, "oscuro"], [minimal, "claro minimal"]] as const) {
-    for (const key of ["delivered", "pending", "confirmed", "incident", "rejected", "cancelled", "inTransit"]) {
+    for (const key of ["delivered", "pending", "confirmed", "incident", "rejected", "cancelled", "inTransit", "neutral"]) {
       const chip = withTheme(theme, RealReact.createElement(StatusChip, { status: key, label: "Etiqueta" }));
       const icon = chip.children.find((c: any) => c.type === "Ionicons");
       const text = chip.children.find((c: any) => c.type === "Text");
@@ -208,7 +208,7 @@ const provide = (prefs: any) => {
         icon.props.color === tone.icon && flat(text.props.style).color === tone.text && flat(chip.props.style).backgroundColor === tone.background && String(text.children) === "Etiqueta");
     }
   }
-  check("StatusChip: un ícono distinto por estado (no depende solo del color)", ICONS.size === 7);
+  check("StatusChip: un ícono distinto por estado (no depende solo del color)", ICONS.size === 8);
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
   console.log("\nTodas las pruebas pasaron");

@@ -8,7 +8,10 @@ import { ActivityIndicator, FlatList, ImageBackground, Pressable, RefreshControl
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
+import StatusChip from "../../../components/StatusChip";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
@@ -17,6 +20,7 @@ import {
 } from "./routesApi";
 import { errorMessage } from "../errorMessage";
 import { fetchMyOffers } from "../turbo/turboApi";
+import { routeStatusKey } from "./routeStatus";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -28,6 +32,8 @@ const shiftDate = (iso: string, days: number) => {
 const prettyDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
 
 export default function RoutesScreen({ navigation }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [date, setDate] = useState(todayIso());
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,17 +80,18 @@ export default function RoutesScreen({ navigation }: Props) {
 
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
+      <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.page}>
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              <Pressable onPress={() => navigation.goBack()} hitSlop={8}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
               <Text style={styles.eyebrow}>Recorridos de reparto</Text>
             </View>
             <View style={styles.dateRow}>
-              <Pressable onPress={() => setDate(shiftDate(date, -1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-back" size={22} color={AppTheme.text.primary} /></Pressable>
+              <Pressable onPress={() => setDate(shiftDate(date, -1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-back" size={22} color={theme.text.primary} /></Pressable>
               <Text style={styles.title}>{prettyDate(date)}</Text>
-              <Pressable onPress={() => setDate(shiftDate(date, 1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-forward" size={22} color={AppTheme.text.primary} /></Pressable>
+              <Pressable onPress={() => setDate(shiftDate(date, 1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-forward" size={22} color={theme.text.primary} /></Pressable>
             </View>
             {date !== todayIso() ? <Pressable onPress={() => setDate(todayIso())}><Text style={styles.link}>Volver a hoy</Text></Pressable> : null}
           </View>
@@ -92,20 +99,20 @@ export default function RoutesScreen({ navigation }: Props) {
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
           {ofertas ? (
-            <Pressable style={[styles.confirmBox, styles.turboBox]} onPress={() => navigation.navigate("TurboOffersScreen")}>
+            <Pressable style={[theme.card, styles.confirmBox, styles.turboBox]} onPress={() => navigation.navigate("TurboOffersScreen")}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Ionicons name="flash" size={22} color={AppTheme.text.accent} />
+                <Ionicons name="flash" size={22} color={theme.text.accent} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.confirmTitle}>Tenés {ofertas === 1 ? "un turbo ofrecido" : `${ofertas} turbos ofrecidos`}</Text>
                   <Text style={styles.cardMeta}>Contestá antes de que venza: el primero que acepta se lo queda.</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={AppTheme.text.muted} />
+                <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
               </View>
             </Pressable>
           ) : null}
 
           {ofrecidos.length ? (
-            <View style={styles.confirmBox}>
+            <View style={[theme.card, styles.confirmBox]}>
               <Text style={styles.confirmTitle}>Te {ofrecidos.length === 1 ? "ofrecieron un recorrido" : `ofrecieron ${ofrecidos.length} recorridos`}</Text>
               {ofrecidos.map((o) => (
                 <View key={o.route_id} style={styles.confirmRow}>
@@ -125,17 +132,15 @@ export default function RoutesScreen({ navigation }: Props) {
           <FlatList
             data={routes}
             keyExtractor={(r) => String(r.id)}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={AppTheme.text.accent} />}
-            ListEmptyComponent={loading ? <ActivityIndicator color={AppTheme.text.accent} style={{ marginTop: 40 }} /> : (
-              <View style={styles.empty}><Ionicons name="map-outline" size={36} color={AppTheme.text.muted} /><Text style={styles.emptyText}>No tenés recorridos de reparto ni Turbo para este día.</Text></View>
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.text.accent} />}
+            ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
+              <View style={styles.empty}><Ionicons name="map-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No tenés recorridos de reparto ni Turbo para este día.</Text></View>
             )}
             renderItem={({ item }) => (
-              <Pressable style={styles.card} onPress={() => navigation.navigate("RouteDetailScreen", { routeId: item.id })}>
+              <Pressable style={[theme.listItem, styles.card]} onPress={() => navigation.navigate("RouteDetailScreen", { routeId: item.id })}>
                 <View style={styles.cardTop}>
                   <Text style={styles.cardType}>{TYPE_LABEL[item.type]} #{item.id}</Text>
-                  <View style={[styles.badge, item.status === "IN_PROGRESS" && styles.badgeActive, (item.status === "COMPLETED" || item.status === "CANCELLED") && styles.badgeDone]}>
-                    <Text style={styles.badgeText}>{STATUS_LABEL[item.status]}</Text>
-                  </View>
+                  <StatusChip status={routeStatusKey(item.status)} label={STATUS_LABEL[item.status]} />
                 </View>
                 <Text style={styles.cardMeta}>
                   {item.stops_count} {item.stops_count === 1 ? "parada" : "paradas"} · {item.deliveries_count} {item.deliveries_count === 1 ? "envío" : "envíos"}
@@ -153,38 +158,35 @@ export default function RoutesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  background: { flex: 1, backgroundColor: AppTheme.colors.background },
-  backgroundImage: { opacity: 0.18 },
+const makeStyles = (t: Theme) => StyleSheet.create({
+  background: { flex: 1, backgroundColor: t.colors.background },
+  backgroundImage: { opacity: t.backdrop.imageOpacity },
   safeArea: { flex: 1 },
-  page: { flex: 1, paddingHorizontal: AppTheme.layout.screenPadding, paddingTop: AppTheme.spacing.lg, paddingBottom: 112 },
-  header: { marginBottom: AppTheme.spacing.lg, paddingTop: AppTheme.spacing.lg, gap: AppTheme.spacing.xs },
+  page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 112 },
+  header: { marginBottom: t.spacing.lg, paddingTop: t.spacing.lg, gap: t.spacing.xs },
   headerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  eyebrow: { ...AppTheme.typography.kicker },
+  eyebrow: { ...t.typography.kicker },
   dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   dateBtn: { padding: 6 },
-  title: { color: AppTheme.text.primary, fontSize: 20, fontWeight: "700", textTransform: "capitalize", flex: 1, textAlign: "center" },
-  link: { color: AppTheme.text.accent, textAlign: "center", marginTop: 4 },
-  card: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.borders.default, padding: AppTheme.spacing.md, marginBottom: AppTheme.spacing.sm, gap: 6 },
+  title: { color: t.text.primary, fontSize: 20, fontWeight: "700", textTransform: "capitalize", flex: 1, textAlign: "center" },
+  link: { color: t.text.accent, textAlign: "center", marginTop: 4 },
+  card: { padding: t.spacing.md, marginBottom: t.list.gap, gap: 6 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardType: { color: AppTheme.text.primary, fontSize: 16, fontWeight: "700" },
-  cardMeta: { color: AppTheme.text.secondary, fontSize: 13 },
-  cardHint: { color: AppTheme.text.accent, fontSize: 12 },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: AppTheme.borders.default },
-  badgeActive: { borderColor: AppTheme.colors.primary },
-  badgeDone: { opacity: 0.6 },
-  badgeText: { color: AppTheme.text.primary, fontSize: 12, fontWeight: "600" },
+  cardType: { color: t.text.primary, fontSize: 16, fontWeight: "700" },
+  cardMeta: { color: t.text.secondary, fontSize: 13 },
+  cardHint: { color: t.text.accent, fontSize: 12 },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
-  emptyText: { color: AppTheme.text.secondary, textAlign: "center" },
-  confirmBox: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.colors.primary, padding: AppTheme.spacing.md, marginBottom: AppTheme.spacing.md, gap: 8 },
-  confirmTitle: { color: AppTheme.text.primary, fontSize: 15, fontWeight: "700" },
-  turboBox: { borderColor: AppTheme.text.accent },
-  confirmRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: AppTheme.borders.default },
-  confirmName: { color: AppTheme.text.primary, fontSize: 14, fontWeight: "600" },
+  emptyText: { color: t.text.secondary, textAlign: "center" },
+  // Ofertas: siempre con contorno, también en Minimal (piden respuesta).
+  confirmBox: { borderWidth: 1, borderColor: t.colors.primary, padding: t.spacing.md, marginBottom: t.spacing.md, gap: 8 },
+  confirmTitle: { color: t.text.primary, fontSize: 15, fontWeight: "700" },
+  turboBox: { borderColor: t.text.accent },
+  confirmRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 6, borderTopWidth: t.separator.width, borderTopColor: t.separator.color },
+  confirmName: { color: t.text.primary, fontSize: 14, fontWeight: "600" },
   confirmBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
-  confirmYes: { borderColor: AppTheme.colors.success, backgroundColor: `${AppTheme.colors.success}22` },
-  confirmNo: { borderColor: AppTheme.colors.danger, backgroundColor: `${AppTheme.colors.danger}22` },
-  confirmBtnText: { color: AppTheme.text.primary, fontWeight: "700" },
-  errorBox: { borderWidth: 1, borderColor: AppTheme.colors.danger ?? "#d9534f", borderRadius: AppTheme.radius.md, padding: 12, marginBottom: 12 },
-  errorText: { color: AppTheme.text.primary },
+  confirmYes: { borderColor: t.status.confirmed.border, backgroundColor: t.status.confirmed.background },
+  confirmNo: { borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background },
+  confirmBtnText: { color: t.text.primary, fontWeight: "700" },
+  errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
+  errorText: { color: t.status.rejected.text },
 });

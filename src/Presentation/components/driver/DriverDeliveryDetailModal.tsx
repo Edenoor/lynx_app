@@ -3,7 +3,8 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../theme/ThemeContext";
+import type { Theme } from "../../theme/createTheme";
 import type { DriverDeliveryCardItem } from "./DriverDeliveryCard";
 
 type Props = {
@@ -151,6 +152,8 @@ export function DriverDeliveryDetailModal({
   delivery,
   onClose,
 }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -163,7 +166,7 @@ export function DriverDeliveryDetailModal({
               </View>
 
               <Pressable onPress={onClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={18} color={AppTheme.text.primary} />
+                <Ionicons name="close" size={18} color={theme.text.primary} />
               </Pressable>
             </View>
 
@@ -226,6 +229,7 @@ export function DriverDeliveryDetailModal({
 }
 
 function Row({ label, value }: { label: string; value?: string | null }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -236,60 +240,60 @@ function Row({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: AppTheme.overlays.camera,
-    padding: AppTheme.spacing.lg,
+    backgroundColor: t.overlays.camera,
+    padding: t.spacing.lg,
     justifyContent: "center",
   },
 
   card: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.screenAlt,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.screenAlt,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.lg,
-    ...AppTheme.shadows.card,
+    borderColor: t.borders.medium,
+    padding: t.spacing.lg,
+    ...t.shadows.card,
   },
 
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: AppTheme.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.lg,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontSize: t.font.size.lg,
+    fontWeight: t.font.weight.black,
   },
 
   closeBtn: {
     width: 34,
     height: 34,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
   },
 
   summary: {
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    padding: AppTheme.spacing.md,
+    borderColor: t.borders.soft,
+    padding: t.spacing.md,
     flexDirection: "row",
-    gap: AppTheme.spacing.md,
-    marginBottom: AppTheme.spacing.md,
+    gap: t.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
   summaryMain: {
@@ -297,17 +301,17 @@ const styles = StyleSheet.create({
   },
 
   client: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 12,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     marginBottom: 2,
   },
 
   tracking: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 20,
     lineHeight: 24,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.7,
   },
 
@@ -317,54 +321,54 @@ const styles = StyleSheet.create({
   },
 
   amountLabel: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   amountValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 17,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   rows: {
-    gap: AppTheme.spacing.sm,
-    marginBottom: AppTheme.spacing.md,
+    gap: t.spacing.sm,
+    marginBottom: t.spacing.md,
   },
 
   row: {
     flexDirection: "row",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
     alignItems: "flex-start",
   },
 
   rowLabel: {
     width: 112,
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
   },
 
   rowValue: {
     flex: 1,
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   primaryBtn: {
-    backgroundColor: AppTheme.colors.primary,
-    borderRadius: AppTheme.radius.lg,
+    backgroundColor: t.colors.primary,
+    borderRadius: t.radius.lg,
     paddingVertical: 14,
     alignItems: "center",
   },
 
   primaryBtnText: {
-    color: AppTheme.colors.white,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.onPrimary,
+    fontWeight: t.font.weight.black,
   },
 });
 

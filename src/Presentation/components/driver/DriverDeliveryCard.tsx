@@ -3,7 +3,10 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../theme/ThemeContext";
+import type { Theme } from "../../theme/createTheme";
+import StatusChip from "../StatusChip";
+import { deliveryStatusKey } from "./deliveryStatus";
 
 export type DriverDeliveryCardItem = {
   id?: string | number | null;
@@ -84,20 +87,6 @@ const metodoLabel = (m?: string | null) => {
   return s[0].toUpperCase() + s.slice(1);
 };
 
-const statusColor = (delivery?: DriverDeliveryCardItem | null) => {
-  const s = normalizeStatus(getRawStatus(delivery));
-
-  if (s.includes("entregado")) return AppTheme.colors.success;
-  if (s.includes("retirado") || s.includes("en camino") || s.includes("transit"))
-    return AppTheme.colors.primary;
-  if (s.includes("solicitado") || s.includes("creado") || s.includes("pendiente"))
-    return AppTheme.colors.warning;
-  if (s.includes("cancel") || s.includes("rechaz")) return AppTheme.colors.danger;
-  if (s.includes("nadie") || s.includes("reprogram")) return AppTheme.colors.warning;
-
-  return AppTheme.text.muted;
-};
-
 const statusLabel = (delivery?: DriverDeliveryCardItem | null) => {
   const raw = getRawStatus(delivery);
   const s = normalizeStatus(raw);
@@ -130,8 +119,10 @@ const netoChofer = (it?: DriverDeliveryCardItem | null) => {
   return Math.round(precio * factor * 100) / 100;
 };
 
+// Fila de la lista: en Minimal deja de ser tarjeta (theme.listItem).
 export function DriverDeliveryCard({ delivery, onPress }: Props) {
-  const color = statusColor(delivery);
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const status = statusLabel(delivery);
   const neto = netoChofer(delivery);
   const method = metodoLabel(delivery.metodo_envio);
@@ -141,7 +132,7 @@ export function DriverDeliveryCard({ delivery, onPress }: Props) {
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[theme.listItem, styles.card]}
       onPress={onPress}
       activeOpacity={0.88}
       disabled={!onPress}
@@ -151,15 +142,12 @@ export function DriverDeliveryCard({ delivery, onPress }: Props) {
           <Ionicons
             name={isOnDemand(delivery.metodo_envio) ? "flash" : "cube"}
             size={12}
-            color={AppTheme.colors.primary}
+            color={theme.text.accent}
           />
           <Text style={styles.typeText}>{method}</Text>
         </View>
 
-        <View style={[styles.statusPill, { borderColor: color }]}>
-          <View style={[styles.statusDot, { backgroundColor: color }]} />
-          <Text style={[styles.statusText, { color }]}>{status}</Text>
-        </View>
+        <StatusChip status={deliveryStatusKey(getRawStatus(delivery))} label={status} />
       </View>
 
       <View style={styles.middleRow}>
@@ -172,7 +160,7 @@ export function DriverDeliveryCard({ delivery, onPress }: Props) {
             <Ionicons
               name="storefront-outline"
               size={13}
-              color={AppTheme.text.muted}
+              color={theme.text.muted}
             />
             <Text style={styles.secondaryText} numberOfLines={1}>
               {secondaryText}
@@ -189,15 +177,11 @@ export function DriverDeliveryCard({ delivery, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   card: {
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
-    borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    paddingVertical: AppTheme.spacing.sm,
-    paddingHorizontal: AppTheme.spacing.md,
-    marginBottom: AppTheme.spacing.sm,
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.md,
+    marginBottom: t.list.gap,
   },
 
   topRow: {
@@ -213,42 +197,20 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.overlays.primary,
+    borderRadius: t.radius.full,
+    backgroundColor: t.overlays.primary,
   },
 
   typeText: {
-    color: AppTheme.colors.primary,
+    color: t.text.accent,
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.black,
-  },
-
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: "rgba(255,255,255,0.035)",
-    borderWidth: 1,
-  },
-
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: AppTheme.radius.full,
-  },
-
-  statusText: {
-    fontSize: 10,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   middleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   info: {
@@ -256,10 +218,10 @@ const styles = StyleSheet.create({
   },
 
   mainAddress: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 16,
     lineHeight: 20,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.4,
     marginBottom: 5,
   },
@@ -272,10 +234,10 @@ const styles = StyleSheet.create({
 
   secondaryText: {
     flex: 1,
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: AppTheme.font.weight.medium,
+    fontWeight: t.font.weight.medium,
   },
 
   amount: {
@@ -284,17 +246,17 @@ const styles = StyleSheet.create({
   },
 
   amountLabel: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 9,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     marginBottom: 1,
   },
 
   amountValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 15,
     lineHeight: 18,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.4,
   },
 });

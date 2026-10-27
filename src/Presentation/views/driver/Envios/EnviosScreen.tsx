@@ -20,7 +20,9 @@ import { File, Paths } from "expo-file-system/next";
 import useEnviosViewModel from "./ViewModel";
 import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
 import global from "../../../theme/global";
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import { DriverDeliveryStatCard } from "../../../components/driver/DriverDeliveryStatCard";
 import { DriverDeliveryCard } from "../../../components/driver/DriverDeliveryCard";
@@ -267,6 +269,8 @@ export const EnviosScreen = ({ navigation }: any) => {
     reload,
     username,
   } = useEnviosViewModel();
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
 
   const legacyRows = useMemo(
     () => ((list || []).filter(Boolean) as Envio[]),
@@ -454,6 +458,7 @@ export const EnviosScreen = ({ navigation }: any) => {
   if (loading && legacyRows.length === 0 && currentRows.length === 0) {
     return (
       <View style={styles.center}>
+        <ThemedStatusBar />
         <LynxPulseLoader message="Cargando envíos..." />
       </View>
     );
@@ -461,6 +466,7 @@ export const EnviosScreen = ({ navigation }: any) => {
 
   return (
     <View style={styles.screen}>
+      <ThemedStatusBar />
       <View style={styles.header}>
         <View style={styles.topLine}>
           <View>
@@ -485,7 +491,7 @@ export const EnviosScreen = ({ navigation }: any) => {
                     downloadingExcel ? "hourglass-outline" : "download-outline"
                   }
                   size={19}
-                  color={AppTheme.colors.white}
+                  color={theme.text.onPrimary}
                 />
               </Pressable>
             )}
@@ -494,7 +500,7 @@ export const EnviosScreen = ({ navigation }: any) => {
               <Ionicons
                 name="refresh"
                 size={19}
-                color={AppTheme.colors.white}
+                color={theme.text.primary}
               />
             </Pressable>
           </View>
@@ -506,9 +512,9 @@ export const EnviosScreen = ({ navigation }: any) => {
           style={styles.routesLink}
           onPress={() => navigation.navigate("RoutesScreen")}
         >
-          <Ionicons name="map-outline" size={18} color={AppTheme.text.accent} />
+          <Ionicons name="map-outline" size={18} color={theme.text.accent} />
           <Text style={styles.routesLinkText}>Recorridos de reparto, Turbo y ofertas</Text>
-          <Ionicons name="chevron-forward" size={18} color={AppTheme.text.muted} />
+          <Ionicons name="chevron-forward" size={18} color={theme.text.muted} />
         </Pressable>
 
         <View style={styles.segmented}>
@@ -566,8 +572,8 @@ export const EnviosScreen = ({ navigation }: any) => {
                 size={14}
                 color={
                   quickToday && !from && !to
-                    ? AppTheme.colors.white
-                    : AppTheme.text.muted
+                    ? theme.text.onPrimary
+                    : theme.text.muted
                 }
               />
               <Text
@@ -587,7 +593,7 @@ export const EnviosScreen = ({ navigation }: any) => {
               <Ionicons
                 name="calendar-outline"
                 size={14}
-                color={from && to ? AppTheme.colors.white : AppTheme.text.muted}
+                color={from && to ? theme.text.onPrimary : theme.text.muted}
               />
               <Text
                 style={[
@@ -619,7 +625,7 @@ export const EnviosScreen = ({ navigation }: any) => {
             <Ionicons
               name="warning-outline"
               size={16}
-              color={AppTheme.colors.danger}
+              color={theme.status.rejected.icon}
             />
             <Text style={styles.errorText}>{activeError}</Text>
           </View>
@@ -636,7 +642,7 @@ export const EnviosScreen = ({ navigation }: any) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={AppTheme.colors.primary}
+            tintColor={theme.colors.primary}
           />
         }
         renderItem={({ item }) => {
@@ -654,7 +660,7 @@ export const EnviosScreen = ({ navigation }: any) => {
             <Ionicons
               name="file-tray-outline"
               size={34}
-              color={AppTheme.text.muted}
+              color={theme.text.muted}
             />
             <Text style={styles.emptyTitle}>{emptyTitle}</Text>
             <Text style={styles.emptyText}>
@@ -811,21 +817,25 @@ const SegmentButton = ({
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
-}) => (
-  <Pressable
-    onPress={onPress}
-    style={[styles.segmentButton, active && styles.segmentButtonActive]}
-  >
-    <Ionicons
-      name={icon}
-      size={14}
-      color={active ? AppTheme.colors.white : AppTheme.text.muted}
-    />
-    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-      {label}
-    </Text>
-  </Pressable>
-);
+}) => {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.segmentButton, active && styles.segmentButtonActive]}
+    >
+      <Ionicons
+        name={icon}
+        size={14}
+        color={active ? theme.text.onPrimary : theme.text.muted}
+      />
+      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+};
 
 const ModalHeader = ({
   title,
@@ -833,34 +843,41 @@ const ModalHeader = ({
 }: {
   title: string;
   onClose: () => void;
-}) => (
-  <View style={styles.modalHeader}>
-    <Text style={styles.modalTitle}>{title}</Text>
+}) => {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.modalHeader}>
+      <Text style={styles.modalTitle}>{title}</Text>
 
-    <Pressable onPress={onClose} style={styles.closeBtn}>
-      <Ionicons name="close" size={18} color={AppTheme.text.primary} />
-    </Pressable>
-  </View>
-);
+      <Pressable onPress={onClose} style={styles.closeBtn}>
+        <Ionicons name="close" size={18} color={theme.text.primary} />
+      </Pressable>
+    </View>
+  );
+};
 
-const Row = ({ label, value }: { label: string; value?: string | null }) => (
-  <View style={styles.rowLine}>
-    <Text style={styles.rowLabel}>{label}</Text>
-    <Text style={styles.rowValue} numberOfLines={3}>
-      {value ?? "—"}
-    </Text>
-  </View>
-);
+const Row = ({ label, value }: { label: string; value?: string | null }) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.rowLine}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={styles.rowValue} numberOfLines={3}>
+        {value ?? "—"}
+      </Text>
+    </View>
+  );
+};
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   center: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
@@ -868,56 +885,56 @@ const styles = StyleSheet.create({
 
   header: {
     paddingTop: global.SIZES.statusBarHeight + 14,
-    paddingHorizontal: AppTheme.spacing.lg,
-    paddingBottom: AppTheme.spacing.md,
+    paddingHorizontal: t.spacing.lg,
+    paddingBottom: t.spacing.md,
   },
 
   topLine: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: AppTheme.spacing.lg,
+    marginBottom: t.spacing.lg,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
     marginBottom: 4,
   },
 
   title: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 30,
     lineHeight: 34,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -1,
   },
 
   subtitle: {
     marginTop: 4,
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 13,
-    fontWeight: AppTheme.font.weight.semibold,
+    fontWeight: t.font.weight.semibold,
   },
 
   headerActions: {
     flexDirection: "row",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   iconButton: {
     width: 42,
     height: 42,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.default,
+    borderColor: t.borders.default,
   },
 
   downloadButton: {
-    backgroundColor: AppTheme.colors.primary,
-    borderColor: AppTheme.colors.primary,
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
 
   iconButtonDisabled: {
@@ -927,19 +944,19 @@ const styles = StyleSheet.create({
   routesLink: {
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.sm,
-    paddingHorizontal: AppTheme.spacing.md,
+    gap: t.spacing.sm,
+    paddingHorizontal: t.spacing.md,
     paddingVertical: 10,
-    borderRadius: AppTheme.radius.lg,
-    backgroundColor: AppTheme.surfaces.muted,
+    borderRadius: t.radius.lg,
+    backgroundColor: t.surfaces.muted,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    marginBottom: AppTheme.spacing.md,
+    borderColor: t.borders.soft,
+    marginBottom: t.spacing.md,
   },
 
   routesLinkText: {
     flex: 1,
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -947,17 +964,17 @@ const styles = StyleSheet.create({
   segmented: {
     flexDirection: "row",
     padding: 4,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.surfaces.muted,
+    borderRadius: t.radius.full,
+    backgroundColor: t.surfaces.muted,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    marginBottom: AppTheme.spacing.md,
+    borderColor: t.borders.soft,
+    marginBottom: t.spacing.md,
   },
 
   segmentButton: {
     flex: 1,
     minHeight: 38,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -966,21 +983,21 @@ const styles = StyleSheet.create({
   },
 
   segmentButtonActive: {
-    backgroundColor: AppTheme.colors.primary,
+    backgroundColor: t.colors.primary,
   },
 
   segmentText: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   segmentTextActive: {
-    color: AppTheme.colors.white,
+    color: t.text.onPrimary,
   },
 
   statsGrid: {
-    marginBottom: AppTheme.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
   filtersBox: {
@@ -988,75 +1005,75 @@ const styles = StyleSheet.create({
   },
 
   filtersContent: {
-    gap: AppTheme.spacing.sm,
-    paddingRight: AppTheme.spacing.lg,
+    gap: t.spacing.sm,
+    paddingRight: t.spacing.lg,
   },
 
   filterChip: {
     height: 38,
     paddingHorizontal: 13,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.surfaces.muted,
+    borderRadius: t.radius.full,
+    backgroundColor: t.surfaces.muted,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
 
   filterChipActive: {
-    backgroundColor: AppTheme.colors.primary,
-    borderColor: AppTheme.colors.primary,
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
 
   filterChipText: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 12,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   filterChipTextActive: {
-    color: AppTheme.colors.white,
+    color: t.text.onPrimary,
   },
 
   clearChip: {
     height: 38,
     paddingHorizontal: 13,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: `${AppTheme.colors.danger}22`,
+    borderRadius: t.radius.full,
+    backgroundColor: t.status.rejected.background,
     borderWidth: 1,
-    borderColor: `${AppTheme.colors.danger}44`,
+    borderColor: t.status.rejected.border,
     alignItems: "center",
     justifyContent: "center",
   },
 
   clearChipText: {
-    color: AppTheme.colors.danger,
+    color: t.status.rejected.text,
     fontSize: 12,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   errorBox: {
-    marginTop: AppTheme.spacing.md,
-    padding: AppTheme.spacing.md,
-    borderRadius: AppTheme.radius.lg,
-    backgroundColor: `${AppTheme.colors.danger}22`,
+    marginTop: t.spacing.md,
+    padding: t.spacing.md,
+    borderRadius: t.radius.lg,
+    backgroundColor: t.status.rejected.background,
     borderWidth: 1,
-    borderColor: `${AppTheme.colors.danger}44`,
+    borderColor: t.status.rejected.border,
     flexDirection: "row",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   errorText: {
     flex: 1,
-    color: AppTheme.colors.danger,
+    color: t.status.rejected.text,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   listContent: {
-    paddingHorizontal: AppTheme.spacing.lg,
+    paddingHorizontal: t.spacing.lg,
     paddingBottom: 124,
   },
 
@@ -1066,14 +1083,14 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 16,
-    fontWeight: AppTheme.font.weight.black,
-    marginTop: AppTheme.spacing.md,
+    fontWeight: t.font.weight.black,
+    marginTop: t.spacing.md,
   },
 
   emptyText: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -1083,115 +1100,115 @@ const styles = StyleSheet.create({
 
   backdrop: {
     flex: 1,
-    backgroundColor: AppTheme.overlays.camera,
+    backgroundColor: t.overlays.camera,
     padding: 20,
     justifyContent: "center",
   },
 
   modalCard: {
-    borderRadius: AppTheme.radius.xxl,
-    padding: AppTheme.spacing.lg,
-    backgroundColor: AppTheme.surfaces.screenAlt,
+    borderRadius: t.radius.xxl,
+    padding: t.spacing.lg,
+    backgroundColor: t.surfaces.screenAlt,
     borderWidth: 1,
-    borderColor: AppTheme.borders.default,
+    borderColor: t.borders.default,
   },
 
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: AppTheme.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
   modalTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 18,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.4,
   },
 
   closeBtn: {
     width: 34,
     height: 34,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
   },
 
   modalBody: {
-    gap: AppTheme.spacing.sm,
-    marginBottom: AppTheme.spacing.md,
+    gap: t.spacing.sm,
+    marginBottom: t.spacing.md,
   },
 
   rowLine: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   rowLabel: {
     width: 112,
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
   },
 
   rowValue: {
     flex: 1,
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   primaryBtn: {
-    backgroundColor: AppTheme.colors.primary,
-    borderRadius: AppTheme.radius.lg,
+    backgroundColor: t.colors.primary,
+    borderRadius: t.radius.lg,
     paddingVertical: 14,
     alignItems: "center",
   },
 
   primaryBtnText: {
-    color: AppTheme.colors.white,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.onPrimary,
+    fontWeight: t.font.weight.black,
   },
 
   secondaryBtn: {
-    borderRadius: AppTheme.radius.lg,
+    borderRadius: t.radius.lg,
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: AppTheme.surfaces.muted,
+    backgroundColor: t.surfaces.muted,
     borderWidth: 1,
-    borderColor: AppTheme.borders.default,
+    borderColor: t.borders.default,
   },
 
   secondaryBtnText: {
-    color: AppTheme.text.primary,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontWeight: t.font.weight.black,
   },
 
   dateBtn: {
     paddingVertical: 14,
     paddingHorizontal: 14,
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.default,
-    borderRadius: AppTheme.radius.lg,
+    borderColor: t.borders.default,
+    borderRadius: t.radius.lg,
     alignItems: "center",
   },
 
   dateBtnText: {
-    color: AppTheme.text.primary,
-    fontWeight: AppTheme.font.weight.bold,
+    color: t.text.primary,
+    fontWeight: t.font.weight.bold,
   },
 
   modalActions: {
     flexDirection: "row",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   modalActionBtn: {

@@ -18,6 +18,7 @@ const ICONS: Record<StatusKey, keyof typeof Ionicons.glyphMap> = {
   rejected: "close-circle-outline",
   cancelled: "ban-outline",
   inTransit: "navigate-outline",
+  neutral: "ellipse-outline",
 };
 
 export function StatusChip({ status, label }: { status: StatusKey; label: string }) {

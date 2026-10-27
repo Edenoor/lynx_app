@@ -3,7 +3,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../theme/ThemeContext";
+import type { StatusTone, Theme } from "../../theme/createTheme";
 
 type Props = {
   neto: string;
@@ -20,6 +21,8 @@ export function DriverDeliveryStatCard({
   atencion,
   onPressNeto,
 }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.card}>
       <View style={styles.mainRow}>
@@ -32,7 +35,7 @@ export function DriverDeliveryStatCard({
             <Ionicons
               name="wallet-outline"
               size={18}
-              color={AppTheme.colors.primary}
+              color={theme.text.accent}
             />
           </View>
 
@@ -50,21 +53,21 @@ export function DriverDeliveryStatCard({
             icon="checkmark-circle-outline"
             value={String(entregados)}
             label="Entregados"
-            color={AppTheme.colors.success}
+            tone={theme.status.delivered}
           />
 
           <Metric
             icon="time-outline"
             value={String(pendientes)}
             label="Pendientes"
-            color={AppTheme.colors.warning}
+            tone={theme.status.pending}
           />
 
           <Metric
             icon="alert-circle-outline"
             value={String(atencion)}
             label="Atención"
-            color={AppTheme.colors.danger}
+            tone={theme.status.rejected}
           />
         </View>
       </View>
@@ -76,17 +79,18 @@ function Metric({
   icon,
   value,
   label,
-  color,
+  tone,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   value: string;
   label: string;
-  color: string;
+  tone: StatusTone;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.metric}>
-      <View style={[styles.iconCircle, { backgroundColor: `${color}22` }]}>
-        <Ionicons name={icon} size={15} color={color} />
+      <View style={[styles.iconCircle, { backgroundColor: tone.background }]}>
+        <Ionicons name={icon} size={15} color={tone.icon} />
       </View>
 
       <Text style={styles.metricValue} numberOfLines={1}>
@@ -100,22 +104,22 @@ function Metric({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   card: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    paddingVertical: AppTheme.spacing.sm,
-    paddingHorizontal: AppTheme.spacing.md,
-    ...AppTheme.shadows.card,
+    borderColor: t.borders.medium,
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.md,
+    ...t.shadows.card,
   },
 
   mainRow: {
     minHeight: 92,
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   mainMetric: {
@@ -128,7 +132,7 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 62,
-    backgroundColor: AppTheme.borders.soft,
+    backgroundColor: t.borders.soft,
   },
 
   metricsRow: {
@@ -136,7 +140,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   metric: {
@@ -149,42 +153,42 @@ const styles = StyleSheet.create({
   iconCirclePrimary: {
     width: 31,
     height: 31,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.overlays.primary,
+    backgroundColor: t.overlays.primary,
   },
 
   iconCircle: {
     width: 29,
     height: 29,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
   },
 
   netoValue: {
     maxWidth: 88,
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 17,
     lineHeight: 21,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.7,
   },
 
   metricValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 20,
     lineHeight: 24,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.7,
   },
 
   metricLabel: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 10,
     lineHeight: 13,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     textAlign: "center",
   },
 });
