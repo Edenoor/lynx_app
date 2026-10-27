@@ -128,14 +128,10 @@ if (tab === "scan") {
       {
         text: "Cerrar sesión",
         style: "destructive",
-        onPress: async () => {
-          await removeUserSession();
-
-          navigation.getParent()?.reset({
-            index: 0,
-            routes: [{ name: "HomeScreen" as never }],
-          });
-        },
+        // Sin navegar a mano: al quedar sin sesión, MainStackNavigator deja de
+        // montar el stack de Driver y muestra el login. Un reset a "HomeScreen"
+        // desde acá apunta a una pantalla que en ese momento no está registrada.
+        onPress: removeUserSession,
       },
     ]);
   };

@@ -73,12 +73,11 @@ export const ClientScreen = ({ navigation }: Props) => {
     };
   }, [userId, username, add]);
 
+  // Sin navegar a mano: al quedar sin sesión, MainStackNavigator deja de montar
+  // el stack de Seller y muestra el login (un reset a 'HomeScreen' desde acá
+  // apunta a una pantalla que en ese momento no está registrada).
   const removeSession = async () => {
     await removeUserSession();
-    navigation.getParent()?.reset({
-      index: 0,
-      routes: [{ name: 'HomeScreen' as never }],
-    });
   };
 
   const navigateTo = (screenName: keyof RootStackParamList) => {

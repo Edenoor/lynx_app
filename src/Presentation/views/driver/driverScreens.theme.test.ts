@@ -504,6 +504,10 @@ const setDriverApi = () => {
     }
     tree = await press(tree, "Cerrar sesión");
     check("Mi cuenta: cerrar sesión pide confirmación (sin cerrar)", alerts.length === 1 && alerts[0][0] === "Cerrar sesión" && alerts[0][2].map((b: any) => b.text).join("|") === "Cancelar|Cerrar sesión" && !nav.calls.some((c) => c[0] === "reset"));
+    nav.calls = []; session.removed = 0;
+    await alerts[0][2].find((b: any) => b.text === "Cerrar sesión").onPress();
+    tree = await settle();
+    check("Mi cuenta: confirmar cierra la sesión sin navegar a mano (sin RESET a HomeScreen)", session.removed === 1 && nav.calls.length === 0, JSON.stringify(nav.calls));
     check("Mi cuenta: filas con el separador del tema", all(tree, (x) => x.type === "Pressable" && textOf(x).includes("Vehículo")).every((x) => flat(x.props.style).borderBottomWidth === 0.5));
   }
   {
@@ -936,6 +940,66 @@ const setDriverApi = () => {
     check(`Recorridos ${style}: día anterior consulta la misma ruta`, api.calls.includes(`GET /v2/routes/mine?date=${d.toISOString().slice(0, 10)}`), api.calls.join(", "));
     byLabel(tree, "Volver")[0].props.onPress();
     check(`Recorridos ${style}: volver sale de la pantalla`, same(lastNav(), ["goBack"]));
+  }
+
+  // 19) Al login se llega solo porque se cierra la sesión: MainStackNavigator
+  // monta HomeScreen cuando no hay usuario. Un navigate/reset a "HomeScreen"
+  // desde un área con sesión apunta a una ruta que no está registrada (RESET
+  // «not handled by any navigator»). Vale también para Seller (views/client).
+  {
+    const base = path.join(APP, "src", "Presentation");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        const rel = path.relative(base, p).replace(/\\/g, "/");
+        if (e.isDirectory()) { if (!/^views\/(WIP|deprecated)$/.test(rel)) walk(p); continue; }
+        if (!/\.tsx?$/.test(e.name) || /\.test\.ts$/.test(e.name)) continue;
+        const src = fs.readFileSync(p, "utf8");
+        if (/(navigate|replace|push)\(\s*["']HomeScreen["']|name:\s*["']HomeScreen["'](?!\s*component)/.test(src)) offenders.push(rel);
+      }
+    };
+    walk(base);
+    check("Nadie navega ni resetea a HomeScreen desde un área con sesión", offenders.length === 0, offenders.join(", "));
+  }
+
+  // 20) Seller: «Cerrar sesión» cierra la sesión y no navega a mano.
+  {
+    const { ClientScreen } = L("src/Presentation/views/client/Landing/Client.tsx");
+    nav.calls = []; session.removed = 0;
+    let tree = await mount(RealReact.createElement(ClientScreen, { navigation: nav, route: { params: undefined } }));
+    const menu = all(tree, (x) => typeof x.props?.onPress === "function" && textOf(x) === "")[0];
+    menu.props.onPress();
+    tree = await settle();
+    await pressable(tree, "Cerrar sesión").props.onPress();
+    tree = await settle();
+    check("Seller: cerrar sesión la cierra sin navegar a mano (sin RESET a HomeScreen)", session.removed === 1 && !nav.calls.some((c) => c[0] === "reset"), JSON.stringify(nav.calls));
+  }
+
+  // 21) MainStackNavigator: con sesión registra solo el stack del rol; sin
+  // sesión, el login. Es lo que lleva al login después de cerrar sesión.
+  {
+    // Los stacks de cada área no importan acá (y traen GPS, mapas, etc.).
+    for (const [end, name] of [["navigator/DriverStackNavigator", "DriverStackNavigator"], ["navigator/SellerStackNavigator", "SellerStackNavigator"], ["navigator/PickerStackNavigator", "PickerStackNavigator"], ["admin/AdminWebScreen", "AdminWebScreen"]]) {
+      RELATIVE_MOCKS.unshift([end, { [name]: () => null }]);
+    }
+    const { MainStackNavigator } = L("src/Presentation/navigator/MainStackNavigator.tsx");
+    stackScreens.clear();
+    const screensFor = async (u: any) => {
+      contextOverride.set(UserContext, { user: u, isAuthLoading: false });
+      registeredScreens.clear();
+      await mount(RealReact.createElement(MainStackNavigator));
+      return [...registeredScreens].sort().join(",");
+    };
+    for (const [area, u, expected] of [
+      ["Seller", { rol: "SELLER", username: "s", token: "x" }, "SellerStackNavigator"],
+      ["Driver", { rol: "DRIVER", username: "d", token: "x" }, "DriverStackNavigator"],
+      ["Picker", { rol: "ADMIN", profile: "PICKER", username: "p", token: "x" }, "PickerStackNavigator"],
+    ] as const) {
+      check(`Navegación: con sesión de ${area}, solo su stack (sin HomeScreen)`, (await screensFor(u)) === expected);
+      check(`Navegación: al cerrar sesión de ${area}, el login`, (await screensFor(null)) === "HomeScreen,RecuperarScreen,RegisterScreen");
+    }
+    contextOverride.delete(UserContext);
   }
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
