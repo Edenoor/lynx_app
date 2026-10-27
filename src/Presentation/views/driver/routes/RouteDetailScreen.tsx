@@ -3,7 +3,7 @@
 // cada parada, registrar qué pasó con cada envío, cerrar la parada y
 // completar el recorrido. Sin mapa en esta etapa.
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, ImageBackground, Linking, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppTheme from "../../../theme/AppTheme";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
-  completeRoute, confirmLoad, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, startRoute, todayIso,
+  completeRoute, confirmLoad, declareStopCount, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, startRoute, todayIso,
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
@@ -21,6 +21,8 @@ import { errorMessage } from "../errorMessage";
 import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from "./pickupConfirmation";
 import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
+import DeclaredCountForm from "./DeclaredCountForm";
+import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -103,6 +105,9 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const day = executionDayLabel(route.scheduled_date, today);
   const inProgress = route.status === "IN_PROGRESS";
   const allClosed = route.stops.every((s) => s.status === "DONE" || s.status === "SKIPPED");
+  const declared = isPickup ? declarationSummary(route.stops) : null;
+  // La parada que devuelve la declaración se muestra ya, aunque falle la recarga.
+  const replaceStop = (stop: Stop) => setRoute((r) => (r ? { ...r, stops: r.stops.map((s) => (s.id === stop.id ? stop : s)) } : r));
 
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
@@ -195,9 +200,20 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
             </Pressable>
           ) : null}
 
+          {declared && declared.stops ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Paquetes retirados</Text>
+              <View style={styles.stats}>
+                <Stat value={declared.total} label="informados" />
+                <Stat value={declared.informed} label={placeStatLabel(declared.informed, declared.allStores, "informed")} />
+                <Stat value={declared.pending} label={placeStatLabel(declared.pending, declared.allStores, "pending")} warn={declared.pending > 0} />
+              </View>
+            </View>
+          ) : null}
+
           {route.stops.map((s) => (
-            <StopCard key={s.id} routeId={route.id} stop={s} routeType={route.type} inProgress={inProgress} busy={busy}
-              open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} />
+            <StopCard key={s.id} routeId={route.id} stop={s} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
+              open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} onStopSaved={replaceStop} />
           ))}
 
           {inProgress ? (
@@ -212,8 +228,18 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   );
 }
 
-function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, act }: {
-  routeId: number; stop: Stop; routeType: RouteDetail["type"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void; act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>;
+function Stat({ value, label, warn }: { value: number; label: string; warn?: boolean }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={[styles.statValue, warn && styles.statWarn]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, open, onToggle, act, onStopSaved }: {
+  routeId: number; stop: Stop; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void;
+  act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>; onStopSaved: (stop: Stop) => void;
 }) {
   const [pending, setPending] = useState<PendingDelivery[] | null>(null);
   const [notes, setNotes] = useState("");
@@ -248,6 +274,24 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
       setClosing(null);
     }, setCloseError);
   };
+  // Cantidad retirada (solo colectas). La ref frena el segundo toque antes de
+  // que `busy` llegue a deshabilitar el botón.
+  const declares = routeType === "PICKUP" && supportsDeclaration(stop);
+  const declaring = useRef(false);
+  const [declareError, setDeclareError] = useState<string | null>(null);
+  const declare = (count: number) => {
+    const send = () => {
+      if (declaring.current) return;
+      declaring.current = true;
+      setDeclareError(null);
+      act(async () => onStopSaved(await declareStopCount(routeId, stop.id, count)), setDeclareError).finally(() => { declaring.current = false; });
+    };
+    if (stop.declared_count === null || stop.declared_count === undefined) { send(); return; }
+    Alert.alert("Corregir cantidad", `Ya informaste ${stop.declared_count}. ¿Reemplazarlo por ${count}?`, [
+      { text: "No", style: "cancel" },
+      { text: "Sí, corregir", onPress: send },
+    ]);
+  };
   // Los Flex se cierran desde Envíos Flex: no cuentan como «sin resultado».
   const withoutOutcome = stop.deliveries.filter((d) => !d.outcome && d.tipo_envio !== "flex");
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
@@ -261,6 +305,12 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
           <Text style={styles.stopMeta}>
             {isPickup ? (stop.store_address ?? "") : `${stop.address ?? ""}${stop.postal_code ? ` · CP ${stop.postal_code}` : ""}`}
           </Text>
+          {isPickup && stop.pickup_time_snapshot ? (
+            <View style={styles.cutoffRow}>
+              <Ionicons name="time-outline" size={14} color={AppTheme.text.accent} />
+              <Text style={styles.cutoffText}>Retiro: {stop.pickup_time_snapshot.slice(0, 5)}</Text>
+            </View>
+          ) : null}
           {isPickup && stop.cutoff_snapshot ? (
             <View style={styles.cutoffRow}>
               <Ionicons name="time-outline" size={14} color={AppTheme.text.accent} />
@@ -270,6 +320,7 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
           <Text style={styles.stopMeta}>
             {STOP_STATUS_LABEL[stop.status]}
             {isPickup ? (stop.collected_count ? ` · ${stop.collected_count} colectados en Lynx` : "") : ` · ${stop.deliveries.length} envíos`}
+            {declares ? ` · ${declarationLabel(stop.declared_count)}` : ""}
           </Text>
         </View>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={AppTheme.text.muted} />
@@ -307,6 +358,11 @@ function StopCard({ routeId, stop, routeType, inProgress, busy, open, onToggle, 
               <Ionicons name="navigate-outline" size={16} color={AppTheme.text.primary} />
               <Text style={styles.btnGhostText}>Cómo llegar</Text>
             </Pressable>
+          ) : null}
+
+          {declares ? (
+            <DeclaredCountForm key={String(stop.declared_count)} count={stop.declared_count ?? null} routeStatus={routeStatus}
+              busy={busy} error={declareError} onSubmit={declare} />
           ) : null}
 
           {isPickup && !collectsHere && stop.status === "ARRIVED" ? (
@@ -409,6 +465,11 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   btnText: { color: AppTheme.text.inverse, fontWeight: "700" },
   btnGhostText: { color: AppTheme.text.primary, fontWeight: "600" },
+  stats: { flexDirection: "row", gap: 8 },
+  stat: { flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: AppTheme.radius.md, backgroundColor: AppTheme.surfaces.muted },
+  statValue: { color: AppTheme.text.primary, fontSize: 20, fontWeight: "700" },
+  statWarn: { color: AppTheme.colors.warning },
+  statLabel: { color: AppTheme.text.secondary, fontSize: 11, textAlign: "center" },
   stop: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.borders.default, overflow: "hidden" },
   stopClosed: { opacity: 0.65 },
   stopHead: { flexDirection: "row", gap: 12, alignItems: "center", padding: AppTheme.spacing.md },

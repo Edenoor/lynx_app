@@ -35,6 +35,9 @@ export type Stop = {
   // Retiro: coordenadas congeladas al armar la parada (pg las manda como texto)
   // y, si el origen es un Dropoff en vez de una tienda, su nombre.
   latitude_snapshot?: number | string | null; longitude_snapshot?: number | string | null; warehouse_name?: string | null;
+  // Retiro: horario planificado de la tienda («HH:MM:SS») y cantidad que
+  // declaró el chofer (null = sin informar). Un servidor anterior no los manda.
+  pickup_time_snapshot?: string | null; declared_count?: number | null; declared_at?: string | null;
   address?: string | null; postal_code?: string | null; latitude?: number | null; longitude?: number | null; receiver_name?: string | null;
   deliveries: StopDelivery[];
 };
@@ -94,6 +97,11 @@ export const completeRoute = async (id: number) => unwrap<{ route: RouteDetail }
 
 export const stopAction = async (routeId: number, stopId: number, action: "arrive" | "done" | "skip" | "store-ready", notes?: string) =>
   unwrap<{ stop: Stop }>(await putJson(`/v2/routes/${routeId}/stops/${stopId}/${action}`, notes ? { notes } : {})).stop;
+
+// Cantidad de paquetes retirados en una parada de colecta. stopId es el de la
+// parada de este recorrido (route_stops.id), no el de la tienda ni la plantilla.
+export const declareStopCount = async (routeId: number, stopId: number, count: number) =>
+  unwrap<{ stop: Stop }>(await putJson(`/v2/routes/${routeId}/stops/${stopId}/declare-count`, { count })).stop;
 
 // `declaration` (Baúl) trae solo los campos que el chofer completó.
 export const recordOutcome = async (routeId: number, stopId: number, deliveryId: number, outcome: string, notes?: string, declaration?: OutcomeDeclaration) =>
