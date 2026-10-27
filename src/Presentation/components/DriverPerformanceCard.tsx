@@ -15,6 +15,8 @@ import AppTheme from "../theme/AppTheme";
 
 type DriverPerformanceCardProps = {
   loading?: boolean;
+  // El período que de verdad cubren las cifras (p. ej. «Historial completo»).
+  periodLabel: string;
   score: number;
   effectiveness: number;
   totalDeliveries: number;
@@ -65,6 +67,7 @@ const getStatusIcon = (effectiveness: number) => {
 
 export function DriverPerformanceCard({
   loading = false,
+  periodLabel,
   score,
   effectiveness,
   totalDeliveries,
@@ -113,6 +116,7 @@ export function DriverPerformanceCard({
   return (
     <>
       <View style={styles.card}>
+        <Text style={styles.periodLabel}>{periodLabel}</Text>
         <View style={styles.mainRow}>
           <View style={styles.gaugeBlock}>
             <Svg width={GAUGE_SIZE} height={GAUGE_SIZE} style={styles.gaugeSvg}>
@@ -230,7 +234,7 @@ export function DriverPerformanceCard({
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalKicker}>DETALLE SLA</Text>
-                <Text style={styles.modalTitle}>Composición semanal</Text>
+                <Text style={styles.modalTitle}>{periodLabel}</Text>
               </View>
 
               <TouchableOpacity onPress={() => setDetailVisible(false)}>
@@ -369,6 +373,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: AppTheme.spacing.md,
     gap: AppTheme.spacing.xs,
     ...AppTheme.shadows.card,
+  },
+
+  periodLabel: {
+    color: AppTheme.text.muted,
+    fontSize: 11,
+    fontWeight: AppTheme.font.weight.medium,
+    paddingTop: AppTheme.spacing.xs,
   },
 
   mainRow: {

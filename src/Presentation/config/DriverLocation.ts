@@ -363,6 +363,21 @@ const startHeartbeat = () => {
   }, HEARTBEAT_MS);
 };
 
+// Posición para mostrar (mapa de Inicio): la última conocida si es reciente,
+// si no una sola lectura. No pide permisos ni abre seguimiento: eso lo hace
+// startDriverTracking. null = sin permiso o sin ubicación.
+export const readCurrentPosition = async (): Promise<{ latitude: number; longitude: number } | null> => {
+  try {
+    if (!(await Location.getForegroundPermissionsAsync()).granted) return null;
+    const loc =
+      (await Location.getLastKnownPositionAsync({ maxAge: HEARTBEAT_MS })) ??
+      (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+    return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  } catch {
+    return null;
+  }
+};
+
 const stopLocationUpdatesQuietly = async () => {
   stopFallback();
   stopHeartbeat();

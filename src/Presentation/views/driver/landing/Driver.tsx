@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StackScreenProps } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -29,6 +30,7 @@ import {
 import {
   startDriverTracking,
   flushDriverPositions,
+  readCurrentPosition,
 } from "../../../config/DriverLocation";
 
 import {
@@ -176,6 +178,11 @@ export const DriverScreen = ({ navigation }: Props) => {
   const [available] = useState<boolean>(true);
   // Modo en que quedó el seguimiento: si no es "background", se muestra un aviso fijo.
   const [trackingMode, setTrackingMode] = useState<string | null>(null);
+  // Posición real para el mapa: undefined = buscando, null = no disponible.
+  const [myPosition, setMyPosition] = useState<
+    { latitude: number; longitude: number } | null | undefined
+  >(undefined);
+  const insets = useSafeAreaInsets();
 
   const [pendingAssignment, setPendingAssignment] =
     useState<PendingAssignment | null>(null);
@@ -407,6 +414,9 @@ export const DriverScreen = ({ navigation }: Props) => {
       const tracking = await startDriverTracking({ available });
       if (cancelled) return;
       setTrackingMode(tracking.ok ? tracking.mode : tracking.reason === "error" ? "fallback" : "off");
+      const position = tracking.ok ? await readCurrentPosition() : null;
+      if (cancelled) return;
+      setMyPosition(position);
 
       if (!tracking.ok) {
         showFeedback(
@@ -432,6 +442,9 @@ export const DriverScreen = ({ navigation }: Props) => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         void flushDriverPositions();
+        void readCurrentPosition().then((p) => {
+          if (!cancelled && p) setMyPosition(p);
+        });
         if (Date.now() - lastPushRegisterAt > 12 * 60 * 60 * 1000) {
           lastPushRegisterAt = Date.now();
           setupPushAndRegisterDevice({
@@ -613,23 +626,20 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   return (
     <View style={styles.container}>
-      <MapView
-        style={styles.map}
-        initialRegion={{
-          latitude: -34.6037,
-          longitude: -58.3816,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        }}
-      >
-        <Marker coordinate={{ latitude: -34.6037, longitude: -58.3816 }} />
-      </MapView>
+      {myPosition ? (
+        <MapView
+          style={styles.map}
+          region={{ ...myPosition, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
+        >
+          <Marker coordinate={myPosition} />
+        </MapView>
+      ) : null}
 
       <View style={styles.mapOverlay} />
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={styles.contentInner}
+        contentContainerStyle={[styles.contentInner, { paddingTop: insets.top + AppTheme.spacing.md }]}
         showsVerticalScrollIndicator={false}
       >
         {trackingMode && trackingMode !== "background" ? (
@@ -651,6 +661,15 @@ export const DriverScreen = ({ navigation }: Props) => {
             <Text style={styles.subtitle}>
               Todo listo para operar tus envíos.
             </Text>
+            {/* Sin permiso ya lo explica el aviso de ubicación de arriba. */}
+            {!myPosition && trackingMode !== "off" ? (
+              <View style={styles.locationStatus}>
+                <Ionicons name="locate-outline" size={14} color={AppTheme.text.muted} />
+                <Text style={styles.locationStatusText}>
+                  {myPosition === undefined ? "Buscando tu ubicación…" : "No pudimos obtener tu ubicación."}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <Pressable
             onPress={() => navigation.navigate("DriverAccountScreen")}
@@ -673,6 +692,10 @@ export const DriverScreen = ({ navigation }: Props) => {
 
           <DriverPerformanceCard
             loading={loadingLegacy}
+            // /v1/data/driver/me no filtra por fecha: son todos los envíos
+            // del chofer. Cuando exista la performance semanal del servidor,
+            // va acá con su período.
+            periodLabel="Historial completo"
             score={driverMetrics.score}
             effectiveness={driverMetrics.effectiveness}
             totalDeliveries={driverMetrics.total}
@@ -857,7 +880,6 @@ const styles = StyleSheet.create({
   contentInner: {
     flexGrow: 1,
     paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.layout.headerTopPadding + 72,
     paddingBottom: 108,
   },
 
@@ -870,6 +892,18 @@ const styles = StyleSheet.create({
   hero: {
     flex: 1,
     gap: AppTheme.spacing.sm,
+  },
+
+  locationStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: AppTheme.spacing.xs,
+  },
+
+  locationStatusText: {
+    ...AppTheme.typography.body,
+    color: AppTheme.text.muted,
+    fontSize: 13,
   },
 
   profileButton: {
