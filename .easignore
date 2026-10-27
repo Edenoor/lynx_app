@@ -1,0 +1,90 @@
+# Qué NO se sube a EAS Build. Con este archivo, EAS ignora .gitignore: por eso
+# repite sus reglas. Diferencias con .gitignore:
+#   - .env SÍ se sube: solo trae variables EXPO_PUBLIC_* (quedan dentro de la
+#     APK igual) y así la configuración es la misma que en las APK anteriores.
+#   - Se excluyen la clave SSH versionada por error (y su .pub) y archivos
+#     temporales que no hacen falta para compilar.
+
+# Clave SSH (tratarla como comprometida hasta confirmar su revocación)
+Start-Service ssh-agent
+Start-Service ssh-agent.pub
+
+# Temporales
+gradle-log.txt
+package.json.bak
+
+# =========================
+# Dependencies
+# =========================
+node_modules/
+
+# =========================
+# Expo
+# =========================
+.expo/
+dist/
+web-build/
+
+# =========================
+# React Native / Native builds
+# =========================
+android/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+
+ios/build/
+ios/Pods/
+
+# =========================
+# Metro
+# =========================
+.metro-cache/
+
+# =========================
+# Environment variables
+# =========================
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Temporary
+# =========================
+*.tmp
+*.temp
+android/app/*.jks
+
+
+
+# Compilación de los módulos nativos locales
+modules/*/android/build/
+
+# Reglas de android/.gitignore (sin VCS, EAS no lee los .gitignore internos)
+android/**/build/
+android/**/.idea
+android/**/.gradle
+android/local.properties
+android/**/*.iml
+android/**/*.hprof
+android/**/.cxx/
+android/**/*.jsbundle

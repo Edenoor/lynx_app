@@ -64,3 +64,7 @@ android/app/*.jks
 
 # Compilación de los módulos nativos locales
 modules/*/android/build/
+
+# SSH credentials
+/Start-Service ssh-agent
+/Start-Service ssh-agent.pub
