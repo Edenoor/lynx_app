@@ -3,6 +3,8 @@ import { ActivityIndicator, View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { UserContext } from "../context/UserContext";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeProvider";
+import type { Theme } from "../theme/createTheme";
 
 import { HomeScreen } from "../views/auth/home/Home";
 import { RecuperarScreen } from "../views/auth/recuperar/Recuperar";
@@ -25,17 +27,22 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const makeLoadingStyles = (t: Theme) => ({
+  screen: {
+    flex: 1,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: t.colors.background,
+  },
+});
+
 const AuthLoadingScreen = () => {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeLoadingStyles);
+
   return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#FFFFFF",
-      }}
-    >
-      <ActivityIndicator size="large" />
+    <View style={styles.screen}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
     </View>
   );
 };

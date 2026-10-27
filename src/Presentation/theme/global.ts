@@ -102,9 +102,14 @@ export const BASE_COLORS = {
 //   gray: "#94A3B8",
 // };
 
+// Estados con contraste ≥ 4,5:1 sobre todas las superficies de cada esquema
+// (theme.test.ts). success oscuro sigue igual: es fondo del botón «Aceptar»
+// con texto blanco y aclararlo bajaría ese contraste.
 export const DARK_COLORS = {
   ...BASE_COLORS,
   mode: "dark" as ThemeMode,
+
+  danger: "#EC5D62",
 
   background: "#04070D",
   backgroundAlt: "#09111D",
@@ -191,6 +196,9 @@ export const DARK_COLORS = {
 export const LIGHT_COLORS = {
   ...BASE_COLORS,
   mode: "light" as ThemeMode,
+
+  success: "#3A7524",
+  warning: "#8A6100",
 
   background: "#F4F6FA",
   backgroundAlt: "#EEF2F8",
