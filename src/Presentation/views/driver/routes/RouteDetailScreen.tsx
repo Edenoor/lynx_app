@@ -11,13 +11,14 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AppTheme from "../../../theme/AppTheme";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
-  completeRoute, confirmLoad, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, RouteDetail, startRoute, todayIso,
+  completeRoute, confirmLoad, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, startRoute, todayIso,
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
 import OutcomeForm from "./OutcomeForm";
 import { buildDeclaration, cobranzaOf, OutcomeDraft } from "./outcomeDeclaration";
 import { errorMessage } from "../errorMessage";
+import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer } from "./pickupConfirmation";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -92,7 +93,10 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
   const isDelivery = route.type === "DELIVERY";
   const canConfirm = isDelivery && route.status === "ASSIGNED";
-  const canStart = route.status === "LOADED" || (!isDelivery && route.status === "ASSIGNED");
+  // Una colecta asignada sale recién cuando el chofer la acepta (el servidor
+  // la rechaza sin aceptar): mientras tanto se muestra para contestar.
+  const answer = pickupAnswer(route);
+  const canStart = canStartRoute(route);
   const inProgress = route.status === "IN_PROGRESS";
   const allClosed = route.stops.every((s) => s.status === "DONE" || s.status === "SKIPPED");
 
@@ -130,6 +134,38 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               {route.load_confirmed_count !== null && route.load_expected_count !== null && route.load_confirmed_count !== route.load_expected_count ? (
                 <Text style={styles.warn}>Última confirmación: {route.load_confirmed_count} de {route.load_expected_count}. Con diferencia el recorrido no sale.</Text>
               ) : null}
+            </View>
+          ) : null}
+
+          {answer ? (
+            <View style={[styles.panel, answer === "DECLINED" && styles.panelDanger]}>
+              <Text style={styles.panelTitle}>Colecta · {PICKUP_ANSWER_LABEL[answer]}</Text>
+              <Text style={styles.panelText}>
+                {answer === "ACCEPTED"
+                  ? "La aceptaste. Cuando estés listo, salí a la calle."
+                  : answer === "DECLINED"
+                  ? "Dijiste que no podés hacerla: el coordinador ya fue avisado. Si cambiaste de idea, aceptala."
+                  : "Confirmá si podés hacer esta colecta. Sin aceptarla no se puede iniciar."}
+              </Text>
+              {answer !== "ACCEPTED" ? (
+                <View style={styles.row}>
+                  <Pressable onPress={() => act(() => respondConfirmation(routeId, "ACCEPTED"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
+                    <Text style={styles.btnText}>Aceptar colecta</Text>
+                  </Pressable>
+                  {answer === "PENDING" ? (
+                    <Pressable onPress={() => act(() => respondConfirmation(routeId, "DECLINED"))} disabled={busy} style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}>
+                      <Text style={styles.btnGhostText}>No puedo</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {answer && answer !== "ACCEPTED" ? (
+            <View style={[styles.btn, styles.btnBig, styles.btnDisabled]}>
+              <Ionicons name="lock-closed" size={18} color={AppTheme.text.inverse} />
+              <Text style={styles.btnText}>Aceptá la colecta para salir</Text>
             </View>
           ) : null}
 
@@ -309,6 +345,7 @@ const styles = StyleSheet.create({
   panelTitle: { color: AppTheme.text.primary, fontWeight: "700", fontSize: 15 },
   panelText: { color: AppTheme.text.secondary, fontSize: 13, lineHeight: 18 },
   warn: { color: AppTheme.colors.warning, fontSize: 13 },
+  panelDanger: { borderColor: AppTheme.colors.danger },
   row: { flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" },
   input: { flex: 1, minWidth: 120, minHeight: 44, borderRadius: AppTheme.radius.md, borderWidth: 1, borderColor: AppTheme.borders.default, backgroundColor: AppTheme.surfaces.input, color: AppTheme.text.primary, paddingHorizontal: 12 },
   btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", backgroundColor: AppTheme.colors.primary, borderRadius: AppTheme.radius.md, paddingHorizontal: 16, minHeight: 44 },

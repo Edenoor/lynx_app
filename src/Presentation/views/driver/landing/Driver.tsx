@@ -340,6 +340,33 @@ export const DriverScreen = ({ navigation }: Props) => {
           // pantalla de ofertas (cuenta regresiva y botones); si llegó con la
           // app abierta, solo se avisa: no se le cambia la pantalla a mitad de
           // un escaneo o una entrega.
+          // Avisos de recorridos: al tocar la notificación se abre lo que
+          // corresponde; con la app abierta solo se avisa, sin cambiarle la
+          // pantalla en medio de un escaneo o una entrega.
+          onRouteNotice: ({ kind, routeId, source }) => {
+            const nav = navigation as any;
+            const openRoute = () => (routeId ? nav.navigate("RouteDetailScreen", { routeId }) : nav.navigate("RoutesScreen"));
+            const openRoutes = () => nav.navigate("RoutesScreen");
+            // Quitada: el detalle ya no es suyo (403). Ofrecido: se contesta en Rutas.
+            const open = kind === "PICKUP_REASSIGNED" || kind === "ROUTE_OFFER" ? openRoutes : openRoute;
+            if (source === "response") {
+              open();
+              return;
+            }
+            if (kind === "PICKUP_ASSIGNED" || kind === "ROUTE_OFFER") {
+              Alert.alert(
+                kind === "PICKUP_ASSIGNED" ? "Colecta asignada" : "Recorrido ofrecido",
+                kind === "PICKUP_ASSIGNED"
+                  ? `Se te asignó la colecta${routeId ? ` #${routeId}` : ""}. Confirmá si podés hacerla.`
+                  : "Contestá desde Rutas antes de que venza.",
+                [
+                  { text: "Ahora no", style: "cancel" },
+                  { text: kind === "PICKUP_ASSIGNED" ? "Ver colecta" : "Ver en Rutas", onPress: open },
+                ],
+              );
+            }
+          },
+
           onTurboOffer: ({ source, raw }) => {
             const openOffers = () => navigation.navigate("TurboOffersScreen" as never);
             if (source === "response") {

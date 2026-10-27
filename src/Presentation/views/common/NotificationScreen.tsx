@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useNotifications, Noti } from "../../context/NotificationContext";
 import AppTheme from "../../theme/AppTheme";
+import { routeIdOf } from "../../config/pushKind";
 import {
   DriverBottomNavigation,
   DriverTabKey,
@@ -32,6 +33,10 @@ const kindLabel: Record<Noti["kind"], string> = {
   ASSIGNMENT_REJECTED: "Rechazada",
   ROUTE_CONFIRMATION: "Ronda de mañana",
   TURBO_OFFER: "Turbo",
+  PICKUP_ASSIGNED: "Colecta asignada",
+  PICKUP_REASSIGNED: "Colecta quitada",
+  ROUTE_UPDATED: "Recorrido actualizado",
+  ROUTE_OFFER: "Recorrido ofrecido",
   INFO: "Info",
   ALERT: "Alerta",
 };
@@ -45,6 +50,10 @@ const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
   ASSIGNMENT_REJECTED: "close-circle-outline",
   ROUTE_CONFIRMATION: "calendar-outline",
   TURBO_OFFER: "flash-outline",
+  PICKUP_ASSIGNED: "cube-outline",
+  PICKUP_REASSIGNED: "remove-circle-outline",
+  ROUTE_UPDATED: "git-compare-outline",
+  ROUTE_OFFER: "map-outline",
   INFO: "information-circle-outline",
   ALERT: "alert-circle-outline",
 };
@@ -58,6 +67,10 @@ const kindColor: Record<Noti["kind"], string> = {
   ASSIGNMENT_REJECTED: AppTheme.colors.danger,
   ROUTE_CONFIRMATION: AppTheme.colors.primary,
   TURBO_OFFER: AppTheme.colors.primary,
+  PICKUP_ASSIGNED: AppTheme.colors.primary,
+  PICKUP_REASSIGNED: AppTheme.colors.warning,
+  ROUTE_UPDATED: AppTheme.colors.primary,
+  ROUTE_OFFER: AppTheme.colors.primary,
   INFO: AppTheme.text.secondary,
   ALERT: AppTheme.colors.danger,
 };
@@ -468,6 +481,32 @@ const NotificationsScreen: React.FC = () => {
                   }}
                 >
                   <Text style={styles.btnTxtPrimary}>Contestar en Rutas</Text>
+                </Pressable>
+              )}
+              {(selected?.kind === "PICKUP_ASSIGNED" || selected?.kind === "ROUTE_UPDATED") && (
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  onPress={() => {
+                    const routeId = routeIdOf(selected.data);
+                    markRead(selected.id);
+                    setSelected(null);
+                    if (routeId) (navigation as any).navigate("RouteDetailScreen", { routeId });
+                    else (navigation as any).navigate("RoutesScreen");
+                  }}
+                >
+                  <Text style={styles.btnTxtPrimary}>Ver recorrido</Text>
+                </Pressable>
+              )}
+              {(selected?.kind === "ROUTE_OFFER" || selected?.kind === "PICKUP_REASSIGNED") && (
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  onPress={() => {
+                    markRead(selected.id);
+                    setSelected(null);
+                    (navigation as any).navigate("RoutesScreen");
+                  }}
+                >
+                  <Text style={styles.btnTxtPrimary}>{selected.kind === "ROUTE_OFFER" ? "Contestar en Rutas" : "Ver Rutas"}</Text>
                 </Pressable>
               )}
               {!!selected && (

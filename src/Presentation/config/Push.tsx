@@ -4,20 +4,11 @@ import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { getJson, postJson, putJson } from "./Api";
 import { rememberPushToken } from "./PushUnregister";
+import { isRouteNotice, normalizeKind, NotiKind, RouteNoticeKind, routeIdOf } from "./pushKind";
 
 type MobileRole = "seller" | "driver" | "admin";
 
-export type NotiKind =
-  | "NEW_TRAD"
-  | "TRAD_ACCEPTED"
-  | "ASIGNACION"
-  | "DRIVER_ASIGNADO"
-  | "ASSIGNMENT_ACCEPTED"
-  | "ASSIGNMENT_REJECTED"
-  | "ROUTE_CONFIRMATION"
-  | "TURBO_OFFER"
-  | "INFO"
-  | "ALERT";
+export type { NotiKind } from "./pushKind";
 
 const EXPO_PROJECT_ID = "57ae574a-011e-4d21-8627-821f480087a5";
 
@@ -174,6 +165,7 @@ export function attachNotificationListeners({
   onAccepted,
   onAssignment,
   onTurboOffer,
+  onRouteNotice,
   onAny,
 }: {
   currentUser: { username: string; rol: MobileRole };
@@ -189,6 +181,9 @@ export function attachNotificationListeners({
   }) => void;
   // Un turbo ofrecido: se llama tanto al llegar como al tocar la notificación.
   onTurboOffer?: (payload: { routeId: number | null; source: "received" | "response"; raw?: any }) => void;
+  // Avisos de recorridos (colecta asignada o quitada, cambios, recorrido
+  // ofrecido): al llegar y al tocar la notificación.
+  onRouteNotice?: (payload: { kind: RouteNoticeKind; routeId: number | null; source: "received" | "response"; raw?: any }) => void;
   onAny?: (payload: {
     kind: NotiKind;
     title: string;
@@ -196,39 +191,6 @@ export function attachNotificationListeners({
     data?: any;
   }) => void;
 }) {
-  const normalizeKind = (
-    type?: unknown,
-    data?: any,
-    title?: string | null
-  ): NotiKind => {
-    const normalized = String(type ?? "").toUpperCase().trim();
-    const titleNormalized = String(title ?? "").toUpperCase().trim();
-
-    if (normalized === "NEW_TRAD") return "NEW_TRAD";
-    if (normalized === "TRAD_ACCEPTED") return "TRAD_ACCEPTED";
-    if (normalized === "ASIGNACION") return "ASIGNACION";
-    if (normalized === "DRIVER_ASIGNADO") return "DRIVER_ASIGNADO";
-    if (normalized === "ASSIGNMENT_ACCEPTED") return "ASSIGNMENT_ACCEPTED";
-    if (normalized === "ASSIGNMENT_REJECTED") return "ASSIGNMENT_REJECTED";
-    if (normalized === "ROUTE_CONFIRMATION") return "ROUTE_CONFIRMATION";
-    if (normalized === "TURBO_OFFER") return "TURBO_OFFER";
-
-    // El servidor hoy manda el tipo fuera de `data` y Expo no lo entrega: estos
-    // dos se reconocen por los datos que traen hasta que viaje en `data.type`.
-    if (data?.offerId != null && data?.routeId != null) return "TURBO_OFFER";
-    if (data?.template_name != null && data?.routeId != null) return "ROUTE_CONFIRMATION";
-
-    if (data?.deliveryId && titleNormalized.includes("NUEVO ENVÍO ASIGNADO")) {
-      return "ASIGNACION";
-    }
-
-    if (normalized.includes("REJECT")) return "ASSIGNMENT_REJECTED";
-    if (normalized.includes("ACCEPT")) return "ASSIGNMENT_ACCEPTED";
-    if (normalized.includes("ALERT")) return "ALERT";
-
-    return "INFO";
-  };
-
   const save = (
     kind: NotiKind,
     title?: string | null,
@@ -255,6 +217,14 @@ export function attachNotificationListeners({
           ? "Ronda de mañana"
           : kind === "TURBO_OFFER"
           ? "Turbo disponible"
+          : kind === "PICKUP_ASSIGNED"
+          ? "Colecta asignada"
+          : kind === "PICKUP_REASSIGNED"
+          ? "Ya no tenés esta colecta"
+          : kind === "ROUTE_UPDATED"
+          ? "Recorrido actualizado"
+          : kind === "ROUTE_OFFER"
+          ? "Recorrido ofrecido"
           : "Notificación"),
       body: body ?? undefined,
       data,
@@ -287,6 +257,11 @@ export function attachNotificationListeners({
 
     if (source === "received") {
       save(kind, content.title ?? undefined, content.body ?? undefined, data);
+    }
+
+    if (isRouteNotice(kind) && currentUser.rol === "driver") {
+      onRouteNotice?.({ kind, routeId: routeIdOf(data), source, raw: data });
+      return;
     }
 
     if (kind === "TURBO_OFFER" && currentUser.rol === "driver") {

@@ -8,17 +8,9 @@ import React, {
 } from "react";
 import { nanoid } from "nanoid/non-secure";
 
-export type NotiKind =
-  | "NEW_TRAD"
-  | "TRAD_ACCEPTED"
-  | "ASIGNACION"
-  | "DRIVER_ASIGNADO"
-  | "ASSIGNMENT_ACCEPTED"
-  | "ASSIGNMENT_REJECTED"
-  | "ROUTE_CONFIRMATION"
-  | "TURBO_OFFER"
-  | "INFO"
-  | "ALERT";
+// Una sola definición: la misma que usa Push.
+import type { NotiKind } from "../config/pushKind";
+export type { NotiKind };
 
 export type Noti = {
   id: string;

@@ -95,5 +95,16 @@ export const stopAction = async (routeId: number, stopId: number, action: "arriv
 export const recordOutcome = async (routeId: number, stopId: number, deliveryId: number, outcome: string, notes?: string, declaration?: OutcomeDeclaration) =>
   unwrap<{ stop: Stop }>(await postJson(`/v2/routes/${routeId}/stops/${stopId}/outcomes`, { delivery_id: deliveryId, outcome, notes: notes ?? null, ...declaration })).stop;
 
+// Recorridos que el coordinador le ofrece al chofer (GET /v2/offers/mine trae
+// también los Turbo, que tienen su propia pantalla: acá se dejan afuera).
+export type RouteOffer = {
+  id: number; route_id: number; kind: string; scheduled_date: string | null; expires_at: string; seconds_left: number;
+  deliveries: number; first_addresses?: string[];
+};
+export const fetchRouteOffers = async () =>
+  unwrap<{ offers: RouteOffer[] }>(await getJson("/v2/offers/mine")).offers.filter((o) => String(o.kind).toUpperCase() !== "TURBO");
+export const acceptRouteOffer = async (routeId: number) => unwrap<unknown>(await postJson(`/v2/offers/${routeId}/accept`, {}));
+export const declineRouteOffer = async (routeId: number) => unwrap<unknown>(await postJson(`/v2/offers/${routeId}/decline`, {}));
+
 export const fetchPendingAtStore = async (routeId: number, stopId: number) =>
   unwrap<{ deliveries: PendingDelivery[] }>(await getJson(`/v2/routes/${routeId}/stops/${stopId}/pending`)).deliveries;
