@@ -38,7 +38,9 @@ import {
   rejectDeliveryAssignment,
 } from "./acceptApi";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import { confirmationNoticeText } from "../routes/collectionLabels";
 import { todayIso } from "../routes/routesApi";
 import {
@@ -74,13 +76,6 @@ const VEHICLE_KEYS_GUESS = [
   "tipo_vehiculo",
   "vehicle_type",
 ];
-
-const successOverlay = `${AppTheme.colors.success}22`;
-const successBorder = `${AppTheme.colors.success}55`;
-const dangerOverlay = `${AppTheme.colors.danger}22`;
-const dangerBorder = `${AppTheme.colors.danger}55`;
-const primaryOverlay = AppTheme.overlays.primary;
-const primaryBorder = AppTheme.borders.primary;
 
 const getFirstWord = (value?: string | null): string => {
   if (!value || typeof value !== "string") return "";
@@ -148,6 +143,7 @@ const DetailLine = ({
   value?: string | number | null;
   force?: boolean;
 }) => {
+  const styles = useThemedStyles(makeStyles);
   if (!force && !value) return null;
 
   return (
@@ -161,6 +157,8 @@ const DetailLine = ({
 };
 
 export const DriverScreen = ({ navigation }: Props) => {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const { user } = useViewModel();
 
   const {
@@ -596,26 +594,16 @@ export const DriverScreen = ({ navigation }: Props) => {
     }
   };
 
-  const feedbackColor =
+  const feedbackTone =
     feedbackModal.type === "success"
-      ? AppTheme.colors.success
+      ? theme.status.confirmed
       : feedbackModal.type === "error"
-      ? AppTheme.colors.danger
-      : AppTheme.colors.primary;
+      ? theme.status.rejected
+      : theme.status.inTransit;
 
-  const feedbackOverlay =
-    feedbackModal.type === "success"
-      ? successOverlay
-      : feedbackModal.type === "error"
-      ? dangerOverlay
-      : primaryOverlay;
-
-  const feedbackBorder =
-    feedbackModal.type === "success"
-      ? successBorder
-      : feedbackModal.type === "error"
-      ? dangerBorder
-      : primaryBorder;
+  const feedbackColor = feedbackTone.solid;
+  const feedbackOverlay = feedbackTone.background;
+  const feedbackBorder = feedbackTone.border;
 
   const feedbackIcon =
     feedbackModal.type === "success"
@@ -626,6 +614,7 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   return (
     <View style={styles.container}>
+      <ThemedStatusBar />
       {myPosition ? (
         <MapView
           style={styles.map}
@@ -639,7 +628,7 @@ export const DriverScreen = ({ navigation }: Props) => {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={[styles.contentInner, { paddingTop: insets.top + AppTheme.spacing.md }]}
+        contentContainerStyle={[styles.contentInner, { paddingTop: insets.top + theme.spacing.md }]}
         showsVerticalScrollIndicator={false}
       >
         {trackingMode && trackingMode !== "background" ? (
@@ -664,7 +653,7 @@ export const DriverScreen = ({ navigation }: Props) => {
             {/* Sin permiso ya lo explica el aviso de ubicación de arriba. */}
             {!myPosition && trackingMode !== "off" ? (
               <View style={styles.locationStatus}>
-                <Ionicons name="locate-outline" size={14} color={AppTheme.text.muted} />
+                <Ionicons name="locate-outline" size={14} color={theme.text.muted} />
                 <Text style={styles.locationStatusText}>
                   {myPosition === undefined ? "Buscando tu ubicación…" : "No pudimos obtener tu ubicación."}
                 </Text>
@@ -677,7 +666,7 @@ export const DriverScreen = ({ navigation }: Props) => {
             hitSlop={8}
             accessibilityLabel="Perfil"
           >
-            <Ionicons name="person-outline" size={22} color={AppTheme.text.primary} />
+            <Ionicons name="person-outline" size={22} color={theme.text.primary} />
           </Pressable>
         </View>
 
@@ -734,7 +723,7 @@ export const DriverScreen = ({ navigation }: Props) => {
                 <Ionicons
                   name="cube-outline"
                   size={24}
-                  color={AppTheme.colors.primary}
+                  color={theme.colors.primary}
                 />
               </View>
 
@@ -839,7 +828,7 @@ export const DriverScreen = ({ navigation }: Props) => {
                 <Ionicons
                   name={feedbackIcon}
                   size={30}
-                  color={AppTheme.colors.white}
+                  color={feedbackTone.onSolid}
                 />
               </View>
             </View>
@@ -857,10 +846,10 @@ export const DriverScreen = ({ navigation }: Props) => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   map: {
@@ -869,7 +858,7 @@ const styles = StyleSheet.create({
 
   mapOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: AppTheme.overlays.camera,
+    backgroundColor: t.overlays.map,
   },
 
   content: {
@@ -879,94 +868,94 @@ const styles = StyleSheet.create({
 
   contentInner: {
     flexGrow: 1,
-    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingHorizontal: t.layout.screenPadding,
     paddingBottom: 108,
   },
 
   heroRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   hero: {
     flex: 1,
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   locationStatus: {
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.xs,
+    gap: t.spacing.xs,
   },
 
   locationStatusText: {
-    ...AppTheme.typography.body,
-    color: AppTheme.text.muted,
+    ...t.typography.body,
+    color: t.text.muted,
     fontSize: 13,
   },
 
   profileButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.default,
+    borderColor: t.borders.default,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    ...AppTheme.typography.titleLg,
+    ...t.typography.titleLg,
   },
 
   subtitle: {
-    ...AppTheme.typography.body,
+    ...t.typography.body,
   },
 
   bottomCards: {
     marginTop: "auto",
-    gap: AppTheme.spacing.sm,
-    paddingTop: AppTheme.spacing.xl,
+    gap: t.spacing.sm,
+    paddingTop: t.spacing.xl,
   },
 
   assignmentOverlay: {
     flex: 1,
-    backgroundColor: AppTheme.overlays.camera,
+    backgroundColor: t.overlays.camera,
     justifyContent: "center",
-    paddingHorizontal: AppTheme.spacing.lg,
+    paddingHorizontal: t.spacing.lg,
   },
 
   assignmentCard: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.screenAlt,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.screenAlt,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.lg,
-    gap: AppTheme.spacing.md,
-    ...AppTheme.shadows.card,
+    borderColor: t.borders.medium,
+    padding: t.spacing.lg,
+    gap: t.spacing.md,
+    ...t.shadows.card,
   },
 
   assignmentTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   assignmentIcon: {
     width: 54,
     height: 54,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.overlays.primary,
+    backgroundColor: t.overlays.primary,
     borderWidth: 1,
-    borderColor: AppTheme.borders.primary,
+    borderColor: t.borders.primary,
   },
 
   assignmentHeaderText: {
@@ -974,188 +963,188 @@ const styles = StyleSheet.create({
   },
 
   assignmentKicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   assignmentTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 24,
     lineHeight: 29,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -0.7,
-    marginTop: AppTheme.spacing.xs,
+    marginTop: t.spacing.xs,
   },
 
   assignmentBody: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.sm,
-    lineHeight: AppTheme.font.lineHeight.md,
-    fontWeight: AppTheme.font.weight.medium,
+    color: t.text.secondary,
+    fontSize: t.font.size.sm,
+    lineHeight: t.font.lineHeight.md,
+    fontWeight: t.font.weight.medium,
   },
 
   assignmentDetailsBox: {
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.card,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
     overflow: "hidden",
   },
 
   assignmentDetailRow: {
-    paddingHorizontal: AppTheme.spacing.md,
-    paddingVertical: AppTheme.spacing.sm,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: AppTheme.borders.soft,
+    borderBottomColor: t.borders.soft,
     gap: 3,
   },
 
   assignmentDetailLabel: {
-    color: AppTheme.text.muted,
-    fontSize: AppTheme.font.size.xxs,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.muted,
+    fontSize: t.font.size.xxs,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
 
   assignmentDetailValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   assignmentFooter: {
     flexDirection: "row",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
     justifyContent: "flex-end",
     flexWrap: "wrap",
   },
 
   assignmentBtn: {
     minHeight: 44,
-    paddingHorizontal: AppTheme.spacing.md,
-    borderRadius: AppTheme.radius.lg,
+    paddingHorizontal: t.spacing.md,
+    borderRadius: t.radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },
 
   assignmentBtnGhost: {
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
   },
 
   assignmentBtnReject: {
-    backgroundColor: dangerOverlay,
+    backgroundColor: t.status.rejected.background,
     borderWidth: 1,
-    borderColor: dangerBorder,
+    borderColor: t.status.rejected.border,
   },
 
   assignmentBtnAccept: {
-    backgroundColor: AppTheme.colors.success,
+    backgroundColor: t.status.confirmed.solid,
   },
 
   assignmentBtnGhostText: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.secondary,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.black,
   },
 
   assignmentBtnRejectText: {
-    color: AppTheme.colors.danger,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.status.rejected.text,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.black,
   },
 
   assignmentBtnAcceptText: {
-    color: AppTheme.colors.white,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.status.confirmed.onSolid,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.black,
   },
 
   feedbackOverlay: {
     flex: 1,
-    backgroundColor: AppTheme.overlays.camera,
+    backgroundColor: t.overlays.camera,
     justifyContent: "flex-end",
   },
 
   feedbackSheet: {
-    borderTopLeftRadius: AppTheme.radius.xxl,
-    borderTopRightRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.screenAlt,
+    borderTopLeftRadius: t.radius.xxl,
+    borderTopRightRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.screenAlt,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    paddingHorizontal: AppTheme.spacing.lg,
-    paddingTop: AppTheme.spacing.md,
-    paddingBottom: AppTheme.spacing.xl,
+    borderColor: t.borders.medium,
+    paddingHorizontal: t.spacing.lg,
+    paddingTop: t.spacing.md,
+    paddingBottom: t.spacing.xl,
     alignItems: "center",
-    ...AppTheme.shadows.card,
+    ...t.shadows.card,
   },
 
   feedbackHandle: {
     width: 46,
     height: 5,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.borders.strong,
-    marginBottom: AppTheme.spacing.lg,
+    borderRadius: t.radius.full,
+    backgroundColor: t.borders.strong,
+    marginBottom: t.spacing.lg,
   },
 
   feedbackIconOuter: {
     width: 86,
     height: 86,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    marginBottom: AppTheme.spacing.lg,
+    marginBottom: t.spacing.lg,
   },
 
   feedbackIconInner: {
     width: 58,
     height: 58,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
   },
 
   feedbackTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 28,
     lineHeight: 32,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textAlign: "center",
   },
 
   feedbackMessage: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.md,
+    color: t.text.secondary,
+    fontSize: t.font.size.md,
     lineHeight: 24,
-    fontWeight: AppTheme.font.weight.medium,
+    fontWeight: t.font.weight.medium,
     textAlign: "center",
-    marginTop: AppTheme.spacing.sm,
+    marginTop: t.spacing.sm,
   },
 
   feedbackButton: {
     width: "100%",
     minHeight: 54,
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.colors.primary,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: AppTheme.spacing.xl,
+    marginTop: t.spacing.xl,
   },
 
   feedbackButtonText: {
-    color: AppTheme.colors.white,
-    fontSize: AppTheme.font.size.md,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.onPrimary,
+    fontSize: t.font.size.md,
+    fontWeight: t.font.weight.black,
   },
   trackingBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     backgroundColor: "#FFD54F",
-    borderRadius: 12,
+    borderRadius: t.radius.md,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginBottom: 12,

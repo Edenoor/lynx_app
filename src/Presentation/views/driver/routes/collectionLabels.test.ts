@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/routes/collectionLabels.ts src/Presentation/views/driver/routes/collectionLabels.test.ts
 //   node /tmp/labels/collectionLabels.test.js
 
-import { collectionKindLabel, collectionName, confirmationNoticeText, directionsUrl, executionDayLabel } from "./collectionLabels";
+import { collectionKindLabel, collectionName, collectionStatusKey, confirmationNoticeText, directionsUrl, executionDayLabel } from "./collectionLabels";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -41,6 +41,15 @@ eq("por coordenadas (pg las manda como texto)", directionsUrl({ latitude: "-31.4
 eq("sin coordenadas: por dirección", directionsUrl({ latitude: null, longitude: null, address: "Arcadini 4464, Córdoba" }), "https://www.google.com/maps/dir/?api=1&destination=Arcadini%204464%2C%20C%C3%B3rdoba");
 eq("coordenadas 0,0: por dirección", directionsUrl({ latitude: 0, longitude: 0, address: "Arcadini 4464" }), "https://www.google.com/maps/dir/?api=1&destination=Arcadini%204464");
 eq("sin nada", directionsUrl({ latitude: null, longitude: null, address: "  " }), null);
+
+// Tono del estado (lista de colectas)
+eq("pendiente de confirmar", collectionStatusKey("ASSIGNED", "PENDING"), "pending");
+eq("rechazada", collectionStatusKey("ASSIGNED", "DECLINED"), "rejected");
+eq("aceptada", collectionStatusKey("ASSIGNED", "ACCEPTED"), "confirmed");
+eq("cancelada", collectionStatusKey("CANCELLED", null), "cancelled");
+eq("en curso", collectionStatusKey("IN_PROGRESS", null), "inTransit");
+eq("completada", collectionStatusKey("COMPLETED", null), "confirmed");
+eq("planificada", collectionStatusKey("PLANNED", null), "confirmed");
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

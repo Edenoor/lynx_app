@@ -6,7 +6,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 export type BottomNavigationItem<K extends string> = {
   key: K;
@@ -32,8 +33,10 @@ type Props<K extends string> = {
 export const BOTTOM_NAVIGATION_SPACE = 112;
 
 export function BottomNavigationBar<K extends string>({ items, activeKey, onPress, bottomInset = 0 }: Props<K>) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
-    <View style={bottomInset ? [styles.safeArea, { paddingBottom: AppTheme.spacing.md + bottomInset }] : styles.safeArea}>
+    <View style={bottomInset ? [styles.safeArea, { paddingBottom: theme.spacing.md + bottomInset }] : styles.safeArea}>
       <View style={styles.container}>
         {items.map((tab) => {
           const active = activeKey === tab.key;
@@ -54,7 +57,7 @@ export function BottomNavigationBar<K extends string>({ items, activeKey, onPres
                   <Ionicons
                     name={tab.icon}
                     size={28}
-                    color={AppTheme.colors.black}
+                    color={theme.colors.black}
                   />
                 </View>
 
@@ -74,7 +77,7 @@ export function BottomNavigationBar<K extends string>({ items, activeKey, onPres
               <Ionicons
                 name={tab.icon}
                 size={22}
-                color={active ? AppTheme.text.accent : AppTheme.text.muted}
+                color={active ? theme.text.accent : theme.text.muted}
               />
 
               <Text style={[styles.label, active && styles.labelActive]}>
@@ -94,14 +97,14 @@ export function BottomNavigationBar<K extends string>({ items, activeKey, onPres
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   safeArea: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: AppTheme.layout.screenPaddingCompact,
-    paddingBottom: AppTheme.spacing.md,
+    paddingHorizontal: t.layout.screenPaddingCompact,
+    paddingBottom: t.spacing.md,
     zIndex: 40,
   },
 
@@ -110,13 +113,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    paddingHorizontal: AppTheme.spacing.sm,
-    paddingVertical: AppTheme.spacing.sm,
-    ...AppTheme.shadows.card,
+    borderColor: t.borders.medium,
+    paddingHorizontal: t.spacing.sm,
+    paddingVertical: t.spacing.sm,
+    ...t.shadows.card,
   },
 
   item: {
@@ -124,17 +127,17 @@ const styles = StyleSheet.create({
     minHeight: 54,
     alignItems: "center",
     justifyContent: "center",
-    gap: AppTheme.spacing.xs,
+    gap: t.spacing.xs,
   },
 
   label: {
-    color: AppTheme.text.muted,
-    fontSize: AppTheme.font.size.xs,
-    fontWeight: AppTheme.font.weight.bold,
+    color: t.text.muted,
+    fontSize: t.font.size.xs,
+    fontWeight: t.font.weight.bold,
   },
 
   labelActive: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
   },
 
   primaryItem: {
@@ -142,24 +145,24 @@ const styles = StyleSheet.create({
     minHeight: 66,
     alignItems: "center",
     justifyContent: "center",
-    gap: AppTheme.spacing.xs,
-    marginTop: -AppTheme.spacing.xl,
+    gap: t.spacing.xs,
+    marginTop: -t.spacing.xl,
   },
 
   primaryButton: {
     width: 58,
     height: 58,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.text.accent,
+    backgroundColor: t.colors.primary,
     borderWidth: 1,
-    borderColor: AppTheme.borders.primary,
-    ...AppTheme.shadows.glow,
+    borderColor: t.borders.primary,
+    ...t.shadows.glow,
   },
 
   primaryButtonActive: {
-    backgroundColor: AppTheme.colors.primarySoft,
+    backgroundColor: t.colors.primarySoft,
   },
 
   badge: {
@@ -169,22 +172,22 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     paddingHorizontal: 4,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.colors.danger,
+    backgroundColor: t.status.rejected.solid,
   },
 
   badgeText: {
-    color: AppTheme.colors.white,
+    color: t.status.rejected.onSolid,
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   primaryLabel: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.xs,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontSize: t.font.size.xs,
+    fontWeight: t.font.weight.black,
   },
 });
 

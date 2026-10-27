@@ -2,6 +2,9 @@
 // Textos de colectas que ve el chofer. Nunca «ronda» ni nombres internos
 // (PICKUP, ROUTE_CONFIRMATION). Sin React: se prueba con node.
 
+import type { PickupAnswer } from "./pickupConfirmation";
+import type { StatusKey } from "../../../theme/createTheme";
+
 const WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 const dayNumber = (iso: string) => Math.round(Date.parse(`${iso.slice(0, 10)}T12:00:00Z`) / 86_400_000);
@@ -28,6 +31,17 @@ export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 
 export const COLLECTION_STATUS_LABEL: Record<string, string> = {
   PLANNED: "Planificada", ASSIGNED: "Asignada", LOADED: "Cargada", IN_PROGRESS: "En curso", COMPLETED: "Completada", CANCELLED: "Cancelada",
 };
+
+// Tono del estado en la lista de colectas. Mismo criterio de color que antes
+// (pendiente; rechazada o cancelada; el resto, positivo), con la colecta en
+// curso como «en camino». Solo presentación: el estado lo decide el servidor.
+export function collectionStatusKey(status: string, answer: PickupAnswer | null): StatusKey {
+  if (answer === "PENDING") return "pending";
+  if (answer === "DECLINED") return "rejected";
+  if (status === "CANCELLED") return "cancelled";
+  if (answer === null && status === "IN_PROGRESS") return "inTransit";
+  return "confirmed";
+}
 
 // Aviso de confirmación (ROUTE_CONFIRMATION). El servidor arma el texto con
 // «Ronda … hoy/mañana» y «Confirmá desde Rutas»; acá se rearma con los datos

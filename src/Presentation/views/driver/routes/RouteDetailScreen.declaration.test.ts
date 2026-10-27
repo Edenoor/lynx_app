@@ -7,7 +7,7 @@
 // La pantalla se transpila al vuelo con el `typescript` del proyecto y corre con
 // un React de prueba: useState toma los valores de `states` en orden de llamada
 // y sus setters registran lo que reciben; los efectos no corren. react-native,
-// los íconos y Api.tsx están simulados: no hay red.
+// los íconos, la barra de estado y Api.tsx están simulados: no hay red.
 
 export {}; // módulo: sin esto, los nombres de acá chocan con los globales del DOM
 
@@ -36,6 +36,8 @@ const FakeReact = {
   useCallback: (f: any) => f,
   useMemo: (f: any) => f(),
   useRef: (v: any) => ({ current: v }),
+  // Sin provider: el tema por defecto (oscuro, Classic, Equilibrado).
+  useContext: (ctx: any) => ctx._currentValue,
 };
 
 const alerts: any[][] = [];
@@ -49,7 +51,7 @@ const ApiMock = {
 };
 
 const RN = {
-  StyleSheet: { create: (s: any) => s, absoluteFill: {} },
+  StyleSheet: { create: (s: any) => s, absoluteFill: {}, hairlineWidth: 0.5 },
   View: "View", Text: "Text", Pressable: "Pressable", ImageBackground: "ImageBackground", ScrollView: "ScrollView",
   SafeAreaView: "SafeAreaView", ActivityIndicator: "ActivityIndicator", TextInput: "TextInput",
   Alert: { alert: (...a: any[]) => alerts.push(a) },
@@ -61,7 +63,12 @@ const RN = {
   Appearance: { getColorScheme: () => "dark" },
   useWindowDimensions: () => ({ width: 400, height: 800 }),
 };
-const MOCKS: Record<string, any> = { "react-native": RN, "@expo/vector-icons": { Ionicons: "Ionicons" } };
+const MOCKS: Record<string, any> = {
+  "react-native": RN,
+  "@expo/vector-icons": { Ionicons: "Ionicons" },
+  "expo-status-bar": { StatusBar: "StatusBar" },
+  "@react-navigation/native": { useIsFocused: () => true },
+};
 const nav = { navigate: () => {}, goBack: () => {}, addListener: () => () => {} };
 
 const cache = new Map<string, { exports: any }>();

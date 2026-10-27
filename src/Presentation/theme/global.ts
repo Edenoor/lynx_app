@@ -102,14 +102,19 @@ export const BASE_COLORS = {
 //   gray: "#94A3B8",
 // };
 
-// Estados con contraste ≥ 4,5:1 sobre todas las superficies de cada esquema
-// (theme.test.ts). success oscuro sigue igual: es fondo del botón «Aceptar»
-// con texto blanco y aclararlo bajaría ese contraste.
+// Estados con contraste ≥ 4,5:1 sobre todas las superficies de cada paleta
+// (theme.test.ts). `success` y `primary` son también rellenos de botones con
+// texto blanco: para texto e íconos se usan `successText` y `accent`.
 export const DARK_COLORS = {
   ...BASE_COLORS,
   mode: "dark" as ThemeMode,
 
   danger: "#EC5D62",
+  successText: "#5FA843",
+  accent: "#86A4E8",
+  // Indicadores de la tarjeta de performance (no son estados operativos).
+  highlightGold: "#F5C451",
+  highlightGreen: "#39D98A",
 
   background: "#04070D",
   backgroundAlt: "#09111D",
@@ -199,6 +204,10 @@ export const LIGHT_COLORS = {
 
   success: "#3A7524",
   warning: "#8A6100",
+  successText: "#3A7524",
+  accent: "#3862B5",
+  highlightGold: "#8A6100",
+  highlightGreen: "#3A7524",
 
   background: "#F4F6FA",
   backgroundAlt: "#EEF2F8",
@@ -221,7 +230,7 @@ export const LIGHT_COLORS = {
 
   text: "#101828",
   textSecondary: "#344054",
-  textMuted: "#667085",
+  textMuted: "#5E6779",
   placeholder: "#98A2B3",
 
   border: "rgba(16,24,40,0.10)",
@@ -237,6 +246,103 @@ export const LIGHT_COLORS = {
   tabBar: "#FFFFFF",
   input: "rgba(255,255,255,0.90)",
   gray: "#667085",
+};
+
+// Marble: piedra clara y carbón suave. Superficies opacas que se separan del
+// fondo por pocos tonos y bordes casi invisibles; sin imágenes ni transparencias.
+export const MARBLE_DARK_COLORS = {
+  ...DARK_COLORS,
+
+  // Las superficies son más claras que en Classic: rojo y verde un poco más vivos.
+  danger: "#F2777A",
+  successText: "#66AE4A",
+
+  background: "#141619",
+  backgroundAlt: "#181A1E",
+  backgroundDeep: "#101214",
+
+  surface: "#1B1E22",
+  surfaceSoft: "#1F2226",
+  surfaceStrong: "#23262B",
+
+  card: "#1A1D21",
+  cardStrong: "#1D2024",
+  cardElevated: "#202328",
+
+  overlay: "rgba(20,22,25,0.42)",
+  overlayStrong: "rgba(0,0,0,0.60)",
+  footerOverlay: "rgba(20,22,25,0.96)",
+
+  primaryOverlay: "rgba(134,164,232,0.10)",
+  primaryBorder: "rgba(134,164,232,0.18)",
+
+  text: "#ECEAE6",
+  textSecondary: "#C3BFB8",
+  textMuted: "#A39E96",
+  placeholder: "#77736C",
+
+  border: "rgba(255,255,255,0.08)",
+  borderSoft: "rgba(255,255,255,0.045)",
+  borderMuted: "rgba(255,255,255,0.06)",
+  borderMedium: "rgba(255,255,255,0.07)",
+  borderStrong: "rgba(255,255,255,0.14)",
+  borderLight: "rgba(255,255,255,0.28)",
+  borderWhite: "rgba(255,255,255,0.72)",
+
+  mutedBg: "rgba(255,255,255,0.035)",
+
+  tabBar: "#181A1E",
+  input: "rgba(255,255,255,0.04)",
+  gray: "#A39E96",
+};
+
+export const MARBLE_LIGHT_COLORS = {
+  ...LIGHT_COLORS,
+
+  success: "#346A20",
+  warning: "#7D5800",
+  successText: "#346A20",
+  accent: "#2F55A3",
+  highlightGold: "#7D5800",
+  highlightGreen: "#346A20",
+
+  background: "#ECEAE6",
+  backgroundAlt: "#E7E4DF",
+  backgroundDeep: "#E0DCD6",
+
+  surface: "#F5F3F0",
+  surfaceSoft: "#F1EFEB",
+  surfaceStrong: "#F8F6F3",
+
+  card: "#F2F0EC",
+  cardStrong: "#F4F2EF",
+  cardElevated: "#F7F5F2",
+
+  overlay: "rgba(236,234,230,0.40)",
+  overlayStrong: "rgba(20,18,16,0.42)",
+  footerOverlay: "rgba(236,234,230,0.96)",
+
+  primaryOverlay: "rgba(47,85,163,0.08)",
+  primaryBorder: "rgba(47,85,163,0.16)",
+
+  text: "#1D1B18",
+  textSecondary: "#46423C",
+  textMuted: "#5E594F",
+  placeholder: "#8E897F",
+
+  border: "rgba(40,34,28,0.10)",
+  borderSoft: "rgba(40,34,28,0.05)",
+  borderMuted: "rgba(40,34,28,0.07)",
+  borderMedium: "rgba(40,34,28,0.08)",
+  borderStrong: "rgba(40,34,28,0.16)",
+  borderLight: "rgba(40,34,28,0.26)",
+  borderWhite: "rgba(255,255,255,0.72)",
+
+  mutedBg: "rgba(40,34,28,0.035)",
+
+  tabBar: "#F5F3F0",
+  input: "rgba(255,255,255,0.60)",
+  gray: "#5E594F",
 };
 
 export const COLORS = DARK_COLORS;

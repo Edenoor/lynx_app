@@ -215,7 +215,8 @@ if (tab === "scan") {
           <AccountItem
             icon="settings-outline"
             title="Configuración"
-            description="Preferencias"
+            description="Apariencia: tema, estilo y bordes"
+            onPress={() => navigation.navigate("AppearanceScreen")}
           />
         </View>
 

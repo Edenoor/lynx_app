@@ -14,7 +14,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
+import ThemedCard from "../../../components/ThemedCard";
+import StatusChip from "../../../components/StatusChip";
 import DriverBottomNavigation, {
   DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
@@ -30,6 +34,7 @@ import {
   COLLECTION_STATUS_LABEL,
   collectionKindLabel,
   collectionName,
+  collectionStatusKey,
   plural,
 } from "./collectionLabels";
 import { errorMessage } from "../errorMessage";
@@ -99,6 +104,8 @@ const groupRoutes = (routes: RouteSummary[]): CollectionGroup[] => {
 };
 
 export default function CollectionsScreen({ navigation }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [routes, setRoutes] = useState<RouteSummary[] | null>(null);
   const [today, setToday] = useState(todayIso());
   const [loading, setLoading] = useState(true);
@@ -197,6 +204,7 @@ export default function CollectionsScreen({ navigation }: Props) {
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >
+      <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
           contentContainerStyle={styles.page}
@@ -204,7 +212,7 @@ export default function CollectionsScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={loading}
               onRefresh={load}
-              tintColor={AppTheme.text.accent}
+              tintColor={theme.text.accent}
             />
           }
         >
@@ -223,7 +231,7 @@ export default function CollectionsScreen({ navigation }: Props) {
               <Ionicons
                 name="cube-outline"
                 size={32}
-                color={AppTheme.text.secondary}
+                color={theme.text.secondary}
               />
               <Text style={styles.emptyTitle}>
                 No tenés colectas asignadas
@@ -282,6 +290,8 @@ function CollectionCard({
   onAccept: () => void;
   onReject: () => void;
 }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const answer = pickupAnswer(route);
   const habitual = !!route.template_id;
 
@@ -294,12 +304,7 @@ function CollectionCard({
           ? "Rechazada"
           : COLLECTION_STATUS_LABEL[route.status] ?? route.status;
 
-  const statusColor =
-    answer === "PENDING"
-      ? AppTheme.colors.warning
-      : answer === "DECLINED" || route.status === "CANCELLED"
-        ? AppTheme.colors.danger
-        : AppTheme.colors.success;
+  const statusKey = collectionStatusKey(route.status, answer);
 
   const canAnswer =
     answer === "PENDING" || answer === "DECLINED";
@@ -307,7 +312,7 @@ function CollectionCard({
   const canReject = answer === "PENDING";
 
   return (
-    <View style={styles.card}>
+    <ThemedCard variant="row" style={styles.card}>
       <Pressable
         onPress={onOpen}
         accessibilityRole="button"
@@ -324,18 +329,7 @@ function CollectionCard({
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.statusBadge,
-              { borderColor: statusColor },
-            ]}
-          >
-            <Text
-              style={[styles.statusText, { color: statusColor }]}
-            >
-              {statusLabel}
-            </Text>
-          </View>
+          <StatusChip status={statusKey} label={statusLabel} />
         </View>
 
         <View style={styles.cardDetails}>
@@ -343,7 +337,7 @@ function CollectionCard({
             <Ionicons
               name="calendar-outline"
               size={14}
-              color={AppTheme.text.secondary}
+              color={theme.text.secondary}
             />
             <Text style={styles.cardMeta}>{dateLabel(route)}</Text>
           </View>
@@ -353,7 +347,7 @@ function CollectionCard({
               <Ionicons
                 name="time-outline"
                 size={14}
-                color={AppTheme.text.secondary}
+                color={theme.text.secondary}
               />
               <Text style={styles.cardMeta}>
                 {route.departure_time.slice(0, 5)}
@@ -365,7 +359,7 @@ function CollectionCard({
             <Ionicons
               name="location-outline"
               size={14}
-              color={AppTheme.text.secondary}
+              color={theme.text.secondary}
             />
             <Text style={styles.cardMeta}>
               {plural(route.stops_count, "parada", "paradas")}
@@ -394,7 +388,7 @@ function CollectionCard({
                 <Ionicons
                   name="close"
                   size={22}
-                  color={AppTheme.colors.danger}
+                  color={theme.status.rejected.icon}
                 />
               </Pressable>
             ) : null}
@@ -409,7 +403,7 @@ function CollectionCard({
               <Ionicons
                 name="checkmark"
                 size={23}
-                color={AppTheme.colors.success}
+                color={theme.status.confirmed.icon}
               />
             </Pressable>
           </View>
@@ -429,50 +423,47 @@ function CollectionCard({
           Podés comenzarla el día programado.
         </Text>
       ) : null}
-    </View>
+    </ThemedCard>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   background: {
     flex: 1,
-    backgroundColor: AppTheme.colors.background,
+    backgroundColor: t.colors.background,
   },
   backgroundImage: {
-    opacity: 0.18,
+    opacity: t.backdrop.imageOpacity,
   },
   safeArea: {
     flex: 1,
   },
   page: {
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.spacing.lg,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingTop: t.spacing.lg,
     paddingBottom: 132,
   },
   header: {
-    marginTop: AppTheme.spacing.lg,
+    marginTop: t.spacing.lg,
     marginBottom: 22,
   },
   title: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 25,
     fontWeight: "700",
   },
   section: {
     marginBottom: 22,
-    gap: 10,
+    gap: t.list.gap,
   },
   sectionTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 15,
     fontWeight: "700",
     marginBottom: 2,
   },
+  // Fondo, borde, radio y sombra los pone ThemedCard (fila de lista).
   card: {
-    backgroundColor: AppTheme.surfaces.card,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: AppTheme.borders.default,
     paddingHorizontal: 14,
     paddingVertical: 13,
     gap: 12,
@@ -488,24 +479,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardName: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 16,
     fontWeight: "700",
   },
   kindLabel: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 11,
     fontWeight: "500",
-  },
-  statusBadge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "700",
   },
   cardDetails: {
     flexDirection: "row",
@@ -518,19 +499,19 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   cardMeta: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 12,
   },
   cardActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: AppTheme.borders.soft,
+    borderTopWidth: t.separator.width,
+    borderTopColor: t.separator.color,
     paddingTop: 10,
   },
   actionHint: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 12,
   },
   actionButtons: {
@@ -541,25 +522,25 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: t.radius.full,
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
   },
   acceptButton: {
-    borderColor: AppTheme.colors.success,
-    backgroundColor: `${AppTheme.colors.success}16`,
+    borderColor: t.status.confirmed.border,
+    backgroundColor: t.status.confirmed.background,
   },
   rejectButton: {
-    borderColor: AppTheme.colors.danger,
-    backgroundColor: `${AppTheme.colors.danger}16`,
+    borderColor: t.status.rejected.border,
+    backgroundColor: t.status.rejected.background,
   },
   cardHint: {
-    color: AppTheme.text.accent,
+    color: t.text.accent,
     fontSize: 11,
   },
   cardWarn: {
-    color: AppTheme.colors.warning,
+    color: t.status.pending.text,
     fontSize: 11,
   },
   emptyContainer: {
@@ -568,23 +549,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 15,
     fontWeight: "600",
   },
   emptyText: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 12,
     textAlign: "center",
   },
   errorBox: {
     borderWidth: 1,
-    borderColor: AppTheme.colors.danger,
-    borderRadius: AppTheme.radius.md,
+    borderColor: t.status.rejected.border,
+    borderRadius: t.radius.md,
     padding: 12,
     marginBottom: 12,
   },
   errorText: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
   },
 });

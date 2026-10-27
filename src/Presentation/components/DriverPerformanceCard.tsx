@@ -11,7 +11,8 @@ import {
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 type DriverPerformanceCardProps = {
   loading?: boolean;
@@ -41,9 +42,6 @@ const GAUGE_RADIUS = 33;
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS;
 const GAUGE_VISIBLE_PERCENT = 0.74;
 
-const GOLD = "#F5C451";
-const GREEN = "#39D98A";
-
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
@@ -53,10 +51,10 @@ const getPerformanceLabel = (effectiveness: number) => {
   return "Atención";
 };
 
-const getPerformanceColor = (effectiveness: number) => {
-  if (effectiveness > 97) return GOLD;
-  if (effectiveness >= 95) return GREEN;
-  return AppTheme.colors.danger;
+const getPerformanceColor = (effectiveness: number, theme: Theme) => {
+  if (effectiveness > 97) return theme.colors.highlightGold;
+  if (effectiveness >= 95) return theme.colors.highlightGreen;
+  return theme.status.rejected.text;
 };
 
 const getStatusIcon = (effectiveness: number) => {
@@ -82,13 +80,17 @@ export function DriverPerformanceCard({
   post23InTransit,
   delayedTotal,
 }: DriverPerformanceCardProps) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const GOLD = theme.colors.highlightGold;
+  const GREEN = theme.colors.highlightGreen;
   const [detailVisible, setDetailVisible] = useState(false);
 
   const safeScore = clamp(score, 0, 10);
   const safeEffectiveness = clamp(effectiveness, 0, 100);
   const averageRating = clamp(safeScore / 2, 0, 5);
 
-  const statusColor = getPerformanceColor(safeEffectiveness);
+  const statusColor = getPerformanceColor(safeEffectiveness, theme);
   const statusIcon = getStatusIcon(safeEffectiveness);
 
   const visibleDash = GAUGE_CIRCUMFERENCE * GAUGE_VISIBLE_PERCENT;
@@ -124,7 +126,7 @@ export function DriverPerformanceCard({
                 cx={GAUGE_SIZE / 2}
                 cy={GAUGE_SIZE / 2}
                 r={GAUGE_RADIUS}
-                stroke={AppTheme.surfaces.cardStrong}
+                stroke={theme.surfaces.cardStrong}
                 strokeWidth={GAUGE_STROKE}
                 fill="transparent"
                 strokeLinecap="round"
@@ -208,7 +210,7 @@ export function DriverPerformanceCard({
   <Ionicons
     name="eye-outline"
     size={20}
-    color={AppTheme.text.secondary}
+    color={theme.text.secondary}
   />
 </TouchableOpacity>
 
@@ -241,7 +243,7 @@ export function DriverPerformanceCard({
                 <Ionicons
                   name="close-outline"
                   size={24}
-                  color={AppTheme.text.primary}
+                  color={theme.text.primary}
                 />
               </TouchableOpacity>
             </View>
@@ -256,7 +258,7 @@ export function DriverPerformanceCard({
               <SummaryItem
                 label="Demorados"
                 value={delayed}
-                color={AppTheme.colors.danger}
+                color={theme.status.rejected.text}
               />
             </View>
 
@@ -302,9 +304,11 @@ function Metric({
   label: string;
   color?: string;
 }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.metric}>
-      <Ionicons name={icon} size={17} color={color ?? AppTheme.text.secondary} />
+      <Ionicons name={icon} size={17} color={color ?? theme.text.secondary} />
       <Text style={[styles.metricValue, color ? { color } : null]}>
         {value}
       </Text>
@@ -324,9 +328,11 @@ function InlineFooterBlock({
   value: string;
   color?: string;
 }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.inlineFooterItem}>
-      <Ionicons name={icon} size={14} color={color ?? AppTheme.text.secondary} />
+      <Ionicons name={icon} size={14} color={color ?? theme.text.secondary} />
 
       {label ? (
         <Text style={styles.inlineFooterLabel}>{label}</Text>
@@ -346,6 +352,7 @@ function SummaryItem({
   value: number;
   color: string;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.summaryItem}>
       <Text style={styles.summaryValue}>{value}</Text>
@@ -355,6 +362,7 @@ function SummaryItem({
 }
 
 function DetailRow({ label, value }: { label: string; value: number }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -363,30 +371,30 @@ function DetailRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   card: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    paddingVertical: AppTheme.spacing.xs,
-    paddingHorizontal: AppTheme.spacing.md,
-    gap: AppTheme.spacing.xs,
-    ...AppTheme.shadows.card,
+    borderColor: t.borders.medium,
+    paddingVertical: t.spacing.xs,
+    paddingHorizontal: t.spacing.md,
+    gap: t.spacing.xs,
+    ...t.shadows.card,
   },
 
   periodLabel: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.medium,
-    paddingTop: AppTheme.spacing.xs,
+    fontWeight: t.font.weight.medium,
+    paddingTop: t.spacing.xs,
   },
 
   mainRow: {
     minHeight: 88,
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   gaugeBlock: {
@@ -408,17 +416,17 @@ const styles = StyleSheet.create({
   },
 
   scoreValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 26,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -1.2,
     lineHeight: 29,
   },
 
   scoreText: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.medium,
+    fontWeight: t.font.weight.medium,
     marginTop: -2,
   },
 
@@ -432,13 +440,13 @@ const styles = StyleSheet.create({
 
   statusText: {
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   divider: {
     width: 1,
     height: 62,
-    backgroundColor: AppTheme.borders.soft,
+    backgroundColor: t.borders.soft,
   },
 
   metricsRow: {
@@ -446,7 +454,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   metric: {
@@ -457,24 +465,24 @@ const styles = StyleSheet.create({
   },
 
   metricValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 22,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     letterSpacing: -0.7,
     lineHeight: 25,
   },
 
   metricLabel: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.medium,
+    fontWeight: t.font.weight.medium,
     textAlign: "center",
     lineHeight: 13,
   },
 
   footerDivider: {
     height: 1,
-    backgroundColor: AppTheme.borders.soft,
+    backgroundColor: t.borders.soft,
   },
 
   footer: {
@@ -494,15 +502,15 @@ inlineFooterItem: {
 },
 
   inlineFooterLabel: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
 inlineFooterValue: {
-  color: AppTheme.text.primary,
+  color: t.text.primary,
   fontSize: 13,
-  fontWeight: AppTheme.font.weight.black,
+  fontWeight: t.font.weight.black,
   letterSpacing: -0.2,
 },
 
@@ -516,9 +524,9 @@ inlineFooterValue: {
   },
 
   detailButtonText: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   modalOverlay: {
@@ -526,18 +534,18 @@ inlineFooterValue: {
     backgroundColor: "rgba(5, 8, 14, 0.72)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: AppTheme.spacing.lg,
+    paddingHorizontal: t.spacing.lg,
   },
 
   modalCard: {
     width: "100%",
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.screen,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.screen,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.lg,
-    gap: AppTheme.spacing.md,
-    ...AppTheme.shadows.card,
+    borderColor: t.borders.medium,
+    padding: t.spacing.lg,
+    gap: t.spacing.md,
+    ...t.shadows.card,
   },
 
   modalHeader: {
@@ -547,57 +555,57 @@ inlineFooterValue: {
   },
 
   modalKicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   modalTitle: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.lg,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontSize: t.font.size.lg,
+    fontWeight: t.font.weight.black,
   },
 
   summaryGrid: {
     flexDirection: "row",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   summaryItem: {
     flex: 1,
-    borderRadius: AppTheme.radius.lg,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.lg,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    padding: AppTheme.spacing.sm,
+    borderColor: t.borders.soft,
+    padding: t.spacing.sm,
     alignItems: "center",
     gap: 2,
   },
 
   summaryValue: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.lg,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontSize: t.font.size.lg,
+    fontWeight: t.font.weight.black,
   },
 
   summaryLabel: {
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     textAlign: "center",
   },
 
   detailSection: {
-    borderRadius: AppTheme.radius.lg,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.lg,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    padding: AppTheme.spacing.md,
-    gap: AppTheme.spacing.sm,
+    borderColor: t.borders.soft,
+    padding: t.spacing.md,
+    gap: t.spacing.sm,
   },
 
   detailSectionTitle: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.bold,
-    marginBottom: AppTheme.spacing.xs,
+    color: t.text.secondary,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.bold,
+    marginBottom: t.spacing.xs,
   },
 
   detailRow: {
@@ -607,35 +615,35 @@ inlineFooterValue: {
   },
 
   detailLabel: {
-    color: AppTheme.text.muted,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.medium,
+    color: t.text.muted,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.medium,
   },
 
   detailValue: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.md,
-    fontWeight: AppTheme.font.weight.bold,
+    color: t.text.primary,
+    fontSize: t.font.size.md,
+    fontWeight: t.font.weight.bold,
   },
 
   detailTotalRowDanger: {
     borderTopWidth: 1,
-    borderTopColor: AppTheme.borders.soft,
-    paddingTop: AppTheme.spacing.sm,
+    borderTopColor: t.borders.soft,
+    paddingTop: t.spacing.sm,
     flexDirection: "row",
     justifyContent: "space-between",
   },
 
   detailTotalLabel: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.bold,
+    color: t.text.secondary,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.bold,
   },
 
   detailTotalValueDanger: {
-    color: AppTheme.colors.danger,
-    fontSize: AppTheme.font.size.md,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.status.rejected.text,
+    fontSize: t.font.size.md,
+    fontWeight: t.font.weight.black,
   },
 });
 

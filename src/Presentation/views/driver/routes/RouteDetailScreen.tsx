@@ -8,7 +8,10 @@ import { ActivityIndicator, Alert, ImageBackground, Linking, Pressable, SafeArea
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
+import ThemedCard from "../../../components/ThemedCard";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
   completeRoute, confirmLoad, declareStopCount, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, startRoute, todayIso,
@@ -33,6 +36,8 @@ type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
 export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const { routeId, name } = nav.params;
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [route, setRoute] = useState<RouteDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +91,8 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   if (!route) {
     return (
       <View style={[styles.background, styles.center]}>
-        {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={AppTheme.text.accent} />}
+        <ThemedStatusBar />
+        {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={theme.text.accent} />}
         <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 16 }}><Text style={styles.link}>Volver</Text></Pressable>
       </View>
     );
@@ -111,11 +117,12 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
+      <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
         {/* «handled»: con el teclado abierto, el primer toque en «Confirmar» confirma (no solo cierra el teclado). */}
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
+            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
             {isPickup ? (
               <View style={{ flex: 1 }}>
                 <Text style={styles.eyebrow}>Colecta {route.template_id ? "habitual" : "extraordinaria"} · #{route.id}</Text>
@@ -138,7 +145,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
           {canConfirm ? (
-            <View style={styles.panel}>
+            <ThemedCard style={styles.panel}>
               <Text style={styles.panelTitle}>Control de carga</Text>
               <Text style={styles.panelText}>
                 {route.load_expected_count === null
@@ -146,7 +153,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
                   : `El depósito preparó ${route.load_expected_count} bultos. Contá los que recibiste y confirmá.`}
               </Text>
               <View style={styles.row}>
-                <TextInput value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="Cantidad" placeholderTextColor={AppTheme.text.muted} style={styles.input} editable={!busy && route.load_expected_count !== null} />
+                <TextInput value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="Cantidad" placeholderTextColor={theme.text.muted} style={styles.input} editable={!busy && route.load_expected_count !== null} />
                 <Pressable onPress={onConfirmLoad} disabled={busy || route.load_expected_count === null} style={[styles.btn, (busy || route.load_expected_count === null) && styles.btnDisabled]}>
                   <Text style={styles.btnText}>Confirmar</Text>
                 </Pressable>
@@ -154,11 +161,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               {route.load_confirmed_count !== null && route.load_expected_count !== null && route.load_confirmed_count !== route.load_expected_count ? (
                 <Text style={styles.warn}>Última confirmación: {route.load_confirmed_count} de {route.load_expected_count}. Con diferencia el recorrido no sale.</Text>
               ) : null}
-            </View>
+            </ThemedCard>
           ) : null}
 
           {answer ? (
-            <View style={[styles.panel, answer === "DECLINED" && styles.panelDanger]}>
+            <ThemedCard style={[styles.panel, answer === "DECLINED" && styles.panelDanger]}>
               <Text style={styles.panelTitle}>Confirmación · {PICKUP_ANSWER_LABEL[answer]}</Text>
               <Text style={styles.panelText}>
                 {answer === "ACCEPTED"
@@ -180,35 +187,35 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
                   ) : null}
                 </View>
               ) : null}
-            </View>
+            </ThemedCard>
           ) : null}
 
           {answer && answer !== "ACCEPTED" ? (
             <View style={[styles.btn, styles.btnBig, styles.btnDisabled]}>
-              <Ionicons name="lock-closed" size={18} color={AppTheme.text.inverse} />
+              <Ionicons name="lock-closed" size={18} color={theme.text.onPrimary} />
               <Text style={styles.btnText}>Aceptá la colecta para comenzarla</Text>
             </View>
           ) : canStart && later ? (
             <View style={[styles.btn, styles.btnBig, styles.btnDisabled]}>
-              <Ionicons name="lock-closed" size={18} color={AppTheme.text.inverse} />
+              <Ionicons name="lock-closed" size={18} color={theme.text.onPrimary} />
               <Text style={styles.btnText}>Se comienza {day}</Text>
             </View>
           ) : canStart ? (
             <Pressable onPress={onStart} disabled={busy} style={[styles.btn, styles.btnBig, busy && styles.btnDisabled]}>
-              <Ionicons name="play" size={18} color={AppTheme.text.inverse} />
+              <Ionicons name="play" size={18} color={theme.text.onPrimary} />
               <Text style={styles.btnText}>{isPickup ? "Comenzar colecta" : "Salir a la calle"}</Text>
             </Pressable>
           ) : null}
 
           {declared && declared.stops ? (
-            <View style={styles.panel}>
+            <ThemedCard style={styles.panel}>
               <Text style={styles.panelTitle}>Paquetes retirados</Text>
               <View style={styles.stats}>
                 <Stat value={declared.total} label="informados" />
                 <Stat value={declared.informed} label={placeStatLabel(declared.informed, declared.allStores, "informed")} />
                 <Stat value={declared.pending} label={placeStatLabel(declared.pending, declared.allStores, "pending")} warn={declared.pending > 0} />
               </View>
-            </View>
+            </ThemedCard>
           ) : null}
 
           {route.stops.map((s) => (
@@ -218,7 +225,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
           {inProgress ? (
             <Pressable onPress={onComplete} disabled={busy || !allClosed} style={[styles.btn, styles.btnBig, (busy || !allClosed) && styles.btnDisabled]}>
-              <Ionicons name="checkmark-done" size={18} color={AppTheme.text.inverse} />
+              <Ionicons name="checkmark-done" size={18} color={theme.text.onPrimary} />
               <Text style={styles.btnText}>{allClosed ? "Completar recorrido" : "Cerrá todas las paradas para completar"}</Text>
             </Pressable>
           ) : null}
@@ -229,6 +236,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 }
 
 function Stat({ value, label, warn }: { value: number; label: string; warn?: boolean }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.stat}>
       <Text style={[styles.statValue, warn && styles.statWarn]}>{value}</Text>
@@ -241,6 +249,8 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
   routeId: number; stop: Stop; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void;
   act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>; onStopSaved: (stop: Stop) => void;
 }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [pending, setPending] = useState<PendingDelivery[] | null>(null);
   const [notes, setNotes] = useState("");
   const isPickup = stop.type === "PICKUP";
@@ -297,7 +307,7 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
 
   return (
-    <View style={[styles.stop, closed && styles.stopClosed]}>
+    <ThemedCard variant="row" style={[styles.stop, closed && styles.stopClosed]}>
       <Pressable onPress={onToggle} style={styles.stopHead}>
         <View style={styles.seq}><Text style={styles.seqText}>{stop.sequence}</Text></View>
         <View style={{ flex: 1 }}>
@@ -307,13 +317,13 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
           </Text>
           {isPickup && stop.pickup_time_snapshot ? (
             <View style={styles.cutoffRow}>
-              <Ionicons name="time-outline" size={14} color={AppTheme.text.accent} />
+              <Ionicons name="time-outline" size={14} color={theme.text.accent} />
               <Text style={styles.cutoffText}>Retiro: {stop.pickup_time_snapshot.slice(0, 5)}</Text>
             </View>
           ) : null}
           {isPickup && stop.cutoff_snapshot ? (
             <View style={styles.cutoffRow}>
-              <Ionicons name="time-outline" size={14} color={AppTheme.text.accent} />
+              <Ionicons name="time-outline" size={14} color={theme.text.accent} />
               <Text style={styles.cutoffText}>Corte de la tienda: {stop.cutoff_snapshot.slice(0, 5)}</Text>
             </View>
           ) : null}
@@ -323,7 +333,7 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
             {declares ? ` · ${declarationLabel(stop.declared_count)}` : ""}
           </Text>
         </View>
-        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={AppTheme.text.muted} />
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={theme.text.muted} />
       </Pressable>
 
       {open ? (
@@ -355,7 +365,7 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
 
           {directions ? (
             <Pressable onPress={() => Linking.openURL(directions).catch(() => Alert.alert("Cómo llegar", "No se pudo abrir Google Maps."))} style={[styles.btnSmall, styles.btnGhost, styles.rowBtn]}>
-              <Ionicons name="navigate-outline" size={16} color={AppTheme.text.primary} />
+              <Ionicons name="navigate-outline" size={16} color={theme.text.primary} />
               <Text style={styles.btnGhostText}>Cómo llegar</Text>
             </Pressable>
           ) : null}
@@ -368,7 +378,7 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
           {isPickup && !collectsHere && stop.status === "ARRIVED" ? (
             <>
               <Pressable onPress={showCollectInLightData} style={[styles.btnSmall, styles.rowBtn]}>
-                <Ionicons name="qr-code-outline" size={16} color={AppTheme.text.inverse} />
+                <Ionicons name="qr-code-outline" size={16} color={theme.text.onPrimary} />
                 <Text style={styles.btnText}>Escanear paquetes</Text>
               </Pressable>
               {stop.deliveries.length ? <Text style={styles.stopMeta}>Colectados en Lynx en esta parada: {stop.deliveries.map((d) => String(d.tracking ?? d.delivery_id)).join(", ")}</Text> : null}
@@ -383,7 +393,7 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
           {collectsHere && stop.status === "ARRIVED" ? (
             <>
               <Text style={styles.panelText}>Envíos de la tienda pendientes de retiro. Marcá cada bulto que te entregan.</Text>
-              {pending === null ? <ActivityIndicator color={AppTheme.text.accent} /> : pending.filter((p) => !collectedIds.has(p.delivery_id)).length === 0 ? (
+              {pending === null ? <ActivityIndicator color={theme.text.accent} /> : pending.filter((p) => !collectedIds.has(p.delivery_id)).length === 0 ? (
                 <Text style={styles.stopMeta}>No quedan envíos pendientes en esta tienda.</Text>
               ) : pending.filter((p) => !collectedIds.has(p.delivery_id)).map((p) => (
                 <View key={p.delivery_id} style={styles.deliveryRow}>
@@ -405,7 +415,7 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
 
           {inProgress && !closed ? (
             <>
-              <TextInput value={notes} onChangeText={setNotes} placeholder="Observación (opcional)" placeholderTextColor={AppTheme.text.muted} style={styles.input} />
+              <TextInput value={notes} onChangeText={setNotes} placeholder="Observación (opcional)" placeholderTextColor={theme.text.muted} style={styles.input} />
               <View style={styles.row}>
                 {stop.status === "PENDING" ? (
                   <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "arrive"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}><Text style={styles.btnText}>Llegué</Text></Pressable>
@@ -431,56 +441,58 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
           {!inProgress && !closed ? <Text style={styles.stopMeta}>Las paradas se trabajan cuando el recorrido está en curso.</Text> : null}
         </View>
       ) : null}
-    </View>
+    </ThemedCard>
   );
 }
 
-const styles = StyleSheet.create({
-  background: { flex: 1, backgroundColor: AppTheme.colors.background },
-  backgroundImage: { opacity: 0.18 },
+const makeStyles = (t: Theme) => StyleSheet.create({
+  background: { flex: 1, backgroundColor: t.colors.background },
+  backgroundImage: { opacity: t.backdrop.imageOpacity },
   safeArea: { flex: 1 },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
-  page: { paddingHorizontal: AppTheme.layout.screenPadding, paddingTop: AppTheme.spacing.lg, paddingBottom: 40, gap: AppTheme.spacing.sm },
-  header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: AppTheme.spacing.md, paddingTop: AppTheme.spacing.lg },
+  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 40, gap: t.spacing.sm },
+  header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
   back: { padding: 6, marginTop: 2 },
-  eyebrow: { ...AppTheme.typography.kicker },
-  title: { color: AppTheme.text.primary, fontSize: 22, fontWeight: "700" },
-  meta: { color: AppTheme.text.secondary, fontSize: 13, marginTop: 2 },
-  deadline: { color: AppTheme.colors.warning, fontSize: 14, fontWeight: "700", marginTop: 4 },
-  link: { color: AppTheme.text.accent },
-  panel: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.borders.primary, padding: AppTheme.spacing.md, gap: 10 },
-  panelTitle: { color: AppTheme.text.primary, fontWeight: "700", fontSize: 15 },
-  panelText: { color: AppTheme.text.secondary, fontSize: 13, lineHeight: 18 },
-  warn: { color: AppTheme.colors.warning, fontSize: 13 },
-  panelDanger: { borderColor: AppTheme.colors.danger },
+  eyebrow: { ...t.typography.kicker },
+  title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
+  meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },
+  deadline: { color: t.status.pending.text, fontSize: 14, fontWeight: "700", marginTop: 4 },
+  link: { color: t.text.accent },
+  // Fondo, radio y sombra: ThemedCard.
+  panel: { borderColor: t.borders.primary, padding: t.spacing.md, gap: 10 },
+  panelTitle: { color: t.text.primary, fontWeight: "700", fontSize: 15 },
+  panelText: { color: t.text.secondary, fontSize: 13, lineHeight: 18 },
+  warn: { color: t.status.pending.text, fontSize: 13 },
+  panelDanger: { borderWidth: 1, borderColor: t.status.rejected.border },
   row: { flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" },
-  input: { flex: 1, minWidth: 120, minHeight: 44, borderRadius: AppTheme.radius.md, borderWidth: 1, borderColor: AppTheme.borders.default, backgroundColor: AppTheme.surfaces.input, color: AppTheme.text.primary, paddingHorizontal: 12 },
-  btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", backgroundColor: AppTheme.colors.primary, borderRadius: AppTheme.radius.md, paddingHorizontal: 16, minHeight: 44 },
+  input: { flex: 1, minWidth: 120, minHeight: 44, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, backgroundColor: t.surfaces.input, color: t.text.primary, paddingHorizontal: 12 },
+  btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 16, minHeight: 44 },
   btnBig: { minHeight: 52, marginVertical: 4 },
-  btnSmall: { backgroundColor: AppTheme.colors.primary, borderRadius: AppTheme.radius.md, paddingHorizontal: 12, minHeight: 38, justifyContent: "center" },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: AppTheme.borders.default },
+  btnSmall: { backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 12, minHeight: 38, justifyContent: "center" },
+  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: t.borders.default },
   rowBtn: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6 },
   cutoffRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  cutoffText: { color: AppTheme.text.accent, fontSize: 12, fontWeight: "600" },
+  cutoffText: { color: t.text.accent, fontSize: 12, fontWeight: "600" },
   btnDisabled: { opacity: 0.5 },
-  btnText: { color: AppTheme.text.inverse, fontWeight: "700" },
-  btnGhostText: { color: AppTheme.text.primary, fontWeight: "600" },
+  btnText: { color: t.text.onPrimary, fontWeight: "700" },
+  btnGhostText: { color: t.text.primary, fontWeight: "600" },
   stats: { flexDirection: "row", gap: 8 },
-  stat: { flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: AppTheme.radius.md, backgroundColor: AppTheme.surfaces.muted },
-  statValue: { color: AppTheme.text.primary, fontSize: 20, fontWeight: "700" },
-  statWarn: { color: AppTheme.colors.warning },
-  statLabel: { color: AppTheme.text.secondary, fontSize: 11, textAlign: "center" },
-  stop: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.borders.default, overflow: "hidden" },
+  stat: { flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: t.radius.md, backgroundColor: t.surfaces.muted },
+  statValue: { color: t.text.primary, fontSize: 20, fontWeight: "700" },
+  statWarn: { color: t.status.pending.text },
+  statLabel: { color: t.text.secondary, fontSize: 11, textAlign: "center" },
+  // Fondo, borde, radio y sombra: ThemedCard (fila de lista).
+  stop: { overflow: "hidden" },
   stopClosed: { opacity: 0.65 },
-  stopHead: { flexDirection: "row", gap: 12, alignItems: "center", padding: AppTheme.spacing.md },
-  seq: { width: 30, height: 30, borderRadius: 15, backgroundColor: AppTheme.surfaces.muted, alignItems: "center", justifyContent: "center" },
-  seqText: { color: AppTheme.text.primary, fontWeight: "700" },
-  stopTitle: { color: AppTheme.text.primary, fontWeight: "700", fontSize: 15 },
-  stopMeta: { color: AppTheme.text.secondary, fontSize: 12, marginTop: 2 },
-  stopBody: { borderTopWidth: 1, borderTopColor: AppTheme.borders.soft, padding: AppTheme.spacing.md, gap: 10 },
-  deliveryRow: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: AppTheme.borders.soft, flexWrap: "wrap" },
-  deliveryTitle: { color: AppTheme.text.primary, fontSize: 14 },
-  mono: { color: AppTheme.text.muted, fontFamily: "monospace", fontSize: 12 },
-  errorBox: { borderWidth: 1, borderColor: AppTheme.colors.danger, borderRadius: AppTheme.radius.md, padding: 12 },
-  errorText: { color: AppTheme.text.primary },
+  stopHead: { flexDirection: "row", gap: 12, alignItems: "center", padding: t.spacing.md },
+  seq: { width: 30, height: 30, borderRadius: t.radius.full, backgroundColor: t.surfaces.muted, alignItems: "center", justifyContent: "center" },
+  seqText: { color: t.text.primary, fontWeight: "700" },
+  stopTitle: { color: t.text.primary, fontWeight: "700", fontSize: 15 },
+  stopMeta: { color: t.text.secondary, fontSize: 12, marginTop: 2 },
+  stopBody: { borderTopWidth: t.separator.width, borderTopColor: t.separator.color, padding: t.spacing.md, gap: 10 },
+  deliveryRow: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 6, borderBottomWidth: t.separator.width, borderBottomColor: t.separator.color, flexWrap: "wrap" },
+  deliveryTitle: { color: t.text.primary, fontSize: 14 },
+  mono: { color: t.text.muted, fontFamily: "monospace", fontSize: 12 },
+  errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, borderRadius: t.radius.md, padding: 12 },
+  errorText: { color: t.text.primary },
 });

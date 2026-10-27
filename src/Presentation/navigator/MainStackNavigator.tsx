@@ -1,9 +1,9 @@
 import React, { useContext } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { UserContext } from "../context/UserContext";
-import { useAppTheme, useThemedStyles } from "../theme/ThemeProvider";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
 import type { Theme } from "../theme/createTheme";
 
 import { HomeScreen } from "../views/auth/home/Home";
@@ -27,14 +27,15 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const makeLoadingStyles = (t: Theme) => ({
-  screen: {
-    flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    backgroundColor: t.colors.background,
-  },
-});
+const makeLoadingStyles = (t: Theme) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: t.colors.background,
+    },
+  });
 
 const AuthLoadingScreen = () => {
   const theme = useAppTheme();

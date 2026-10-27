@@ -3,7 +3,8 @@
 import React from "react";
 import { StyleSheet, Switch, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 type DriverTurboStatusCardProps = {
   active: boolean;
@@ -23,7 +24,9 @@ export function DriverTurboStatusCard({
   enabled = null,
   onToggle,
 }: DriverTurboStatusCardProps) {
-  const statusColor = active ? AppTheme.colors.success : AppTheme.colors.danger;
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const statusColor = active ? theme.status.confirmed.text : theme.status.rejected.text;
 
   return (
     <View style={styles.card}>
@@ -32,7 +35,7 @@ export function DriverTurboStatusCard({
           <Ionicons
             name="flash-outline"
             size={24}
-            color={AppTheme.text.accent}
+            color={theme.text.accent}
           />
         </View>
 
@@ -47,10 +50,10 @@ export function DriverTurboStatusCard({
           value={active}
           onValueChange={onToggle}
           disabled={saving}
-          thumbColor={AppTheme.text.primary}
+          thumbColor={theme.text.primary}
           trackColor={{
-            false: AppTheme.borders.medium,
-            true: AppTheme.overlays.primary,
+            false: theme.borders.medium,
+            true: theme.overlays.primary,
           }}
         />
       </View>
@@ -75,7 +78,7 @@ export function DriverTurboStatusCard({
           "Cuando haya un Turbo disponible, vas a recibir una alerta para aceptarlo."}
       </Text>
       {enabled === false ? (
-        <Text style={[styles.description, { color: AppTheme.colors.warning }]}>
+        <Text style={[styles.description, { color: theme.status.pending.text }]}>
           Todavía no estás habilitado para Turbo: pedíselo a tu coordinador.
         </Text>
       ) : null}
@@ -83,31 +86,31 @@ export function DriverTurboStatusCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   card: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.lg,
-    gap: AppTheme.spacing.md,
+    borderColor: t.borders.medium,
+    padding: t.spacing.lg,
+    gap: t.spacing.md,
   },
 
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   iconWrap: {
-    width: AppTheme.sizes.iconLg,
-    height: AppTheme.sizes.iconLg,
-    borderRadius: AppTheme.radius.lg,
+    width: t.sizes.iconLg,
+    height: t.sizes.iconLg,
+    borderRadius: t.radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.overlays.primary,
+    backgroundColor: t.overlays.primary,
     borderWidth: 1,
-    borderColor: AppTheme.borders.primary,
+    borderColor: t.borders.primary,
   },
 
   textWrap: {
@@ -115,55 +118,55 @@ const styles = StyleSheet.create({
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.md,
-    fontWeight: AppTheme.font.weight.black,
-    marginTop: AppTheme.spacing.xxs,
+    color: t.text.primary,
+    fontSize: t.font.size.md,
+    fontWeight: t.font.weight.black,
+    marginTop: t.spacing.xxs,
   },
 
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.xs,
-    paddingHorizontal: AppTheme.spacing.md,
-    paddingVertical: AppTheme.spacing.sm,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.surfaces.cardStrong,
+    gap: t.spacing.xs,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderRadius: t.radius.full,
+    backgroundColor: t.surfaces.cardStrong,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
+    borderColor: t.borders.medium,
   },
 
   statusDot: {
-    width: AppTheme.spacing.sm,
-    height: AppTheme.spacing.sm,
-    borderRadius: AppTheme.radius.full,
+    width: t.spacing.sm,
+    height: t.spacing.sm,
+    borderRadius: t.radius.full,
   },
 
   statusText: {
-    fontSize: AppTheme.font.size.xs,
-    fontWeight: AppTheme.font.weight.black,
+    fontSize: t.font.size.xs,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
   },
 
   tripText: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.xs,
-    fontWeight: AppTheme.font.weight.bold,
+    color: t.text.secondary,
+    fontSize: t.font.size.xs,
+    fontWeight: t.font.weight.bold,
   },
 
   description: {
-    ...AppTheme.typography.bodySm,
+    ...t.typography.bodySm,
   },
 });
 

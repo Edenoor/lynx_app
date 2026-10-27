@@ -8,7 +8,8 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
 import {
   Destination, DESTINATION_LABEL, emptyDraft, formatAmountAr, OutcomeDraft, parseAmountAr, PAYMENT_LABEL, PaymentMethod, RETURN_LABEL, ReturnKind,
 } from "./outcomeDeclaration";
@@ -27,6 +28,8 @@ const RETURNS: ReturnKind[] = ["CAMBIO", "RECUPERO", "VA_Y_VUELVE"];
 const DESTINATIONS: Destination[] = ["REENTREGA", "DEVOLUCION", "CANCELACION"];
 
 export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm, onCancel }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [draft, setDraft] = useState<OutcomeDraft>(() => emptyDraft(cobranza !== null ? formatAmountAr(cobranza) : ""));
   const [payOpen, setPayOpen] = useState(cobranza !== null);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -62,7 +65,7 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
               <Chips options={PAYMENTS} labels={PAYMENT_LABEL} value={draft.paymentMethod} onChange={(v) => set({ paymentMethod: v })} />
               <TextInput value={draft.amountText} onChangeText={(t) => set({ amountText: t })} keyboardType="decimal-pad"
                 onFocus={() => setShowAmountError(false)} onBlur={() => setShowAmountError(true)}
-                placeholder="Importe cobrado (ej. 1.500 o 1.234,56)" placeholderTextColor={AppTheme.text.muted} style={styles.input} />
+                placeholder="Importe cobrado (ej. 1.500 o 1.234,56)" placeholderTextColor={theme.text.muted} style={styles.input} />
               {showAmountError && !amount.ok && draft.paymentMethod ? <Text style={styles.warn}>{amount.error}</Text> : null}
               {cobranza === null && !draft.paymentMethod && draft.amountText.trim() ? (
                 <Text style={styles.hint}>Marcá Efectivo o Transferencia para que se registre el importe.</Text>
@@ -76,7 +79,7 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
               <Chips options={RETURNS} labels={RETURN_LABEL} value={draft.returnKind} onChange={(v) => set({ returnKind: v })} />
               {draft.returnKind ? (
                 <TextInput value={draft.returnItem} onChangeText={(t) => set({ returnItem: t })} maxLength={500}
-                  placeholder="¿Qué traés? (obligatorio)" placeholderTextColor={AppTheme.text.muted} style={styles.input} />
+                  placeholder="¿Qué traés? (obligatorio)" placeholderTextColor={theme.text.muted} style={styles.input} />
               ) : null}
             </>
           ) : null}
@@ -104,10 +107,12 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
 }
 
 function Toggle({ label, open, onPress }: { label: string; open: boolean; onPress: () => void }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Pressable onPress={onPress} style={styles.toggle} hitSlop={6} accessibilityRole="button" accessibilityState={{ expanded: open }}>
       <Text style={styles.label}>{label}</Text>
-      <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={AppTheme.text.muted} />
+      <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={theme.text.muted} />
     </Pressable>
   );
 }
@@ -116,6 +121,7 @@ function Toggle({ label, open, onPress }: { label: string; open: boolean; onPres
 function Chips<T extends string>({ options, labels, value, onChange }: {
   options: T[]; labels: Record<T, string>; value: T | null; onChange: (v: T | null) => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       {options.map((o) => (
@@ -128,24 +134,24 @@ function Chips<T extends string>({ options, labels, value, onChange }: {
   );
 }
 
-const styles = StyleSheet.create({
-  box: { width: "100%", gap: 8, padding: AppTheme.spacing.sm, borderRadius: AppTheme.radius.md, borderWidth: 1, borderColor: AppTheme.borders.primary, backgroundColor: AppTheme.overlays.primary },
-  title: { color: AppTheme.text.primary, fontWeight: "700", fontSize: 14 },
-  label: { color: AppTheme.text.primary, fontSize: 13, fontWeight: "600" },
-  hint: { color: AppTheme.text.secondary, fontSize: 12, lineHeight: 16 },
-  warn: { color: AppTheme.colors.warning, fontSize: 13 },
-  cobrar: { borderWidth: 1, borderColor: AppTheme.colors.warning, borderRadius: AppTheme.radius.md, padding: 10, gap: 2 },
-  cobrarText: { color: AppTheme.colors.warning, fontSize: 16, fontWeight: "700" },
+const makeStyles = (t: Theme) => StyleSheet.create({
+  box: { width: "100%", gap: 8, padding: t.spacing.sm, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.primary, backgroundColor: t.overlays.primary },
+  title: { color: t.text.primary, fontWeight: "700", fontSize: 14 },
+  label: { color: t.text.primary, fontSize: 13, fontWeight: "600" },
+  hint: { color: t.text.secondary, fontSize: 12, lineHeight: 16 },
+  warn: { color: t.status.pending.text, fontSize: 13 },
+  cobrar: { borderWidth: 1, borderColor: t.status.pending.border, borderRadius: t.radius.md, padding: 10, gap: 2 },
+  cobrarText: { color: t.status.pending.text, fontSize: 16, fontWeight: "700" },
   toggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 4 },
   row: { flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" },
-  chip: { borderRadius: AppTheme.radius.md, borderWidth: 1, borderColor: AppTheme.borders.default, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
-  chipActive: { backgroundColor: AppTheme.colors.primary, borderColor: AppTheme.colors.primary },
-  chipText: { color: AppTheme.text.primary, fontWeight: "600" },
-  chipTextActive: { color: AppTheme.text.inverse },
-  input: { minHeight: 44, borderRadius: AppTheme.radius.md, borderWidth: 1, borderColor: AppTheme.borders.default, backgroundColor: AppTheme.surfaces.input, color: AppTheme.text.primary, paddingHorizontal: 12 },
-  btn: { alignItems: "center", justifyContent: "center", backgroundColor: AppTheme.colors.primary, borderRadius: AppTheme.radius.md, paddingHorizontal: 16, minHeight: 44 },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: AppTheme.borders.default },
+  chip: { borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
+  chipActive: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
+  chipText: { color: t.text.primary, fontWeight: "600" },
+  chipTextActive: { color: t.text.onPrimary },
+  input: { minHeight: 44, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, backgroundColor: t.surfaces.input, color: t.text.primary, paddingHorizontal: 12 },
+  btn: { alignItems: "center", justifyContent: "center", backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 16, minHeight: 44 },
+  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: t.borders.default },
   btnDisabled: { opacity: 0.5 },
-  btnText: { color: AppTheme.text.inverse, fontWeight: "700" },
-  btnGhostText: { color: AppTheme.text.primary, fontWeight: "600" },
+  btnText: { color: t.text.onPrimary, fontWeight: "700" },
+  btnGhostText: { color: t.text.primary, fontWeight: "600" },
 });

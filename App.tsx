@@ -6,7 +6,8 @@ import { MainStackNavigator } from "./src/Presentation/navigator/MainStackNaviga
 import { UserProvider } from "./src/Presentation/context/UserContext";
 import { OnboardingProvider } from "./src/Presentation/onboarding/OnboardingContext";
 import { AppVersionGate } from "./src/Presentation/components/AppVersionGate";
-import { ThemeProvider, useAppTheme } from "./src/Presentation/theme/ThemeProvider";
+import { ThemeProvider } from "./src/Presentation/theme/ThemeProvider";
+import { useAppTheme } from "./src/Presentation/theme/ThemeContext";
 import type { Theme } from "./src/Presentation/theme/createTheme";
 
 // Fondo de las transiciones y headers nativos con los colores de Lynx: sin

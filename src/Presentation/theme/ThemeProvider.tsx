@@ -1,18 +1,19 @@
 // src/Presentation/theme/ThemeProvider.tsx
 // Tema dinámico según la preferencia guardada y el esquema del sistema. Las
-// pantallas migradas lo leen con useAppTheme / useThemedStyles; las demás
-// siguen con el AppTheme estático (oscuro) hasta que se migren.
+// pantallas migradas lo leen con los hooks de ThemeContext; las demás siguen
+// con el AppTheme estático (oscuro) hasta que se migren.
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { Appearance, StyleSheet, useColorScheme } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Appearance, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 
 import { loadAppearance, saveAppearance } from "../../Data/sources/local/AppearanceStorage";
-import { AppearancePreferences, ColorMode, DEFAULT_APPEARANCE, normalizeAppearance, resolveScheme } from "./appearance";
-import { createTheme, Theme } from "./createTheme";
+import { AppearancePreferences, DEFAULT_APPEARANCE, normalizeAppearance, resolveScheme } from "./appearance";
+import { createTheme } from "./createTheme";
+import { AppearancePatch, ThemeContext, ThemeContextValue } from "./ThemeContext";
 
-// El splash queda hasta saber qué esquema mostrar: si no, un usuario con el
+// El splash queda hasta saber qué apariencia mostrar: si no, un usuario con el
 // tema claro vería primero la app oscura.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -22,20 +23,6 @@ const stored = loadAppearance();
 // Si el almacenamiento no responde, se arranca con los valores por defecto en
 // vez de dejar el splash colgado.
 const HYDRATION_TIMEOUT_MS = 1500;
-
-type Ctx = {
-  theme: Theme;
-  preferences: AppearancePreferences;
-  setColorMode: (mode: ColorMode) => void;
-  resetAppearance: () => void;
-};
-
-const ThemeContext = createContext<Ctx>({
-  theme: createTheme({ scheme: "dark" }),
-  preferences: DEFAULT_APPEARANCE,
-  setColorMode: () => {},
-  resetAppearance: () => {},
-});
 
 export function ThemeProvider({ children }: React.PropsWithChildren) {
   const [preferences, setPreferences] = useState<AppearancePreferences | null>(null);
@@ -65,47 +52,32 @@ export function ThemeProvider({ children }: React.PropsWithChildren) {
     if (preferences) SplashScreen.hideAsync().catch(() => {});
   }, [preferences !== null]);
 
+  const prefs = preferences ?? DEFAULT_APPEARANCE;
+
   // La apariencia cambia en el momento; si no se pudo guardar, al reabrir la
   // app vuelve la anterior.
-  const update = useCallback((next: AppearancePreferences) => {
+  const save = useCallback((next: AppearancePreferences) => {
     setPreferences(next);
     saveAppearance(next).catch(() => {});
   }, []);
+  const setAppearance = useCallback((patch: AppearancePatch) => save({ ...prefs, ...patch }), [prefs, save]);
+  const resetAppearance = useCallback(() => save(DEFAULT_APPEARANCE), [save]);
 
-  const prefs = preferences ?? DEFAULT_APPEARANCE;
-  const theme = createTheme({ scheme: resolveScheme(prefs.colorMode, system) });
+  const theme = createTheme({ scheme: resolveScheme(prefs.colorMode, system), style: prefs.style, radius: prefs.radius });
 
-  const value = useMemo<Ctx>(
-    () => ({
-      theme,
-      preferences: prefs,
-      setColorMode: (mode) => update({ ...prefs, colorMode: mode }),
-      resetAppearance: () => update(DEFAULT_APPEARANCE),
-    }),
-    [theme, prefs, update]
+  const value = useMemo<ThemeContextValue>(
+    () => ({ theme, preferences: prefs, setAppearance, resetAppearance }),
+    [theme, prefs, setAppearance, resetAppearance]
   );
 
   if (!preferences) return null;
 
+  // Iconos claros por defecto: la mayoría de las pantallas todavía son legacy
+  // (oscuras). Las migradas ponen la suya con ThemedStatusBar.
   return (
     <ThemeContext.Provider value={value}>
-      <StatusBar style={theme.scheme === "dark" ? "light" : "dark"} />
+      <StatusBar style="light" />
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export const useAppTheme = () => useContext(ThemeContext).theme;
-
-export const useAppearance = () => useContext(ThemeContext);
-
-// Para migrar una pantalla: el objeto de su StyleSheet.create pasa a ser una
-// función del tema, definida fuera del componente para que sea estable.
-//   const makeStyles = (t: Theme) => ({ screen: { backgroundColor: t.colors.background } });
-//   const styles = useThemedStyles(makeStyles);
-export function useThemedStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
-  make: (theme: Theme) => T & StyleSheet.NamedStyles<any>
-): T {
-  const theme = useAppTheme();
-  return useMemo(() => StyleSheet.create(make(theme)), [theme, make]);
 }

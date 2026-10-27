@@ -6,6 +6,7 @@ import { EnviosScreen } from "../views/driver/Envios/EnviosScreen";
 import NotificationsScreen from "../views/common/NotificationScreen";
 import DriverAccountScreen from "../views/driver/account/DriverAccountScreen";
 import DriverHomeScreen from "../views/driver/account/DriverHomeScreen";
+import AppearanceScreen from "../views/driver/account/AppearanceScreen";
 
 import { OnboardingStackNavigator } from "../navigator/OnboardingStackNavigator";
 import { useOnboarding } from "../onboarding/OnboardingContext";
@@ -26,6 +27,7 @@ export type DriverStackParamList = {
   NotificationsScreen: undefined;
   DriverAccountScreen: undefined;
   DriverHomeScreen: undefined;
+  AppearanceScreen: undefined;
   DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
   // Recorridos de reparto, Turbo y ofertas (se entra desde Envíos).
@@ -61,6 +63,7 @@ export const DriverStackNavigator = () => {
             component={DriverAccountScreen}
           />
           <Stack.Screen name="DriverHomeScreen" component={DriverHomeScreen} />
+          <Stack.Screen name="AppearanceScreen" component={AppearanceScreen} />
           <Stack.Screen
             name="DriverScanOptionsScreen"
             component={DriverScanOptionsScreen}
