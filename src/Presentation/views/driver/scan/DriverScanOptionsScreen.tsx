@@ -10,7 +10,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import DriverQrActionGrid from "../../../components/DriverQrActionGrid";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
@@ -22,6 +24,7 @@ type Props = NativeStackScreenProps<
 >;
 
 export default function DriverScanOptionsScreen({ navigation }: Props) {
+  const styles = useThemedStyles(makeStyles);
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
       case "home":
@@ -46,6 +49,7 @@ export default function DriverScanOptionsScreen({ navigation }: Props) {
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >
+      <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.page}>
           <View style={styles.header}>
@@ -85,14 +89,14 @@ export default function DriverScanOptionsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   background: {
     flex: 1,
-    backgroundColor: AppTheme.colors.background,
+    backgroundColor: t.colors.background,
   },
 
   backgroundImage: {
-    opacity: 0.18,
+    opacity: t.backdrop.imageOpacity,
   },
 
   safeArea: {
@@ -101,42 +105,42 @@ const styles = StyleSheet.create({
 
   page: {
     flex: 1,
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.spacing.lg,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingTop: t.spacing.lg,
     paddingBottom: 112,
   },
 
   header: {
-    marginBottom: AppTheme.spacing.xl,
-    paddingTop: AppTheme.spacing.lg,
+    marginBottom: t.spacing.xl,
+    paddingTop: t.spacing.lg,
   },
 
 
   headerText: {
-    gap: AppTheme.spacing.xs,
+    gap: t.spacing.xs,
   },
 
   eyebrow: {
-    color: AppTheme.text.accent,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.accent,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
 
   title: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.xxl,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontSize: t.font.size.xxl,
+    fontWeight: t.font.weight.black,
   },
 
   subtitle: {
-    color: AppTheme.text.secondary,
-    fontSize: AppTheme.font.size.md,
+    color: t.text.secondary,
+    fontSize: t.font.size.md,
     lineHeight: 22,
   },
 
   content: {
-    marginTop: AppTheme.spacing.md,
+    marginTop: t.spacing.md,
   },
 });

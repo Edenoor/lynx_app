@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 import { DarkTheme, DefaultTheme, NavigationContainer, type Theme as NavigationTheme } from "@react-navigation/native";
 
 import { MainStackNavigator } from "./src/Presentation/navigator/MainStackNavigator";
+import { AppArea, resolveAppArea } from "./src/Presentation/navigator/appArea";
 
-import { UserProvider } from "./src/Presentation/context/UserContext";
+import { UserContext, UserProvider } from "./src/Presentation/context/UserContext";
 import { OnboardingProvider } from "./src/Presentation/onboarding/OnboardingContext";
 import { AppVersionGate } from "./src/Presentation/components/AppVersionGate";
 import { ThemeProvider } from "./src/Presentation/theme/ThemeProvider";
+import { DEFAULT_THEME, FixedTheme, PUBLIC_THEME } from "./src/Presentation/theme/FixedTheme";
 import { useAppTheme } from "./src/Presentation/theme/ThemeContext";
 import type { Theme } from "./src/Presentation/theme/createTheme";
 
@@ -28,7 +30,19 @@ const navigationTheme = (t: Theme): NavigationTheme => {
   };
 };
 
-function ThemedNavigation() {
+// Tema de cada área. Lo público (login, registro, recuperar) va en Light fijo;
+// Seller, Picker y la Web de admin todavía no se personalizan: quedan con el
+// oscuro de siempre aunque el dispositivo tenga otra preferencia. Driver sigue
+// la preferencia guardada.
+const AREA_THEME: Record<AppArea, Theme | null> = {
+  auth: PUBLIC_THEME,
+  driver: null,
+  picker: DEFAULT_THEME,
+  seller: DEFAULT_THEME,
+  adminWeb: DEFAULT_THEME,
+};
+
+function Navigation() {
   const theme = useAppTheme();
   const navTheme = useMemo(() => navigationTheme(theme), [theme]);
 
@@ -36,6 +50,18 @@ function ThemedNavigation() {
     <NavigationContainer theme={navTheme}>
       <MainStackNavigator />
     </NavigationContainer>
+  );
+}
+
+function ThemedNavigation() {
+  const { user, isAuthLoading } = useContext(UserContext);
+
+  // Mientras se lee la sesión se ve la continuación del splash: lo nativo
+  // no se fija todavía, para no alternar de esquema si después entra un chofer.
+  return (
+    <FixedTheme theme={AREA_THEME[resolveAppArea(user)]} native={!isAuthLoading}>
+      <Navigation />
+    </FixedTheme>
   );
 }
 

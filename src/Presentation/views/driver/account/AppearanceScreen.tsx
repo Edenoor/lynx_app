@@ -65,7 +65,7 @@ export default function AppearanceScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>CONFIGURACIÓN</Text>
             <Text style={styles.title}>Apariencia</Text>
-            <Text style={styles.subtitle}>Se aplica al instante en Inicio, Colectas, Envíos, Recorridos y Mi cuenta; el resto de la app sigue oscura.</Text>
+            <Text style={styles.subtitle}>Se aplica al instante en todas las pantallas del chofer. El ingreso y el alta se ven siempre en claro, y la cámara en oscuro.</Text>
           </View>
         </View>
 

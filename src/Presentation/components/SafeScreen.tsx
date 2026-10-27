@@ -8,7 +8,8 @@ import React from "react";
 import { StyleProp, StyleSheet, ViewStyle } from "react-native";
 import { Edge, SafeAreaView } from "react-native-safe-area-context";
 
-import AppTheme from "../theme/AppTheme";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 const ALL_EDGES: Edge[] = ["top", "bottom", "left", "right"];
 
@@ -19,6 +20,7 @@ export function SafeScreen({
   style,
   edges = ALL_EDGES,
 }: React.PropsWithChildren<{ style?: StyleProp<ViewStyle>; edges?: Edge[] }>) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <SafeAreaView edges={edges} style={[styles.screen, style]}>
       {children}
@@ -26,6 +28,6 @@ export function SafeScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AppTheme.surfaces.screen },
+const makeStyles = (t: Theme) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: t.surfaces.screen },
 });

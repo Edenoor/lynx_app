@@ -8,7 +8,8 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import global from "../theme/global";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 type LynxLoaderProps = {
   message?: string;
@@ -21,6 +22,7 @@ export function LynxLoader({
   compact = false,
   style,
 }: LynxLoaderProps) {
+  const styles = useThemedStyles(makeStyles);
   const scanAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0.85)).current;
 
@@ -168,7 +170,7 @@ export function LynxLoader({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -185,9 +187,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    backgroundColor: "rgba(13,22,35,0.62)",
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.14)",
+    borderColor: t.borders.default,
   },
   logoBoxCompact: {
     width: 74,
@@ -195,9 +197,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
 
+  // Logo blanco teñido: se ve en claro y en oscuro.
   logo: {
     width: 76,
     height: 76,
+    tintColor: t.text.primary,
   },
   logoCompact: {
     width: 48,
@@ -210,8 +214,8 @@ const styles = StyleSheet.create({
     right: 12,
     height: 2,
     borderRadius: 999,
-    backgroundColor: global.COLORS.blue,
-    shadowColor: global.COLORS.blue,
+    backgroundColor: t.text.accent,
+    shadowColor: t.text.accent,
     shadowOpacity: 0.9,
     shadowRadius: 12,
     shadowOffset: {
@@ -222,7 +226,7 @@ const styles = StyleSheet.create({
   },
 
   message: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 15,
     lineHeight: 21,
     fontWeight: "800",
@@ -240,6 +244,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 999,
-    backgroundColor: global.COLORS.blue,
+    backgroundColor: t.text.accent,
   },
 });

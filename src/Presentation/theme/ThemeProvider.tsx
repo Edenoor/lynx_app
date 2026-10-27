@@ -3,7 +3,7 @@
 // pantallas migradas lo leen con los hooks de ThemeContext; las demás siguen
 // con el AppTheme estático (oscuro) hasta que se migren.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Appearance, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -11,7 +11,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { loadAppearance, saveAppearance } from "../../Data/sources/local/AppearanceStorage";
 import { AppearancePreferences, DEFAULT_APPEARANCE, normalizeAppearance, resolveScheme } from "./appearance";
 import { createTheme } from "./createTheme";
-import { AppearancePatch, ThemeContext, ThemeContextValue } from "./ThemeContext";
+import type { ThemeMode } from "./global";
+import { AppearancePatch, NativeSchemeContext, ThemeContext, ThemeContextValue } from "./ThemeContext";
 
 // El splash queda hasta saber qué apariencia mostrar: si no, un usuario con el
 // tema claro vería primero la app oscura.
@@ -26,7 +27,22 @@ const HYDRATION_TIMEOUT_MS = 1500;
 
 export function ThemeProvider({ children }: React.PropsWithChildren) {
   const [preferences, setPreferences] = useState<AppearancePreferences | null>(null);
-  const system = useColorScheme();
+
+  // Esquema nativo fijado por un FixedTheme (pantallas públicas, por ejemplo).
+  const nativeLock = useRef<ThemeMode | null>(null);
+
+  // Esquema del sistema para el modo «Sistema». Con el nativo fijado,
+  // useColorScheme informa el fijado y no el del teléfono: se ignora hasta que
+  // cambie de verdad. Así, al salir de una pantalla pública no se ve un cuadro
+  // con el esquema fijado (en Android el valor real llega después, con su aviso).
+  const reported = useColorScheme();
+  const systemRef = useRef(reported);
+  const lastReported = useRef(reported);
+  if (reported !== lastReported.current) {
+    lastReported.current = reported;
+    if (!nativeLock.current) systemRef.current = reported;
+  }
+  const system = systemRef.current;
 
   useEffect(() => {
     let done = false;
@@ -41,12 +57,24 @@ export function ThemeProvider({ children }: React.PropsWithChildren) {
   }, []);
 
   const colorMode = preferences?.colorMode;
+  const colorModeRef = useRef(colorMode);
+  colorModeRef.current = colorMode;
 
-  // Teclado, Alert y selectores nativos siguen el modo elegido; null vuelve a
-  // seguir al sistema (y useColorScheme informa el del sistema otra vez).
-  useEffect(() => {
-    if (colorMode) Appearance.setColorScheme(colorMode === "system" ? null : colorMode);
-  }, [colorMode]);
+  // Teclado, Alert y selectores nativos siguen el modo elegido, salvo que un
+  // FixedTheme lo tenga fijado; null vuelve a seguir al sistema.
+  const applyNativeScheme = useCallback(() => {
+    const mode = nativeLock.current ?? colorModeRef.current;
+    if (mode) Appearance.setColorScheme(mode === "system" ? null : mode);
+  }, []);
+  const lockNativeScheme = useCallback(
+    (scheme: ThemeMode | null) => {
+      nativeLock.current = scheme;
+      applyNativeScheme();
+    },
+    [applyNativeScheme]
+  );
+
+  useEffect(applyNativeScheme, [colorMode, applyNativeScheme]);
 
   useEffect(() => {
     if (preferences) SplashScreen.hideAsync().catch(() => {});
@@ -72,12 +100,14 @@ export function ThemeProvider({ children }: React.PropsWithChildren) {
 
   if (!preferences) return null;
 
-  // Iconos claros por defecto: la mayoría de las pantallas todavía son legacy
-  // (oscuras). Las migradas ponen la suya con ThemedStatusBar.
+  // Iconos claros por defecto: Seller, Picker y la cámara son oscuros. Las
+  // pantallas con tema dinámico ponen la suya con ThemedStatusBar.
   return (
-    <ThemeContext.Provider value={value}>
-      <StatusBar style="light" />
-      {children}
-    </ThemeContext.Provider>
+    <NativeSchemeContext.Provider value={lockNativeScheme}>
+      <ThemeContext.Provider value={value}>
+        <StatusBar style="light" />
+        {children}
+      </ThemeContext.Provider>
+    </NativeSchemeContext.Provider>
   );
 }

@@ -28,6 +28,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { UserContext } from "../../../context/UserContext";
 import AppTheme from "../../../theme/AppTheme";
+import { useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { DEFAULT_THEME, FixedTheme } from "../../../theme/FixedTheme";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import {
   DriverBottomNavigation,
@@ -220,6 +223,7 @@ export default function DriverScanScreen({
   navigation,
   route,
 }: Props) {
+  const loadingStyles = useThemedStyles(makeLoadingStyles);
   const mode =
     route.params.mode;
 
@@ -1427,7 +1431,7 @@ export default function DriverScanScreen({
         {!permission ? (
           <View
             style={
-              styles.loadingBox
+              loadingStyles.loadingBox
             }
           >
             <LynxPulseLoader message="Preparando cámara..." />
@@ -1435,164 +1439,168 @@ export default function DriverScanScreen({
         ) : !permission.granted ? (
           <View
             style={
-              styles.loadingBox
+              loadingStyles.loadingBox
             }
           >
             <LynxPulseLoader message="Solicitando permiso..." />
           </View>
         ) : (
-          <View
-            style={
-              styles.cameraWrap
-            }
-          >
-            <CameraView
-              style={
-                StyleSheet.absoluteFill
-              }
-              facing="back"
-              onBarcodeScanned={
-                processing
-                  ? undefined
-                  : onBarcodeScanned
-              }
-              barcodeScannerSettings={{
-                barcodeTypes:
-                  ["qr"],
-              }}
-            />
-
+          // Visor oscuro fijo en cualquier apariencia: va sobre la imagen de la
+          // cámara. El cargador y la barra de abajo se ven con el oscuro de siempre.
+          <FixedTheme theme={DEFAULT_THEME}>
             <View
-              pointerEvents="box-none"
               style={
-                styles.backLayer
+                styles.cameraWrap
               }
             >
-              <Pressable
-                onPress={
-                  close
-                }
+              <CameraView
                 style={
-                  styles.backButton
+                  StyleSheet.absoluteFill
                 }
-              >
-                <Ionicons
-                  name="arrow-back"
-                  size={30}
-                  color={
-                    AppTheme
-                      .colors
-                      .white
-                  }
-                />
-              </Pressable>
-            </View>
+                facing="back"
+                onBarcodeScanned={
+                  processing
+                    ? undefined
+                    : onBarcodeScanned
+                }
+                barcodeScannerSettings={{
+                  barcodeTypes:
+                    ["qr"],
+                }}
+              />
 
-            <View
-              pointerEvents="none"
-              style={
-                styles.scanLayer
-              }
-            >
               <View
+                pointerEvents="box-none"
                 style={
-                  styles.scanGuide
+                  styles.backLayer
                 }
               >
-                <View
-                  style={[
-                    styles.corner,
-                    styles.topLeft,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.topRight,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.bottomLeft,
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.corner,
-                    styles.bottomRight,
-                  ]}
-                />
+                <Pressable
+                  onPress={
+                    close
+                  }
+                  style={
+                    styles.backButton
+                  }
+                >
+                  <Ionicons
+                    name="arrow-back"
+                    size={30}
+                    color={
+                      AppTheme
+                        .colors
+                        .white
+                    }
+                  />
+                </Pressable>
               </View>
 
               <View
+                pointerEvents="none"
                 style={
-                  styles.scanTextPill
+                  styles.scanLayer
+                }
+              >
+                <View
+                  style={
+                    styles.scanGuide
+                  }
+                >
+                  <View
+                    style={[
+                      styles.corner,
+                      styles.topLeft,
+                    ]}
+                  />
+
+                  <View
+                    style={[
+                      styles.corner,
+                      styles.topRight,
+                    ]}
+                  />
+
+                  <View
+                    style={[
+                      styles.corner,
+                      styles.bottomLeft,
+                    ]}
+                  />
+
+                  <View
+                    style={[
+                      styles.corner,
+                      styles.bottomRight,
+                    ]}
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.scanTextPill
+                  }
+                >
+                  <Text
+                    style={
+                      styles.scanText
+                    }
+                  >
+                    {processing
+                      ? processingHint
+                      : hint}
+                  </Text>
+                </View>
+
+                {processing && (
+                  <View
+                    style={
+                      styles.processingCard
+                    }
+                  >
+                    <LynxPulseLoader
+                      compact
+                      showLogo={
+                        false
+                      }
+                      message={
+                        processingMessage
+                      }
+                    />
+                  </View>
+                )}
+              </View>
+
+              <View
+                pointerEvents="none"
+                style={
+                  styles.bottomInfo
                 }
               >
                 <Text
                   style={
-                    styles.scanText
+                    styles.modeText
                   }
                 >
-                  {processing
-                    ? processingHint
-                    : hint}
+                  {title}
+                </Text>
+
+                <Text
+                  style={
+                    styles.safeText
+                  }
+                >
+                  {environmentLabel}
                 </Text>
               </View>
 
-              {processing && (
-                <View
-                  style={
-                    styles.processingCard
-                  }
-                >
-                  <LynxPulseLoader
-                    compact
-                    showLogo={
-                      false
-                    }
-                    message={
-                      processingMessage
-                    }
-                  />
-                </View>
-              )}
-            </View>
-
-            <View
-              pointerEvents="none"
-              style={
-                styles.bottomInfo
-              }
-            >
-              <Text
-                style={
-                  styles.modeText
+              <DriverBottomNavigation
+                activeTab="scan"
+                onPress={
+                  handleTabPress
                 }
-              >
-                {title}
-              </Text>
-
-              <Text
-                style={
-                  styles.safeText
-                }
-              >
-                {environmentLabel}
-              </Text>
+              />
             </View>
-
-            <DriverBottomNavigation
-              activeTab="scan"
-              onPress={
-                handleTabPress
-              }
-            />
-          </View>
+          </FixedTheme>
         )}
       </View>
     </Modal>
@@ -1831,22 +1839,16 @@ const styles =
       letterSpacing:
         0.7,
     },
+  });
 
+// Permiso y preparación de la cámara: pantalla con la apariencia elegida.
+const makeLoadingStyles = (t: Theme) =>
+  StyleSheet.create({
     loadingBox: {
       flex: 1,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-
-      backgroundColor:
-        AppTheme.surfaces
-          .screen,
-
-      paddingHorizontal:
-        AppTheme.spacing
-          .lg,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: t.surfaces.screen,
+      paddingHorizontal: t.spacing.lg,
     },
   });

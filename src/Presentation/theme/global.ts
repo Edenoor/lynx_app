@@ -349,6 +349,11 @@ export const MARBLE_LIGHT_COLORS = {
 
 export const COLORS = DARK_COLORS;
 
+// Fondo del splash nativo (app.json splash.backgroundColor y
+// android/.../values/colors.xml). La carga inicial lo continúa; si el splash
+// cambia (requiere build nuevo), cambiar también este valor.
+export const SPLASH_BACKGROUND = "#080A10";
+
 export const FONT = {
   family: {
     regular: "System",

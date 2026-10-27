@@ -1,6 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import global from "../theme/global";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 type SelectableCardProps = {
   title: string;
@@ -15,6 +16,7 @@ export function SelectableCard({
   disabled = false,
   onPress,
 }: SelectableCardProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Pressable
       onPress={onPress}
@@ -37,22 +39,22 @@ export function SelectableCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   card: {
     minHeight: 44,
-    borderRadius: global.BORDER_RADIUS.md,
-    paddingHorizontal: global.SPACING.md,
+    borderRadius: t.radius.md,
+    paddingHorizontal: t.spacing.md,
     paddingVertical: 8,
-    backgroundColor: "rgba(13,22,35,0.62)",
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.12)",
+    borderColor: t.borders.default,
     flexDirection: "row",
     alignItems: "center",
-    gap: global.SPACING.sm,
+    gap: t.spacing.sm,
   },
   cardSelected: {
-    backgroundColor: "rgba(0,184,255,0.14)",
-    borderColor: global.COLORS.blue,
+    backgroundColor: t.status.inTransit.background,
+    borderColor: t.status.inTransit.border,
   },
   cardDisabled: {
     opacity: 0.42,
@@ -63,30 +65,30 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: global.COLORS.white,
+    color: t.text.primary,
     fontSize: 14,
     fontWeight: "800",
   },
   titleSelected: {
-    color: "#F8FAFC",
+    color: t.text.primary,
   },
   radio: {
     width: 20,
     height: 20,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: "rgba(248,250,252,0.28)",
+    borderColor: t.borders.strong,
     alignItems: "center",
     justifyContent: "center",
   },
   radioSelected: {
-    borderColor: global.COLORS.blue,
-    backgroundColor: "rgba(0,184,255,0.16)",
+    borderColor: t.text.accent,
+    backgroundColor: t.status.inTransit.background,
   },
   radioDot: {
     width: 9,
     height: 9,
     borderRadius: 999,
-    backgroundColor: global.COLORS.blue,
+    backgroundColor: t.text.accent,
   },
 });

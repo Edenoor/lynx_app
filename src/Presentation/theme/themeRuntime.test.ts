@@ -36,6 +36,8 @@ const FakeReact = {
   useEffect: (f: () => any) => { effects.push(f); },
   useCallback: (f: any) => f,
   useMemo: (f: any) => f(),
+  // Sin estado entre renders: cada render es el primero.
+  useRef: (v: any) => ({ current: v }),
   useContext: (ctx: any) => (contextValue !== undefined ? contextValue : ctx._currentValue),
 };
 
@@ -106,6 +108,7 @@ function render(node: any): any {
 const flat = (style: any): any => (Array.isArray(style) ? Object.assign({}, ...style.map(flat)) : style || {});
 const tick = () => new Promise((r) => setImmediate(r));
 const last = <T,>(a: T[]) => a[a.length - 1];
+const hasText = (n: any, s: string): boolean => (typeof n === "string" ? n === s : Array.isArray(n) ? n.some((c) => hasText(c, s)) : !!n && hasText(n.children, s));
 
 let failed = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -124,7 +127,9 @@ const StatusChip = L("src/Presentation/components/StatusChip.tsx").default;
 const provide = (prefs: any) => {
   states = [prefs]; stateIdx = 0; sets = []; effects = [];
   const tree = render(RealReact.createElement(ThemeProvider, null, "contenido"));
-  return { tree, value: tree?.props?.value };
+  // El valor del ThemeContext (el provider de afuera es el del esquema nativo).
+  const find = (n: any): any => (!n || typeof n !== "object" ? undefined : n.props?.value?.theme ? n : [].concat(n.children).map(find).find(Boolean));
+  return { tree, value: find(tree)?.props?.value };
 };
 
 (async () => {
@@ -141,7 +146,7 @@ const provide = (prefs: any) => {
   // Tema según preferencias
   const dark = provide(DEFAULT_APPEARANCE);
   check("por defecto: tema oscuro Classic Equilibrado (mismo objeto que AppTheme)", dark.value.theme === createTheme({ scheme: "dark" }));
-  check("dibuja los hijos con el tema", JSON.stringify(dark.tree.children).includes("contenido"));
+  check("dibuja los hijos con el tema", hasText(dark.tree, "contenido"));
 
   const marble = provide({ version: 1, colorMode: "dark", style: "marble", radius: "rounded" });
   check("Marble + Oscuro + Redondeado", marble.value.theme === createTheme({ scheme: "dark", style: "marble", radius: "rounded" }));

@@ -6,14 +6,22 @@ import {
   StyleSheet,
   Image,
   LayoutRectangle,
-  StatusBar,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { RoundedButton } from "../components/RoundedButton";
 import { LynxLoader } from "../components/LynxLoader";
 import AppTheme from "../theme/AppTheme";
+import { DEFAULT_THEME, FixedTheme } from "../theme/FixedTheme";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
+import { ThemedStatusBar } from "../theme/ThemedStatusBar";
 
 type OverlayMode = "none" | "selfie" | "document";
+
+// Pantalla de cámara del alta. Permiso, encabezado y pie son interfaz y siguen
+// el tema de afuera (en el onboarding, Light). Solo el área del video es oscura
+// fija (blanco sobre la imagen en vivo): sus estilos usan el AppTheme estático,
+// que es DEFAULT_THEME, y FixedTheme hace que el loader de adentro también.
 
 type Props = {
   title: string;
@@ -39,16 +47,14 @@ export function CameraCaptureView({
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [currentFacing, setCurrentFacing] = useState<"front" | "back">(facing);
   const [cameraLayout, setCameraLayout] = useState<LayoutRectangle | null>(null);
+  const styles = useThemedStyles(makeStyles);
 
   if (!permission) return null;
 
   if (!permission.granted) {
     return (
       <View style={styles.permissionScreen}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor={AppTheme.surfaces.screen}
-        />
+        <ThemedStatusBar />
 
         <View style={styles.permissionCard}>
           <Text style={styles.kicker}>CÁMARA</Text>
@@ -88,10 +94,7 @@ export function CameraCaptureView({
 
   return (
     <View style={styles.screen}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={AppTheme.surfaces.screen}
-      />
+      <ThemedStatusBar />
 
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -114,34 +117,36 @@ export function CameraCaptureView({
         {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
 
-      <View
-        style={styles.cameraWrap}
-        onLayout={(event) => setCameraLayout(event.nativeEvent.layout)}
-      >
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={currentFacing}
-        />
+      <FixedTheme theme={DEFAULT_THEME}>
+        <View
+          style={cameraStyles.cameraWrap}
+          onLayout={(event) => setCameraLayout(event.nativeEvent.layout)}
+        >
+          <CameraView
+            ref={cameraRef}
+            style={cameraStyles.camera}
+            facing={currentFacing}
+          />
 
-        {overlayMode !== "none" && !previewUri && cameraLayout && !busy && (
-          <GuidanceOverlay mode={overlayMode} layout={cameraLayout} />
-        )}
+          {overlayMode !== "none" && !previewUri && cameraLayout && !busy && (
+            <GuidanceOverlay mode={overlayMode} layout={cameraLayout} />
+          )}
 
-        {previewUri && (
-          <View style={styles.previewWrap}>
-            <Image source={{ uri: previewUri }} style={styles.preview} />
-          </View>
-        )}
-
-        {busy && (
-          <View style={styles.captureLoaderOverlay} pointerEvents="auto">
-            <View style={styles.captureLoaderCard}>
-              <LynxLoader compact message="Procesando captura..." />
+          {previewUri && (
+            <View style={cameraStyles.previewWrap}>
+              <Image source={{ uri: previewUri }} style={cameraStyles.preview} />
             </View>
-          </View>
-        )}
-      </View>
+          )}
+
+          {busy && (
+            <View style={cameraStyles.captureLoaderOverlay} pointerEvents="auto">
+              <View style={cameraStyles.captureLoaderCard}>
+                <LynxLoader compact message="Procesando captura..." />
+              </View>
+            </View>
+          )}
+        </View>
+      </FixedTheme>
 
       <View style={styles.footer}>
         <View style={busy && styles.disabledButton}>
@@ -258,59 +263,117 @@ function CornerBR() {
   return <View style={[cornerStyles.base, cornerStyles.br]} />;
 }
 
-const styles = StyleSheet.create({
+// Interfaz (permiso, encabezado, pie): tema de afuera. Superficies opacas: el
+// encabezado y el pie limitan con el video.
+const makeStyles = (t: Theme) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   header: {
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.layout.headerTopPadding,
-    paddingBottom: AppTheme.spacing.base,
-    gap: AppTheme.spacing.sm,
-    backgroundColor: AppTheme.surfaces.screen,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingTop: t.layout.headerTopPadding,
+    paddingBottom: t.spacing.base,
+    gap: t.spacing.sm,
+    backgroundColor: t.surfaces.screen,
   },
 
   headerTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   headerText: {
     flex: 1,
-    gap: AppTheme.spacing.xs,
+    gap: t.spacing.xs,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    ...AppTheme.typography.titleSm,
+    ...t.typography.titleSm,
   },
 
   subtitle: {
-    ...AppTheme.typography.bodySm,
+    ...t.typography.bodySm,
   },
 
   flipButton: {
     borderWidth: 1,
-    borderColor: AppTheme.borders.strong,
-    backgroundColor: AppTheme.surfaces.cardStrong,
-    paddingHorizontal: AppTheme.spacing.md,
-    paddingVertical: AppTheme.spacing.sm,
-    borderRadius: AppTheme.radius.full,
+    borderColor: t.borders.strong,
+    backgroundColor: t.colors.surface,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderRadius: t.radius.full,
   },
 
   flipText: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.xs,
-    fontWeight: AppTheme.font.weight.extrabold,
+    color: t.text.primary,
+    fontSize: t.font.size.xs,
+    fontWeight: t.font.weight.extrabold,
   },
 
+  footer: {
+    paddingHorizontal: t.layout.screenPadding,
+    paddingTop: t.spacing.md,
+    paddingBottom: t.layout.footerPaddingBottom,
+    gap: t.spacing.md,
+    backgroundColor: t.colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: t.borders.soft,
+  },
+
+  disabledButton: {
+    opacity: 0.55,
+  },
+
+  secondaryButton: {
+    minHeight: 48,
+    borderRadius: t.radius.lg,
+    borderWidth: 1,
+    borderColor: t.borders.medium,
+    backgroundColor: t.colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  secondaryButtonText: {
+    ...t.typography.button,
+  },
+
+  permissionScreen: {
+    flex: 1,
+    backgroundColor: t.surfaces.screen,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingTop: t.layout.headerTopPaddingLarge,
+    justifyContent: "center",
+  },
+
+  permissionCard: {
+    borderRadius: t.radius.xl,
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.borders.medium,
+    padding: t.spacing.lg,
+    gap: t.spacing.base,
+  },
+
+  permissionTitle: {
+    ...t.typography.titleMd,
+  },
+
+  permissionText: {
+    ...t.typography.body,
+  },
+});
+
+// Área del video: oscura fija en cualquier tema.
+const cameraStyles = StyleSheet.create({
   cameraWrap: {
     flex: 1,
     overflow: "hidden",
@@ -338,59 +401,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: AppTheme.borders.medium,
     padding: AppTheme.spacing.lg,
-  },
-
-  footer: {
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.spacing.md,
-    paddingBottom: AppTheme.layout.footerPaddingBottom,
-    gap: AppTheme.spacing.md,
-    backgroundColor: AppTheme.surfaces.footer,
-    borderTopWidth: 1,
-    borderTopColor: AppTheme.borders.soft,
-  },
-
-  disabledButton: {
-    opacity: 0.55,
-  },
-
-  secondaryButton: {
-    minHeight: 48,
-    borderRadius: AppTheme.radius.lg,
-    borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    backgroundColor: AppTheme.surfaces.cardStrong,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  secondaryButtonText: {
-    ...AppTheme.typography.button,
-  },
-
-  permissionScreen: {
-    flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.layout.headerTopPaddingLarge,
-    justifyContent: "center",
-  },
-
-  permissionCard: {
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
-    borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.lg,
-    gap: AppTheme.spacing.base,
-  },
-
-  permissionTitle: {
-    ...AppTheme.typography.titleMd,
-  },
-
-  permissionText: {
-    ...AppTheme.typography.body,
   },
 
   previewWrap: {

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   SafeAreaView,
-  StatusBar,
   ImageBackground,
   Pressable,
 } from "react-native";
@@ -13,10 +12,14 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
 import { useOnboarding } from "../onboarding/OnboardingContext";
 import { RoundedButton } from "../components/RoundedButton";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
+import { ThemedStatusBar } from "../theme/ThemedStatusBar";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Terms">;
 
 export function TermsScreen({ navigation }: Props) {
+  const styles = useThemedStyles(makeStyles);
   const { dispatch } = useOnboarding();
   const [accepted, setAccepted] = useState(false);
 
@@ -32,11 +35,12 @@ export function TermsScreen({ navigation }: Props) {
       source={require("../../../assets/background-1.png")}
       style={styles.background}
       resizeMode="cover"
+      imageStyle={styles.backgroundImage}
     >
       <View style={styles.overlay} />
 
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" backgroundColor="#05080E" />
+        <ThemedStatusBar />
 
         <View style={styles.screen}>
           <ScrollView
@@ -131,14 +135,18 @@ export function TermsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
+  // Imagen de fondo como en las pantallas del chofer: tenue y solo en Classic.
+  backgroundImage: {
+    opacity: t.backdrop.imageOpacity,
+  },
   background: {
     flex: 1,
-    backgroundColor: "#05080E",
+    backgroundColor: t.surfaces.screen,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,14,0.42)",
+    backgroundColor: t.overlays.background,
   },
   safe: {
     flex: 1,
@@ -157,20 +165,20 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   kicker: {
-    color: "#00B8FF",
+    color: t.text.accent,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 2,
   },
   title: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 34,
     lineHeight: 38,
     fontWeight: "900",
     letterSpacing: -1.1,
   },
   subtitle: {
-    color: "#CBD5E1",
+    color: t.text.secondary,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "500",
@@ -179,14 +187,14 @@ const styles = StyleSheet.create({
 
   card: {
     borderRadius: 24,
-    backgroundColor: "rgba(13,22,35,0.72)",
+    backgroundColor: t.surfaces.cardStrong,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.18)",
+    borderColor: t.borders.strong,
     padding: 18,
     gap: 14,
   },
   cardTitle: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -196,38 +204,38 @@ const styles = StyleSheet.create({
   },
   itemNumber: {
     width: 34,
-    color: "#00B8FF",
+    color: t.text.accent,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
   itemText: {
     flex: 1,
-    color: "#E2E8F0",
+    color: t.text.secondary,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "600",
   },
   divider: {
     height: 1,
-    backgroundColor: "rgba(248,250,252,0.09)",
+    backgroundColor: t.separator.color,
   },
 
   termsBox: {
     borderRadius: 22,
-    backgroundColor: "rgba(13,22,35,0.48)",
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.12)",
+    borderColor: t.borders.default,
     padding: 18,
     gap: 8,
   },
   termsTitle: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 15,
     fontWeight: "900",
   },
   termsText: {
-    color: "#94A3B8",
+    color: t.text.muted,
     fontSize: 13,
     lineHeight: 20,
     fontWeight: "500",
@@ -238,9 +246,9 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 18,
     gap: 14,
-    backgroundColor: "rgba(5,8,14,0.72)",
+    backgroundColor: t.surfaces.footer,
     borderTopWidth: 1,
-    borderTopColor: "rgba(248,250,252,0.08)",
+    borderTopColor: t.borders.muted,
   },
   checkboxRow: {
     flexDirection: "row",
@@ -252,24 +260,24 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: "rgba(248,250,252,0.28)",
-    backgroundColor: "rgba(13,22,35,0.54)",
+    borderColor: t.borders.strong,
+    backgroundColor: t.surfaces.card,
     alignItems: "center",
     justifyContent: "center",
   },
   checkboxActive: {
-    backgroundColor: "#00B8FF",
-    borderColor: "#00B8FF",
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
   checkmark: {
-    color: "#031018",
+    color: t.text.onPrimary,
     fontSize: 15,
     fontWeight: "900",
     lineHeight: 18,
   },
   checkboxText: {
     flex: 1,
-    color: "#E2E8F0",
+    color: t.text.secondary,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
@@ -278,7 +286,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   footerText: {
-    color: "#94A3B8",
+    color: t.text.muted,
     fontSize: 12,
     textAlign: "center",
     fontWeight: "600",

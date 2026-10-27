@@ -12,7 +12,9 @@ import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useNotifications, Noti } from "../../context/NotificationContext";
-import AppTheme from "../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../theme/ThemeContext";
+import type { StatusKey, Theme } from "../../theme/createTheme";
+import { ThemedStatusBar } from "../../theme/ThemedStatusBar";
 import { routeIdOf } from "../../config/pushKind";
 import { fetchRoute, RouteDetail, STATUS_LABEL, todayIso, TYPE_LABEL } from "../driver/routes/routesApi";
 import { PICKUP_ANSWER_LABEL, pickupAnswer } from "../driver/routes/pickupConfirmation";
@@ -22,11 +24,6 @@ import {
   DriverBottomNavigation,
   DriverTabKey,
 } from "../../components/DriverBottomNavigation";
-
-const successOverlay = `${AppTheme.colors.success}22`;
-const successBorder = `${AppTheme.colors.success}55`;
-const dangerOverlay = `${AppTheme.colors.danger}22`;
-const dangerBorder = `${AppTheme.colors.danger}55`;
 
 const kindLabel: Record<Noti["kind"], string> = {
   NEW_TRAD: "Nuevo envío",
@@ -62,21 +59,23 @@ const kindIcon: Record<Noti["kind"], keyof typeof Ionicons.glyphMap> = {
   ALERT: "alert-circle-outline",
 };
 
-const kindColor: Record<Noti["kind"], string> = {
-  NEW_TRAD: AppTheme.colors.primary,
-  TRAD_ACCEPTED: AppTheme.colors.success,
-  ASIGNACION: AppTheme.colors.primary,
-  DRIVER_ASIGNADO: AppTheme.colors.success,
-  ASSIGNMENT_ACCEPTED: AppTheme.colors.success,
-  ASSIGNMENT_REJECTED: AppTheme.colors.danger,
-  ROUTE_CONFIRMATION: AppTheme.colors.primary,
-  TURBO_OFFER: AppTheme.colors.primary,
-  PICKUP_ASSIGNED: AppTheme.colors.primary,
-  PICKUP_REASSIGNED: AppTheme.colors.warning,
-  ROUTE_UPDATED: AppTheme.colors.primary,
-  ROUTE_OFFER: AppTheme.colors.primary,
-  INFO: AppTheme.text.secondary,
-  ALERT: AppTheme.colors.danger,
+// Tono de cada aviso, con los colores de estado del tema (antes: azul de marca,
+// verde, rojo, ámbar y gris del oscuro).
+const kindTone: Record<Noti["kind"], StatusKey> = {
+  NEW_TRAD: "inTransit",
+  TRAD_ACCEPTED: "delivered",
+  ASIGNACION: "inTransit",
+  DRIVER_ASIGNADO: "delivered",
+  ASSIGNMENT_ACCEPTED: "delivered",
+  ASSIGNMENT_REJECTED: "rejected",
+  ROUTE_CONFIRMATION: "inTransit",
+  TURBO_OFFER: "inTransit",
+  PICKUP_ASSIGNED: "inTransit",
+  PICKUP_REASSIGNED: "pending",
+  ROUTE_UPDATED: "inTransit",
+  ROUTE_OFFER: "inTransit",
+  INFO: "neutral",
+  ALERT: "rejected",
 };
 
 const formatDate = (ts: number) => {
@@ -141,13 +140,13 @@ const getAssignmentVisualState = (item: Noti | null) => {
   return "default";
 };
 
-const getVisualColor = (item: Noti) => {
+const getVisualTone = (item: Noti): StatusKey => {
   const visualState = getAssignmentVisualState(item);
 
-  if (visualState === "accepted") return AppTheme.colors.success;
-  if (visualState === "rejected") return AppTheme.colors.danger;
+  if (visualState === "accepted") return "confirmed";
+  if (visualState === "rejected") return "rejected";
 
-  return kindColor[item.kind] ?? AppTheme.colors.primary;
+  return kindTone[item.kind] ?? "inTransit";
 };
 
 const getVisualLabel = (item: Noti) => {
@@ -173,6 +172,7 @@ const LIVE_ROUTE_KINDS: Noti["kind"][] = ["PICKUP_ASSIGNED", "ROUTE_CONFIRMATION
 type LiveRoute = { loading: true } | { route: RouteDetail } | { error: string };
 
 const DetailRow = ({ label, value }: { label: string; value?: string }) => {
+  const styles = useThemedStyles(makeStyles);
   if (!value) return null;
 
   return (
@@ -184,12 +184,16 @@ const DetailRow = ({ label, value }: { label: string; value?: string }) => {
 };
 
 const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
-  const color = getVisualColor(item);
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const tone = theme.status[getVisualTone(item)];
+  const color = tone.text;
   const visualState = getAssignmentVisualState(item);
 
   return (
     <TouchableOpacity
       style={[
+        theme.listItem,
         styles.item,
         visualState === "accepted" && styles.itemAccepted,
         visualState === "rejected" && styles.itemRejected,
@@ -197,13 +201,7 @@ const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
       onPress={onPress}
       activeOpacity={0.84}
     >
-      <View
-        style={[
-          styles.itemIcon,
-          visualState === "accepted" && styles.itemIconAccepted,
-          visualState === "rejected" && styles.itemIconRejected,
-        ]}
-      >
+      <View style={[styles.itemIcon, { backgroundColor: tone.background }]}>
         <Ionicons
           name={kindIcon[item.kind] ?? "notifications-outline"}
           size={18}
@@ -236,7 +234,7 @@ const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
       <Ionicons
         name="chevron-forward"
         size={18}
-        color={AppTheme.text.muted}
+        color={theme.text.muted}
       />
     </TouchableOpacity>
   );
@@ -244,6 +242,8 @@ const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
 
 const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const { items, markRead, markAllRead, remove, clear } = useNotifications();
   const [selected, setSelected] = useState<Noti | null>(null);
   const [live, setLive] = useState<LiveRoute | null>(null);
@@ -290,9 +290,8 @@ const NotificationsScreen: React.FC = () => {
     [items]
   );
 
-  const selectedColor = selected
-    ? getVisualColor(selected)
-    : AppTheme.colors.primary;
+  const selectedTone = theme.status[selected ? getVisualTone(selected) : "inTransit"];
+  const selectedColor = selectedTone.text;
 
   const selectedTracking = selected
     ? pickDataValue(selected.data, [
@@ -372,6 +371,7 @@ const NotificationsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <ThemedStatusBar />
       <View style={styles.header}>
         <Text style={styles.kicker}>LYNX DRIVER</Text>
         <Text style={styles.title}>Alertas</Text>
@@ -406,7 +406,7 @@ const NotificationsScreen: React.FC = () => {
         data={data}
         keyExtractor={(it) => it.id}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: theme.list.gap }} />}
         renderItem={({ item }) => (
           <Item
             item={item}
@@ -421,7 +421,7 @@ const NotificationsScreen: React.FC = () => {
             <Ionicons
               name="notifications-off-outline"
               size={36}
-              color={AppTheme.text.muted}
+              color={theme.text.muted}
             />
             <Text style={styles.emptyTitle}>Sin notificaciones</Text>
             <Text style={styles.emptyTxt}>
@@ -445,10 +445,7 @@ const NotificationsScreen: React.FC = () => {
               <View
                 style={[
                   styles.modalIcon,
-                  getAssignmentVisualState(selected) === "accepted" &&
-                    styles.modalIconAccepted,
-                  getAssignmentVisualState(selected) === "rejected" &&
-                    styles.modalIconRejected,
+                  { backgroundColor: selectedTone.background, borderColor: selectedTone.border },
                 ]}
               >
                 <Ionicons
@@ -469,7 +466,7 @@ const NotificationsScreen: React.FC = () => {
                 <Ionicons
                   name="close"
                   size={18}
-                  color={AppTheme.text.primary}
+                  color={theme.text.primary}
                 />
               </Pressable>
             </View>
@@ -571,103 +568,91 @@ const NotificationsScreen: React.FC = () => {
 
 export default NotificationsScreen;
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   header: {
-    paddingTop: AppTheme.layout.headerTopPadding,
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingBottom: AppTheme.spacing.md,
+    paddingTop: t.layout.headerTopPadding,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingBottom: t.spacing.md,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    ...AppTheme.typography.titleLg,
-    marginTop: AppTheme.spacing.xs,
+    ...t.typography.titleLg,
+    marginTop: t.spacing.xs,
   },
 
   subtitle: {
-    ...AppTheme.typography.body,
-    marginTop: AppTheme.spacing.sm,
+    ...t.typography.body,
+    marginTop: t.spacing.sm,
   },
 
   actions: {
     flexDirection: "row",
-    gap: AppTheme.spacing.sm,
-    marginTop: AppTheme.spacing.md,
+    gap: t.spacing.sm,
+    marginTop: t.spacing.md,
   },
 
   actionButton: {
     minHeight: 36,
-    paddingHorizontal: AppTheme.spacing.md,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.overlays.primary,
+    paddingHorizontal: t.spacing.md,
+    borderRadius: t.radius.full,
+    backgroundColor: t.overlays.primary,
     borderWidth: 1,
-    borderColor: AppTheme.borders.primary,
+    borderColor: t.borders.primary,
     alignItems: "center",
     justifyContent: "center",
   },
 
   actionButtonDanger: {
-    backgroundColor: dangerOverlay,
-    borderColor: dangerBorder,
+    backgroundColor: t.status.rejected.background,
+    borderColor: t.status.rejected.border,
   },
 
   actionText: {
-    color: AppTheme.colors.primary,
+    color: t.text.accent,
     fontSize: 12,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   actionTextDanger: {
-    color: AppTheme.colors.danger,
+    color: t.status.rejected.text,
   },
 
   listContent: {
-    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingHorizontal: t.layout.screenPadding,
     paddingBottom: 124,
   },
 
+  // Superficie, borde y radio: theme.listItem (en Minimal, fila con separador).
   item: {
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
-    borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
-    padding: AppTheme.spacing.md,
+    padding: t.spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   itemAccepted: {
-    borderColor: successBorder,
+    borderColor: t.status.confirmed.border,
   },
 
   itemRejected: {
-    borderColor: dangerBorder,
+    borderColor: t.status.rejected.border,
   },
 
   itemIcon: {
     width: 38,
     height: 38,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.overlays.primary,
-  },
-
-  itemIconAccepted: {
-    backgroundColor: successOverlay,
-  },
-
-  itemIconRejected: {
-    backgroundColor: dangerOverlay,
   },
 
   itemContent: {
@@ -683,7 +668,7 @@ const styles = StyleSheet.create({
 
   itemKind: {
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -691,46 +676,46 @@ const styles = StyleSheet.create({
   unreadDot: {
     width: 7,
     height: 7,
-    borderRadius: AppTheme.radius.full,
-    backgroundColor: AppTheme.colors.danger,
+    borderRadius: t.radius.full,
+    backgroundColor: t.status.rejected.text,
   },
 
   itemTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 15,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   itemBody: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: AppTheme.font.weight.medium,
+    fontWeight: t.font.weight.medium,
     marginTop: 2,
   },
 
   itemDate: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 11,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
     marginTop: 5,
   },
 
   empty: {
     alignItems: "center",
     marginTop: 54,
-    paddingHorizontal: AppTheme.spacing.lg,
+    paddingHorizontal: t.spacing.lg,
   },
 
   emptyTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 16,
-    fontWeight: AppTheme.font.weight.black,
-    marginTop: AppTheme.spacing.md,
+    fontWeight: t.font.weight.black,
+    marginTop: t.spacing.md,
   },
 
   emptyTxt: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -739,17 +724,17 @@ const styles = StyleSheet.create({
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: AppTheme.overlays.camera,
+    backgroundColor: t.overlays.camera,
     justifyContent: "center",
-    padding: AppTheme.spacing.lg,
+    padding: t.spacing.lg,
   },
 
   modalCard: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.screenAlt,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.screenAlt,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.lg,
+    borderColor: t.borders.medium,
+    padding: t.spacing.lg,
   },
 
   modalHero: {
@@ -761,129 +746,117 @@ const styles = StyleSheet.create({
   modalIcon: {
     width: 54,
     height: 54,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.overlays.primary,
     borderWidth: 1,
-    borderColor: AppTheme.borders.primary,
-  },
-
-  modalIconAccepted: {
-    backgroundColor: successOverlay,
-    borderColor: successBorder,
-  },
-
-  modalIconRejected: {
-    backgroundColor: dangerOverlay,
-    borderColor: dangerBorder,
   },
 
   modalHeader: {
-    marginTop: AppTheme.spacing.md,
+    marginTop: t.spacing.md,
   },
 
   closeBtn: {
     width: 34,
     height: 34,
-    borderRadius: AppTheme.radius.full,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
   },
 
   modalKind: {
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
 
   modalTitle: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 22,
     lineHeight: 27,
-    fontWeight: AppTheme.font.weight.black,
-    marginTop: AppTheme.spacing.xs,
+    fontWeight: t.font.weight.black,
+    marginTop: t.spacing.xs,
   },
 
   modalBody: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: AppTheme.font.weight.medium,
-    marginTop: AppTheme.spacing.sm,
+    fontWeight: t.font.weight.medium,
+    marginTop: t.spacing.sm,
   },
 
   detailBox: {
-    marginTop: AppTheme.spacing.lg,
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.card,
+    marginTop: t.spacing.lg,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
     overflow: "hidden",
   },
 
   detailRow: {
-    paddingHorizontal: AppTheme.spacing.md,
-    paddingVertical: AppTheme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: AppTheme.borders.soft,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderBottomWidth: t.separator.width,
+    borderBottomColor: t.separator.color,
     gap: 3,
   },
 
   detailLabel: {
-    color: AppTheme.text.muted,
+    color: t.text.muted,
     fontSize: 10,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
 
   detailValue: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: AppTheme.font.weight.bold,
+    fontWeight: t.font.weight.bold,
   },
 
   modalFooter: {
-    marginTop: AppTheme.spacing.lg,
+    marginTop: t.spacing.lg,
     flexDirection: "row",
     justifyContent: "flex-end",
-    gap: AppTheme.spacing.sm,
+    gap: t.spacing.sm,
   },
 
   btn: {
     minHeight: 42,
-    paddingHorizontal: AppTheme.spacing.md,
-    borderRadius: AppTheme.radius.lg,
+    paddingHorizontal: t.spacing.md,
+    borderRadius: t.radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },
 
   btnPrimary: {
-    backgroundColor: AppTheme.colors.primary,
+    backgroundColor: t.colors.primary,
   },
 
   btnDanger: {
-    backgroundColor: dangerOverlay,
+    backgroundColor: t.status.rejected.background,
     borderWidth: 1,
-    borderColor: dangerBorder,
+    borderColor: t.status.rejected.border,
   },
 
   btnTxtPrimary: {
-    color: AppTheme.colors.white,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.onPrimary,
+    fontWeight: t.font.weight.black,
   },
 
   btnTxt: {
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 
   btnTxtDanger: {
-    color: AppTheme.colors.danger,
+    color: t.status.rejected.text,
   },
 });

@@ -10,7 +10,9 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import { SafeScreen } from "../../../components/SafeScreen";
 import { DriverHome, HomeCandidate, clearMyHome, fetchMyHome, saveMyHome, searchHomeAddress, shortAddress } from "./homeApi";
 import { errorMessage } from "../errorMessage";
@@ -37,6 +39,8 @@ const servicesOff = (e: any) => e?.code === "E_LOCATION_SERVICES_DISABLED" || /l
 
 export default function DriverHomeScreen() {
   const navigation = useNavigation<any>();
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [home, setHome] = useState<DriverHome | null>(null);
   const [text, setText] = useState("");
   const [candidates, setCandidates] = useState<HomeCandidate[] | null>(null);
@@ -131,9 +135,10 @@ export default function DriverHomeScreen() {
 
   return (
     <SafeScreen>
+      <ThemedStatusBar />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.back} onPress={() => navigation.goBack()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={20} color={AppTheme.text.secondary} />
+          <Ionicons name="chevron-back" size={20} color={theme.text.secondary} />
           <Text style={styles.backText}>Mi cuenta</Text>
         </Pressable>
 
@@ -145,7 +150,7 @@ export default function DriverHomeScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Domicilio cargado</Text>
           {busy === "load" ? (
-            <ActivityIndicator color={AppTheme.colors.primary} style={{ marginTop: 8 }} />
+            <ActivityIndicator color={theme.text.accent} style={{ marginTop: 8 }} />
           ) : loadError ? (
             <>
               <Text style={styles.hint}>{loadError}</Text>
@@ -167,7 +172,7 @@ export default function DriverHomeScreen() {
           <Text style={styles.label}>{home?.address ? "Cambiarlo" : "Cargarlo"}</Text>
 
           <Pressable style={[styles.button, styles.buttonSecondary]} onPress={useMyLocation} disabled={!!busy}>
-            {busy === "gps" ? <ActivityIndicator color={AppTheme.colors.primary} /> : <Ionicons name="locate-outline" size={18} color={AppTheme.colors.primary} />}
+            {busy === "gps" ? <ActivityIndicator color={theme.text.accent} /> : <Ionicons name="locate-outline" size={18} color={theme.text.accent} />}
             <Text style={styles.buttonSecondaryText}>Estoy en mi casa: usar mi ubicación</Text>
           </Pressable>
 
@@ -177,7 +182,7 @@ export default function DriverHomeScreen() {
               value={text}
               onChangeText={setText}
               placeholder="Calle y número, localidad"
-              placeholderTextColor={AppTheme.text.muted}
+              placeholderTextColor={theme.text.muted}
               style={styles.input}
               // Con un punto del GPS sin guardar, «Enter» solo cierra el teclado: buscar lo descartaría.
               returnKeyType={pending?.source === "gps" ? "done" : "search"}
@@ -186,7 +191,7 @@ export default function DriverHomeScreen() {
             />
             <Pressable style={[styles.button, styles.searchButton]} onPress={search} disabled={!!busy}
               accessibilityRole="button" accessibilityLabel="Buscar dirección" accessibilityState={{ disabled: !!busy, busy: busy === "search" }}>
-              {busy === "search" ? <ActivityIndicator color={AppTheme.colors.white} /> : <Ionicons name="search" size={18} color={AppTheme.colors.white} />}
+              {busy === "search" ? <ActivityIndicator color={theme.text.onPrimary} /> : <Ionicons name="search" size={18} color={theme.text.onPrimary} />}
             </Pressable>
           </View>
 
@@ -217,7 +222,7 @@ export default function DriverHomeScreen() {
                   : `Se guarda: ${pending.address}`}
               </Text>
               <Pressable style={styles.button} onPress={save} disabled={!!busy}>
-                {busy === "save" ? <ActivityIndicator color={AppTheme.colors.white} /> : <Text style={styles.buttonText}>Guardar domicilio</Text>}
+                {busy === "save" ? <ActivityIndicator color={theme.text.onPrimary} /> : <Text style={styles.buttonText}>Guardar domicilio</Text>}
               </Pressable>
             </View>
           ) : null}
@@ -226,7 +231,7 @@ export default function DriverHomeScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {needsSettings ? (
           <Pressable style={[styles.button, styles.buttonSecondary]} onPress={() => Linking.openSettings()}>
-            <Ionicons name="settings-outline" size={18} color={AppTheme.colors.primary} />
+            <Ionicons name="settings-outline" size={18} color={theme.text.accent} />
             <Text style={styles.buttonSecondaryText}>Abrir configuración</Text>
           </Pressable>
         ) : null}
@@ -235,72 +240,72 @@ export default function DriverHomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   content: {
-    paddingTop: AppTheme.spacing.md,
-    paddingHorizontal: AppTheme.layout.screenPadding,
+    paddingTop: t.spacing.md,
+    paddingHorizontal: t.layout.screenPadding,
     paddingBottom: 48,
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
   back: { flexDirection: "row", alignItems: "center", gap: 2 },
-  backText: { color: AppTheme.text.secondary, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
+  backText: { color: t.text.secondary, fontSize: 14, fontWeight: t.font.weight.bold },
   title: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 34,
     lineHeight: 38,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     letterSpacing: -1,
   },
-  subtitle: { color: AppTheme.text.secondary, fontSize: 14, lineHeight: 20, fontWeight: AppTheme.font.weight.bold },
+  subtitle: { color: t.text.secondary, fontSize: 14, lineHeight: 20, fontWeight: t.font.weight.bold },
   card: {
-    borderRadius: AppTheme.radius.xxl,
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.surfaces.cardElevated,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.md,
-    gap: AppTheme.spacing.sm,
+    borderColor: t.borders.medium,
+    padding: t.spacing.md,
+    gap: t.spacing.sm,
   },
-  label: { color: AppTheme.text.muted, fontSize: 12, fontWeight: AppTheme.font.weight.black, textTransform: "uppercase", letterSpacing: 0.6 },
-  value: { color: AppTheme.text.primary, fontSize: 17, fontWeight: AppTheme.font.weight.black },
-  link: { color: AppTheme.colors.danger, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
-  retry: { color: AppTheme.colors.primary, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
-  or: { color: AppTheme.text.muted, fontSize: 12, fontWeight: AppTheme.font.weight.bold, textAlign: "center" },
-  row: { flexDirection: "row", gap: AppTheme.spacing.sm, alignItems: "center" },
+  label: { color: t.text.muted, fontSize: 12, fontWeight: t.font.weight.black, textTransform: "uppercase", letterSpacing: 0.6 },
+  value: { color: t.text.primary, fontSize: 17, fontWeight: t.font.weight.black },
+  link: { color: t.status.rejected.text, fontSize: 14, fontWeight: t.font.weight.bold },
+  retry: { color: t.text.accent, fontSize: 14, fontWeight: t.font.weight.bold },
+  or: { color: t.text.muted, fontSize: 12, fontWeight: t.font.weight.bold, textAlign: "center" },
+  row: { flexDirection: "row", gap: t.spacing.sm, alignItems: "center" },
   input: {
     flex: 1,
     minHeight: 48,
-    borderRadius: AppTheme.radius.xl,
+    borderRadius: t.radius.xl,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    backgroundColor: AppTheme.surfaces.cardStrong,
-    color: AppTheme.text.primary,
-    paddingHorizontal: AppTheme.spacing.md,
+    borderColor: t.borders.medium,
+    backgroundColor: t.surfaces.cardStrong,
+    color: t.text.primary,
+    paddingHorizontal: t.spacing.md,
     fontSize: 15,
   },
   button: {
     minHeight: 48,
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.colors.primary,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: AppTheme.spacing.sm,
-    paddingHorizontal: AppTheme.spacing.md,
+    gap: t.spacing.sm,
+    paddingHorizontal: t.spacing.md,
   },
   searchButton: { width: 52, paddingHorizontal: 0 },
-  buttonText: { color: AppTheme.colors.white, fontSize: 15, fontWeight: AppTheme.font.weight.black },
-  buttonSecondary: { backgroundColor: AppTheme.overlays.primary, borderWidth: 1, borderColor: AppTheme.borders.medium },
-  buttonSecondaryText: { color: AppTheme.colors.primary, fontSize: 15, fontWeight: AppTheme.font.weight.black },
-  hint: { color: AppTheme.text.secondary, fontSize: 13, lineHeight: 18, fontWeight: AppTheme.font.weight.bold },
+  buttonText: { color: t.text.onPrimary, fontSize: 15, fontWeight: t.font.weight.black },
+  buttonSecondary: { backgroundColor: t.overlays.primary, borderWidth: 1, borderColor: t.borders.medium },
+  buttonSecondaryText: { color: t.text.accent, fontSize: 15, fontWeight: t.font.weight.black },
+  hint: { color: t.text.secondary, fontSize: 13, lineHeight: 18, fontWeight: t.font.weight.bold },
   candidate: {
     marginTop: 6,
-    borderRadius: AppTheme.radius.xl,
+    borderRadius: t.radius.xl,
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
-    padding: AppTheme.spacing.sm,
+    borderColor: t.borders.medium,
+    padding: t.spacing.sm,
   },
-  candidateOn: { borderColor: AppTheme.colors.primary, backgroundColor: AppTheme.overlays.primary },
-  candidateText: { color: AppTheme.text.primary, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
-  confirm: { marginTop: AppTheme.spacing.sm, gap: AppTheme.spacing.sm },
-  error: { color: AppTheme.colors.danger, fontSize: 14, fontWeight: AppTheme.font.weight.bold },
+  candidateOn: { borderColor: t.colors.primary, backgroundColor: t.overlays.primary },
+  candidateText: { color: t.text.primary, fontSize: 14, fontWeight: t.font.weight.bold },
+  confirm: { marginTop: t.spacing.sm, gap: t.spacing.sm },
+  error: { color: t.status.rejected.text, fontSize: 14, fontWeight: t.font.weight.bold },
 });

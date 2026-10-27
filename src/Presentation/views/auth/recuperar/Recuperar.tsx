@@ -7,11 +7,16 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 
 export const RecuperarScreen = () => {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.container}>
+      <ThemedStatusBar />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -20,7 +25,7 @@ export const RecuperarScreen = () => {
           <Ionicons
             name="lock-closed-outline"
             size={52}
-            color={AppTheme.colors.primary}
+            color={theme.text.accent}
           />
         </View>
 
@@ -40,7 +45,7 @@ export const RecuperarScreen = () => {
           <Ionicons
             name="headset-outline"
             size={20}
-            color={AppTheme.colors.primary}
+            color={theme.text.accent}
           />
 
           <Text style={styles.cardText}>
@@ -56,10 +61,10 @@ export const RecuperarScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   content: {
@@ -74,15 +79,15 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 32,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
     textAlign: "center",
     marginBottom: 16,
   },
 
   description: {
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -94,31 +99,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: AppTheme.surfaces.cardElevated,
-    borderRadius: AppTheme.radius.xl,
+    backgroundColor: t.surfaces.cardElevated,
+    borderRadius: t.radius.xl,
     borderWidth: 1,
-    borderColor: AppTheme.borders.soft,
+    borderColor: t.borders.soft,
     padding: 18,
   },
 
   cardText: {
     flex: 1,
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
     fontSize: 14,
     lineHeight: 20,
   },
 
   button: {
     marginTop: 32,
-    backgroundColor: AppTheme.colors.primary,
-    borderRadius: AppTheme.radius.lg,
+    backgroundColor: t.colors.primary,
+    borderRadius: t.radius.lg,
     paddingVertical: 16,
     alignItems: "center",
   },
 
   buttonText: {
-    color: AppTheme.colors.white,
+    color: t.text.onPrimary,
     fontSize: 16,
-    fontWeight: AppTheme.font.weight.black,
+    fontWeight: t.font.weight.black,
   },
 });

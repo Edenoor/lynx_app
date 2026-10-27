@@ -5,7 +5,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppTheme from "../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 export type QrAction = {
   key: string;
@@ -20,13 +21,15 @@ export type QrAction = {
 };
 
 function ActionItem({ icon, label, badge, note, disabled, onPress }: Omit<QrAction, "key">) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Pressable style={disabled ? [styles.card, styles.cardDisabled] : styles.card} onPress={onPress} disabled={disabled}>
       <View style={styles.iconContainer}>
         <Ionicons
           name={icon}
           size={42}
-          color={AppTheme.text.primary}
+          color={theme.text.primary}
         />
       </View>
 
@@ -44,6 +47,7 @@ function ActionItem({ icon, label, badge, note, disabled, onPress }: Omit<QrActi
 }
 
 export function QrActionGrid({ actions }: { actions: QrAction[] }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.grid}>
       {actions.map(({ key, ...action }) => (
@@ -53,49 +57,49 @@ export function QrActionGrid({ actions }: { actions: QrAction[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   card: {
     width: "48%",
     aspectRatio: 1,
 
-    backgroundColor: AppTheme.surfaces.cardElevated,
+    backgroundColor: t.surfaces.cardElevated,
 
-    borderRadius: AppTheme.radius.xl,
+    borderRadius: t.radius.xl,
 
     borderWidth: 1,
-    borderColor: AppTheme.borders.medium,
+    borderColor: t.borders.medium,
 
     alignItems: "center",
     justifyContent: "center",
 
-    padding: AppTheme.spacing.lg,
+    padding: t.spacing.lg,
 
-    ...AppTheme.shadows.card,
+    ...t.shadows.card,
   },
 
   iconContainer: {
-    marginBottom: AppTheme.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
   label: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
 
-    fontSize: AppTheme.font.size.md,
-    fontWeight: AppTheme.font.weight.black,
+    fontSize: t.font.size.md,
+    fontWeight: t.font.weight.black,
 
     textAlign: "center",
   },
 
   badge: {
-    color: AppTheme.colors.danger,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.status.rejected.text,
+    fontWeight: t.font.weight.black,
   },
 
   cardDisabled: {
@@ -103,10 +107,10 @@ const styles = StyleSheet.create({
   },
 
   note: {
-    marginTop: AppTheme.spacing.xs,
-    color: AppTheme.text.muted,
-    fontSize: AppTheme.font.size.xs,
-    fontWeight: AppTheme.font.weight.bold,
+    marginTop: t.spacing.xs,
+    color: t.text.muted,
+    fontSize: t.font.size.xs,
+    fontWeight: t.font.weight.bold,
     textAlign: "center",
   },
 });

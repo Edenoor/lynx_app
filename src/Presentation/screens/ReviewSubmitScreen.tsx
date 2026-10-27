@@ -16,7 +16,9 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
 import { useOnboarding } from "../onboarding/OnboardingContext";
 import { RoundedButton } from "../components/RoundedButton";
-import global from "../theme/global";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
+import { ThemedStatusBar } from "../theme/ThemedStatusBar";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Review">;
 
@@ -56,6 +58,7 @@ const DOCUMENT_GROUPS = [
 type FileKey = (typeof ORDER)[number];
 
 export function ReviewSubmitScreen({ navigation }: Props) {
+  const styles = useThemedStyles(makeStyles);
   const { state } = useOnboarding();
 
   const missing = useMemo(() => {
@@ -94,11 +97,12 @@ export function ReviewSubmitScreen({ navigation }: Props) {
       source={require("../../../assets/background-1.png")}
       style={styles.background}
       resizeMode="cover"
+      imageStyle={styles.backgroundImage}
     >
       <View style={styles.overlay} />
 
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" backgroundColor="#05080E" />
+        <ThemedStatusBar />
 
         <View style={styles.screen}>
           <ScrollView
@@ -262,14 +266,18 @@ export function ReviewSubmitScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
+  // Imagen de fondo como en las pantallas del chofer: tenue y solo en Classic.
+  backgroundImage: {
+    opacity: t.backdrop.imageOpacity,
+  },
   background: {
     flex: 1,
-    backgroundColor: "#05080E",
+    backgroundColor: t.surfaces.screen,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,14,0.42)",
+    backgroundColor: t.overlays.background,
   },
   safe: {
     flex: 1,
@@ -279,7 +287,7 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingHorizontal: global.SPACING.md,
+    paddingHorizontal: t.spacing.md,
     paddingTop:
       Platform.OS === "android"
         ? (StatusBar.currentHeight ?? 24) + 28
@@ -293,20 +301,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   kicker: {
-    color: global.COLORS.blue,
+    color: t.text.accent,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
   },
   title: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 28,
     lineHeight: 32,
     fontWeight: "900",
     letterSpacing: -1,
   },
   subtitle: {
-    color: "#CBD5E1",
+    color: t.text.secondary,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "500",
@@ -315,9 +323,9 @@ const styles = StyleSheet.create({
 
   successBox: {
     borderRadius: 20,
-    backgroundColor: "rgba(34,197,94,0.12)",
+    backgroundColor: t.status.confirmed.background,
     borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.24)",
+    borderColor: t.status.confirmed.border,
     padding: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -327,14 +335,14 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.18)",
+    backgroundColor: t.status.confirmed.background,
     borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.34)",
+    borderColor: t.status.confirmed.border,
     alignItems: "center",
     justifyContent: "center",
   },
   successIconText: {
-    color: "#22C55E",
+    color: t.status.confirmed.text,
     fontSize: 18,
     fontWeight: "900",
   },
@@ -343,12 +351,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   successTitle: {
-    color: "#DCFCE7",
+    color: t.status.confirmed.text,
     fontSize: 14,
     fontWeight: "900",
   },
   successText: {
-    color: "#BBF7D0",
+    color: t.status.confirmed.text,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "600",
@@ -356,19 +364,19 @@ const styles = StyleSheet.create({
 
   warningBox: {
     borderRadius: 18,
-    backgroundColor: "rgba(251,191,36,0.12)",
+    backgroundColor: t.status.pending.background,
     borderWidth: 1,
-    borderColor: "rgba(251,191,36,0.25)",
+    borderColor: t.status.pending.border,
     padding: 14,
     gap: 4,
   },
   warningTitle: {
-    color: "#FBBF24",
+    color: t.status.pending.text,
     fontSize: 14,
     fontWeight: "900",
   },
   warningText: {
-    color: "#FDE68A",
+    color: t.status.pending.text,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "600",
@@ -376,13 +384,13 @@ const styles = StyleSheet.create({
 
   card: {
     borderRadius: 22,
-    backgroundColor: "rgba(13,22,35,0.72)",
+    backgroundColor: t.surfaces.cardStrong,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.18)",
+    borderColor: t.borders.strong,
     overflow: "hidden",
   },
   cardTitle: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 15,
     fontWeight: "900",
     paddingHorizontal: 14,
@@ -400,7 +408,7 @@ const styles = StyleSheet.create({
   },
   rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(248,250,252,0.09)",
+    borderBottomColor: t.borders.muted,
   },
   groupStatusIcon: {
     width: 28,
@@ -411,39 +419,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   groupStatusIconComplete: {
-    backgroundColor: "rgba(34,197,94,0.12)",
-    borderColor: "rgba(34,197,94,0.25)",
+    backgroundColor: t.status.confirmed.background,
+    borderColor: t.status.confirmed.border,
   },
   groupStatusIconMissing: {
-    backgroundColor: "rgba(251,191,36,0.12)",
-    borderColor: "rgba(251,191,36,0.25)",
+    backgroundColor: t.status.pending.background,
+    borderColor: t.status.pending.border,
   },
   groupStatusText: {
     fontSize: 14,
     fontWeight: "900",
   },
   groupStatusTextComplete: {
-    color: "#22C55E",
+    color: t.status.confirmed.text,
   },
   groupStatusTextMissing: {
-    color: "#FBBF24",
+    color: t.status.pending.text,
   },
   groupText: {
     flex: 1,
     gap: 3,
   },
   groupTitle: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 14,
     fontWeight: "900",
   },
   groupSubtitle: {
-    color: "#22C55E",
+    color: t.status.confirmed.text,
     fontSize: 12,
     fontWeight: "700",
   },
   groupSubtitleMissing: {
-    color: "#FBBF24",
+    color: t.status.pending.text,
   },
 
   thumbs: {
@@ -455,8 +463,8 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.24)",
-    backgroundColor: "#020617",
+    borderColor: t.borders.strong,
+    backgroundColor: t.surfaces.screenDeep,
   },
   thumbOverlap: {
     marginLeft: -14,
@@ -465,36 +473,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(251,191,36,0.12)",
+    backgroundColor: t.status.pending.background,
     borderWidth: 1,
-    borderColor: "rgba(251,191,36,0.25)",
+    borderColor: t.status.pending.border,
   },
   missingBadgeText: {
-    color: "#FBBF24",
+    color: t.status.pending.text,
     fontSize: 11,
     fontWeight: "900",
   },
 
   footer: {
-    paddingHorizontal: global.SPACING.md,
+    paddingHorizontal: t.spacing.md,
     paddingTop: 10,
     paddingBottom: 16,
     gap: 10,
-    backgroundColor: "rgba(5,8,14,0.72)",
+    backgroundColor: t.surfaces.footer,
     borderTopWidth: 1,
-    borderTopColor: "rgba(248,250,252,0.08)",
+    borderTopColor: t.borders.muted,
   },
   secondaryButton: {
     minHeight: 48,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.16)",
-    backgroundColor: "rgba(13,22,35,0.72)",
+    borderColor: t.borders.default,
+    backgroundColor: t.surfaces.cardStrong,
     alignItems: "center",
     justifyContent: "center",
   },
   secondaryButtonText: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -502,7 +510,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   footerText: {
-    color: "#94A3B8",
+    color: t.text.muted,
     fontSize: 12,
     textAlign: "center",
     fontWeight: "600",

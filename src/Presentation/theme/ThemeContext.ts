@@ -7,6 +7,7 @@ import { createContext, useContext, useMemo } from "react";
 
 import { AppearancePreferences, DEFAULT_APPEARANCE } from "./appearance";
 import { createTheme, Theme } from "./createTheme";
+import type { ThemeMode } from "./global";
 
 export type AppearancePatch = Partial<Omit<AppearancePreferences, "version">>;
 
@@ -23,6 +24,11 @@ export const ThemeContext = createContext<ThemeContextValue>({
   setAppearance: () => {},
   resetAppearance: () => {},
 });
+
+// Fija el esquema de lo nativo (Alert, teclado, selectores) mientras se ve una
+// parte de la app con tema fijo; null vuelve a la preferencia. Lo pone
+// ThemeProvider y lo usa FixedTheme.
+export const NativeSchemeContext = createContext<(scheme: ThemeMode | null) => void>(() => {});
 
 export const useAppTheme = () => useContext(ThemeContext).theme;
 

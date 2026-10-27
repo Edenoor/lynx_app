@@ -11,9 +11,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import Constants from "expo-constants";
+import { StatusBar } from "expo-status-bar";
 
 import { API_URL } from "../config/Api";
-import { AppTheme } from "../theme/AppTheme";
+import { FixedTheme, PUBLIC_THEME } from "../theme/FixedTheme";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 const CHECK_TIMEOUT_MS = 8_000;
 
@@ -67,8 +70,21 @@ export const AppVersionGate: React.FC<React.PropsWithChildren> = ({ children }) 
 
   if (!required) return <>{children}</>;
 
+  // Pantalla pública: Light fijo, como el login.
+  return (
+    <FixedTheme theme={PUBLIC_THEME} native>
+      <UpdateRequired current={current} required={required} />
+    </FixedTheme>
+  );
+};
+
+function UpdateRequired({ current, required }: { current: string | null; required: Required }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  // Fuera de la navegación: la barra de estado va directa (no ThemedStatusBar).
   return (
     <View style={styles.screen}>
+      <StatusBar style={theme.scheme === "dark" ? "light" : "dark"} />
       <Text style={styles.title}>Actualizá Lynx</Text>
       <Text style={styles.body}>
         Esta versión de la app ({current}) ya no se puede usar. Instalá la {required.min} o una más nueva para seguir.
@@ -82,36 +98,36 @@ export const AppVersionGate: React.FC<React.PropsWithChildren> = ({ children }) 
       )}
     </View>
   );
-};
+}
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   screen: {
     flex: 1,
     justifyContent: "center",
     padding: 32,
     gap: 16,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
   title: {
     fontSize: 24,
     fontWeight: "800",
-    color: AppTheme.text.primary,
+    color: t.text.primary,
   },
   body: {
     fontSize: 16,
     lineHeight: 22,
-    color: AppTheme.text.secondary,
+    color: t.text.secondary,
   },
   button: {
     marginTop: 8,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
-    backgroundColor: AppTheme.colors.primary,
+    backgroundColor: t.colors.primary,
   },
   buttonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: t.text.onPrimary,
   },
 });

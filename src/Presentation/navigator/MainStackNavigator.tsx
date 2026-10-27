@@ -3,8 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { UserContext } from "../context/UserContext";
-import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
-import type { Theme } from "../theme/createTheme";
+import { DARK_COLORS, SPLASH_BACKGROUND } from "../theme/global";
 
 import { HomeScreen } from "../views/auth/home/Home";
 import { RecuperarScreen } from "../views/auth/recuperar/Recuperar";
@@ -27,26 +26,23 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const makeLoadingStyles = (t: Theme) =>
-  StyleSheet.create({
-    screen: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: t.colors.background,
-    },
-  });
+// Mientras se lee la sesión: continúa el splash nativo (mismo fondo), para que
+// al entrar haya un solo cambio de color, al login (Light) o a la apariencia
+// del chofer, y no dos.
+const loadingStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: SPLASH_BACKGROUND,
+  },
+});
 
-const AuthLoadingScreen = () => {
-  const theme = useAppTheme();
-  const styles = useThemedStyles(makeLoadingStyles);
-
-  return (
-    <View style={styles.screen}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-    </View>
-  );
-};
+const AuthLoadingScreen = () => (
+  <View style={loadingStyles.screen}>
+    <ActivityIndicator size="large" color={DARK_COLORS.accent} />
+  </View>
+);
 
 export const MainStackNavigator = () => {
   const { user, isAuthLoading } = useContext(UserContext);

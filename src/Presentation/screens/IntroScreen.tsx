@@ -5,13 +5,14 @@ import {
   StyleSheet,
   Image,
   SafeAreaView,
-  StatusBar,
   ImageBackground,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
 import { RoundedButton } from "../components/RoundedButton";
-import AppTheme from "../theme/AppTheme";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
+import { ThemedStatusBar } from "../theme/ThemedStatusBar";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Intro">;
 
@@ -23,19 +24,18 @@ const requirements = [
 ];
 
 export function IntroScreen({ navigation }: Props) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <ImageBackground
       source={require("../../../assets/background-1.png")}
       style={styles.background}
       resizeMode="cover"
+      imageStyle={styles.backgroundImage}
     >
       <View style={styles.overlay} />
 
       <SafeAreaView style={styles.safe}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor={AppTheme.surfaces.screen}
-        />
+        <ThemedStatusBar />
 
         <View style={styles.wrap}>
           <View style={styles.header}>
@@ -102,15 +102,19 @@ export function IntroScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
+  // Imagen de fondo como en las pantallas del chofer: tenue y solo en Classic.
+  backgroundImage: {
+    opacity: t.backdrop.imageOpacity,
+  },
   background: {
     flex: 1,
-    backgroundColor: AppTheme.surfaces.screen,
+    backgroundColor: t.surfaces.screen,
   },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: AppTheme.overlays.background,
+    backgroundColor: t.overlays.background,
   },
 
   safe: {
@@ -119,63 +123,65 @@ const styles = StyleSheet.create({
 
   wrap: {
     flex: 1,
-    paddingHorizontal: AppTheme.layout.screenPadding,
-    paddingTop: AppTheme.layout.headerTopPadding,
-    paddingBottom: AppTheme.layout.footerPaddingBottom,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingTop: t.layout.headerTopPadding,
+    paddingBottom: t.layout.footerPaddingBottom,
   },
 
   header: {
     alignItems: "center",
-    marginBottom: AppTheme.spacing.md,
+    marginBottom: t.spacing.md,
   },
 
+  // Logo blanco teñido con el acento: se ve sobre el fondo claro.
   logo: {
-    width: AppTheme.sizes.logoLg,
-    height: AppTheme.sizes.logoLg,
+    width: t.sizes.logoLg,
+    height: t.sizes.logoLg,
+    tintColor: t.text.accent,
   },
 
   content: {
     flex: 1,
     justifyContent: "center",
-    gap: AppTheme.spacing.xl,
+    gap: t.spacing.xl,
   },
 
   hero: {
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   kicker: {
-    ...AppTheme.typography.kicker,
+    ...t.typography.kicker,
   },
 
   title: {
-    ...AppTheme.typography.titleLg,
+    ...t.typography.titleLg,
   },
 
   titleAccent: {
-    color: AppTheme.text.accent,
+    color: t.text.accent,
   },
 
   subtitle: {
-    ...AppTheme.typography.body,
+    ...t.typography.body,
     maxWidth: 320,
   },
 
   section: {
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   sectionTitle: {
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.md,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.primary,
+    fontSize: t.font.size.md,
+    fontWeight: t.font.weight.black,
   },
 
   card: {
-    borderRadius: AppTheme.radius.xl,
-    backgroundColor: AppTheme.surfaces.cardStrong,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.surfaces.cardStrong,
     borderWidth: 1,
-    borderColor: AppTheme.borders.strong,
+    borderColor: t.borders.strong,
     overflow: "hidden",
   },
 
@@ -183,52 +189,52 @@ const styles = StyleSheet.create({
     minHeight: 60,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: AppTheme.spacing.base,
-    gap: AppTheme.spacing.md,
+    paddingHorizontal: t.spacing.base,
+    gap: t.spacing.md,
   },
 
   itemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: AppTheme.borders.muted,
+    borderBottomColor: t.borders.muted,
   },
 
   itemIcon: {
-    width: AppTheme.sizes.iconMd,
-    height: AppTheme.sizes.iconMd,
-    borderRadius: AppTheme.radius.md,
-    backgroundColor: AppTheme.overlays.primary,
+    width: t.sizes.iconMd,
+    height: t.sizes.iconMd,
+    borderRadius: t.radius.md,
+    backgroundColor: t.overlays.primary,
     borderWidth: 1,
-    borderColor: AppTheme.borders.primary,
+    borderColor: t.borders.primary,
     alignItems: "center",
     justifyContent: "center",
   },
 
   itemIconText: {
-    color: AppTheme.text.accent,
-    fontSize: AppTheme.font.size.xxs,
-    fontWeight: AppTheme.font.weight.black,
+    color: t.text.accent,
+    fontSize: t.font.size.xxs,
+    fontWeight: t.font.weight.black,
   },
 
   itemText: {
     flex: 1,
-    color: AppTheme.text.primary,
-    fontSize: AppTheme.font.size.sm,
-    fontWeight: AppTheme.font.weight.bold,
+    color: t.text.primary,
+    fontSize: t.font.size.sm,
+    fontWeight: t.font.weight.bold,
   },
 
   chevron: {
-    color: AppTheme.text.muted,
-    fontSize: AppTheme.font.size.xl,
-    fontWeight: AppTheme.font.weight.regular,
-    marginTop: -AppTheme.spacing.xxs,
+    color: t.text.muted,
+    fontSize: t.font.size.xl,
+    fontWeight: t.font.weight.regular,
+    marginTop: -t.spacing.xxs,
   },
 
   footer: {
-    gap: AppTheme.spacing.md,
+    gap: t.spacing.md,
   },
 
   footerText: {
-    ...AppTheme.typography.caption,
+    ...t.typography.caption,
     textAlign: "center",
   },
 });

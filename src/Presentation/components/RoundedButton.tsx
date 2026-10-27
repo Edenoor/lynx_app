@@ -7,7 +7,8 @@ import {
   ImageSourcePropType,
   View,
 } from "react-native";
-import global from "../theme/global";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 interface Props {
   text: string;
@@ -22,6 +23,7 @@ export const RoundedButton = ({
   foto,
   disabled = false,
 }: Props) => {
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -49,23 +51,14 @@ export const RoundedButton = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   button: {
     width: "100%",
     height: 58,
-    borderRadius: 18,
-    backgroundColor: "#00B8FF",
+    borderRadius: t.radius.lg,
+    backgroundColor: t.colors.primary,
     justifyContent: "center",
-
-    shadowColor: "#00B8FF",
-    shadowOpacity: 0.15,
-    shadowRadius: 18,
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-
-    elevation: 3,
+    ...t.shadows.glow,
   },
 
   buttonDisabled: {
@@ -88,7 +81,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
 
-    color: "#031018",
+    color: t.text.onPrimary,
 
     fontSize: 17,
     fontWeight: "800",
@@ -96,7 +89,7 @@ const styles = StyleSheet.create({
   },
 
   arrow: {
-    color: "#031018",
+    color: t.text.onPrimary,
     fontSize: 26,
     fontWeight: "400",
   },

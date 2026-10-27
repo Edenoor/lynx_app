@@ -8,6 +8,7 @@ import { CaptureDocumentScreen } from "../screens/CaptureDocumentScreen";
 import { ReviewSubmitScreen } from "../screens/ReviewSubmitScreen";
 import { SubmitScreen } from "../screens/SubmitScreen";
 import { DocKey } from "../onboarding/types";
+import { FixedTheme, PUBLIC_THEME } from "../theme/FixedTheme";
 
 export type OnboardingStackParamList = {
   Intro: undefined;
@@ -21,20 +22,25 @@ export type OnboardingStackParamList = {
 
 const Stack = createNativeStackNavigator<OnboardingStackParamList>();
 
+// El alta del chofer es previa a operar: va en Light fijo, como el login, sin
+// importar la apariencia elegida en el dispositivo.
 export function OnboardingStackNavigator() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="Intro" component={IntroScreen} />
-      <Stack.Screen name="Terms" component={TermsScreen} />
-      <Stack.Screen name="Vehicle" component={VehicleScreen} />
-      <Stack.Screen name="Selfie" component={CaptureSelfieScreen} />
-      <Stack.Screen name="Doc" component={CaptureDocumentScreen} />
-      <Stack.Screen name="Review" component={ReviewSubmitScreen} />
-      <Stack.Screen name="Submit" component={SubmitScreen} />
-    </Stack.Navigator>
+    <FixedTheme theme={PUBLIC_THEME} native>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: PUBLIC_THEME.colors.background },
+        }}
+      >
+        <Stack.Screen name="Intro" component={IntroScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
+        <Stack.Screen name="Vehicle" component={VehicleScreen} />
+        <Stack.Screen name="Selfie" component={CaptureSelfieScreen} />
+        <Stack.Screen name="Doc" component={CaptureDocumentScreen} />
+        <Stack.Screen name="Review" component={ReviewSubmitScreen} />
+        <Stack.Screen name="Submit" component={SubmitScreen} />
+      </Stack.Navigator>
+    </FixedTheme>
   );
 }

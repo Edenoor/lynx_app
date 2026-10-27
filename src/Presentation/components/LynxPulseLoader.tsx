@@ -10,7 +10,8 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import AppTheme from "../theme/AppTheme";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
 
 type LynxLoaderProps = {
   message?: string;
@@ -25,6 +26,7 @@ export function LynxPulseLoader({
   style,
   showLogo = true,
 }: LynxLoaderProps) {
+  const styles = useThemedStyles(makeStyles);
   const pulseAnim = useRef(new Animated.Value(0.86)).current;
   const dotOne = useRef(new Animated.Value(1)).current;
   const dotTwo = useRef(new Animated.Value(0.32)).current;
@@ -111,7 +113,7 @@ export function LynxPulseLoader({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -126,25 +128,27 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AppTheme.surfaces.card,
+    backgroundColor: t.surfaces.card,
     borderWidth: 1,
-    borderColor: AppTheme.borders.default,
+    borderColor: t.borders.default,
   },
   logoBoxCompact: {
     width: 64,
     height: 64,
     borderRadius: 22,
   },
+  // Silueta blanca: se tiñe con el texto para que se vea también en Light.
   logo: {
     width: 64,
     height: 64,
+    tintColor: t.text.primary,
   },
   logoCompact: {
     width: 40,
     height: 40,
   },
   message: {
-    color: AppTheme.text.primary,
+    color: t.text.primary,
     fontSize: 15,
     lineHeight: 21,
     fontWeight: "800",
@@ -161,6 +165,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 999,
-    backgroundColor: AppTheme.colors.primary,
+    backgroundColor: t.text.accent,
   },
 });

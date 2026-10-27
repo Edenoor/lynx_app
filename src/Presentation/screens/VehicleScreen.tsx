@@ -19,7 +19,9 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
 import { RoundedButton } from "../components/RoundedButton";
 import { SelectableCard } from "../components/SelectableCard";
-import global from "../theme/global";
+import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
+import { ThemedStatusBar } from "../theme/ThemedStatusBar";
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, "Vehicle">;
 
@@ -31,6 +33,8 @@ const VEHICLE_TYPES: { label: string; value: VehicleType }[] = [
 ];
 
 export function VehicleScreen({ navigation }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const { state, dispatch } = useOnboarding();
 
   const [type, setType] = useState<VehicleType | "">(
@@ -119,11 +123,12 @@ dispatch({
       source={require("../../../assets/background-1.png")}
       style={styles.background}
       resizeMode="cover"
+      imageStyle={styles.backgroundImage}
     >
       <View style={styles.overlay} />
 
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" backgroundColor="#05080E" />
+        <ThemedStatusBar />
 
         <View style={styles.screen}>
           <ScrollView
@@ -215,7 +220,7 @@ dispatch({
                   value={plate}
                   onChangeText={(text) => setPlate(text.toUpperCase())}
                   placeholder="Ej: AA123BB"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.colors.placeholder}
                   autoCapitalize="characters"
                   autoCorrect={false}
                   style={styles.input}
@@ -229,7 +234,7 @@ dispatch({
     value={dni}
     onChangeText={(text) => setDni(text.replace(/\D/g, ""))}
     placeholder="Ej: 30123456"
-    placeholderTextColor="#64748B"
+    placeholderTextColor={theme.colors.placeholder}
     keyboardType="number-pad"
     style={styles.input}
   />
@@ -242,7 +247,7 @@ dispatch({
     value={cuil}
     onChangeText={(text) => setCuil(text.replace(/\D/g, ""))}
     placeholder="Ej: 20301234567"
-    placeholderTextColor="#64748B"
+    placeholderTextColor={theme.colors.placeholder}
     keyboardType="number-pad"
     style={styles.input}
   />
@@ -270,6 +275,7 @@ type SelectedValueCardProps = {
 };
 
 function SelectedValueCard({ value, onChange }: SelectedValueCardProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.selectedCard}>
       <View style={styles.selectedDot} />
@@ -283,14 +289,18 @@ function SelectedValueCard({ value, onChange }: SelectedValueCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
+  // Imagen de fondo como en las pantallas del chofer: tenue y solo en Classic.
+  backgroundImage: {
+    opacity: t.backdrop.imageOpacity,
+  },
   background: {
     flex: 1,
-    backgroundColor: "#05080E",
+    backgroundColor: t.surfaces.screen,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,14,0.42)",
+    backgroundColor: t.overlays.background,
   },
   safe: {
     flex: 1,
@@ -299,7 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 content: {
-  paddingHorizontal: global.SPACING.md,
+  paddingHorizontal: t.spacing.md,
   paddingTop:
     Platform.OS === "android"
       ? (StatusBar.currentHeight ?? 24) + 28
@@ -313,20 +323,20 @@ header: {
   marginTop: 8,
 },
   kicker: {
-    color: global.COLORS.blue,
+    color: t.text.accent,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
   },
 title: {
-  color: "#F8FAFC",
+  color: t.text.primary,
   fontSize: 24,
   lineHeight: 28,
   fontWeight: "900",
   letterSpacing: -1,
 },
   subtitle: {
-    color: "#CBD5E1",
+    color: t.text.secondary,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "500",
@@ -335,9 +345,9 @@ title: {
 
   card: {
     borderRadius: 22,
-    backgroundColor: "rgba(13,22,35,0.72)",
+    backgroundColor: t.surfaces.cardStrong,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.18)",
+    borderColor: t.borders.strong,
     padding: 14,
     gap: 14,
   },
@@ -345,7 +355,7 @@ title: {
     gap: 8,
   },
   label: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 13,
     fontWeight: "900",
   },
@@ -361,7 +371,7 @@ title: {
     width: "48.5%",
   },
   emptyText: {
-    color: "#94A3B8",
+    color: t.text.muted,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "600",
@@ -370,12 +380,12 @@ title: {
 
   selectedCard: {
     minHeight: 46,
-    borderRadius: global.BORDER_RADIUS.md,
-    paddingHorizontal: global.SPACING.md,
+    borderRadius: t.radius.md,
+    paddingHorizontal: t.spacing.md,
     paddingVertical: 8,
-    backgroundColor: "rgba(0,184,255,0.14)",
+    backgroundColor: t.status.inTransit.background,
     borderWidth: 1,
-    borderColor: global.COLORS.blue,
+    borderColor: t.colors.primary,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -384,16 +394,16 @@ title: {
     width: 9,
     height: 9,
     borderRadius: 999,
-    backgroundColor: global.COLORS.blue,
+    backgroundColor: t.colors.primary,
   },
   selectedText: {
     flex: 1,
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 14,
     fontWeight: "900",
   },
   changeText: {
-    color: global.COLORS.blue,
+    color: t.text.accent,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -401,23 +411,23 @@ title: {
   input: {
     height: 48,
     borderRadius: 15,
-    backgroundColor: "rgba(5,8,14,0.76)",
+    backgroundColor: t.surfaces.footer,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.14)",
+    borderColor: t.borders.default,
     paddingHorizontal: 14,
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 1,
   },
 
   footer: {
-    paddingHorizontal: global.SPACING.md,
+    paddingHorizontal: t.spacing.md,
     paddingTop: 10,
     paddingBottom: 16,
-    backgroundColor: "rgba(5,8,14,0.72)",
+    backgroundColor: t.surfaces.footer,
     borderTopWidth: 1,
-    borderTopColor: "rgba(248,250,252,0.08)",
+    borderTopColor: t.borders.muted,
   },
   disabledButton: {
     opacity: 0.45,

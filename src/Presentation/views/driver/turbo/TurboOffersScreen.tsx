@@ -10,7 +10,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 
-import AppTheme from "../../../theme/AppTheme";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { acceptOffer, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
@@ -20,6 +22,8 @@ type Props = NativeStackScreenProps<DriverStackParamList, "TurboOffersScreen">;
 const REFRESH_MS = 10_000;
 
 export default function TurboOffersScreen({ navigation }: Props) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [offers, setOffers] = useState<TurboOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,10 +98,11 @@ export default function TurboOffersScreen({ navigation }: Props) {
 
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
+      <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.page}>
           <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={AppTheme.text.primary} /></Pressable>
+            <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
             <View style={{ flex: 1 }}>
               <Text style={styles.eyebrow}>Turbo</Text>
               <Text style={styles.title}>Turbos ofrecidos</Text>
@@ -111,20 +116,20 @@ export default function TurboOffersScreen({ navigation }: Props) {
           <FlatList
             data={offers}
             keyExtractor={(o) => String(o.route_id)}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} tintColor={AppTheme.text.accent} />}
-            ListEmptyComponent={loading ? <ActivityIndicator color={AppTheme.text.accent} style={{ marginTop: 40 }} /> : (
-              <View style={styles.empty}><Ionicons name="flash-outline" size={36} color={AppTheme.text.muted} /><Text style={styles.emptyText}>No hay turbos ofrecidos ahora.</Text></View>
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} tintColor={theme.text.accent} />}
+            ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
+              <View style={styles.empty}><Ionicons name="flash-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No hay turbos ofrecidos ahora.</Text></View>
             )}
             renderItem={({ item }) => {
               const left = Math.max(0, Math.round((new Date(item.expires_at).getTime() - now) / 1000));
               const urgent = left <= 15;
               const disabled = busy !== null || left === 0;
               return (
-                <View style={[styles.card, urgent && styles.cardUrgent]}>
+                <View style={[theme.card, styles.card, urgent && styles.cardUrgent]}>
                   <View style={styles.cardTop}>
                     <Text style={styles.cardType}>Turbo #{item.route_id}</Text>
                     <View style={[styles.badge, urgent && styles.badgeUrgent]}>
-                      <Ionicons name="time-outline" size={14} color={urgent ? AppTheme.colors.danger : AppTheme.text.primary} />
+                      <Ionicons name="time-outline" size={14} color={urgent ? theme.status.rejected.icon : theme.text.primary} />
                       <Text style={[styles.badgeText, urgent && styles.badgeTextUrgent]}>{left === 0 ? "vencida" : `${left} s para responder`}</Text>
                     </View>
                   </View>
@@ -136,7 +141,7 @@ export default function TurboOffersScreen({ navigation }: Props) {
                   </Text>
                   <View style={styles.row}>
                     <Pressable onPress={() => onAccept(item)} disabled={disabled} style={[styles.btn, styles.btnYes, disabled && styles.btnDisabled]}>
-                      {busy === item.route_id ? <ActivityIndicator color={AppTheme.text.inverse} /> : <Text style={styles.btnText}>Acepto</Text>}
+                      {busy === item.route_id ? <ActivityIndicator color={theme.text.onPrimary} /> : <Text style={styles.btnText}>Acepto</Text>}
                     </Pressable>
                     <Pressable onPress={() => onDecline(item)} disabled={disabled} style={[styles.btn, styles.btnNo, disabled && styles.btnDisabled]}>
                       <Text style={styles.btnGhostText}>Paso</Text>
@@ -155,38 +160,41 @@ export default function TurboOffersScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  background: { flex: 1, backgroundColor: AppTheme.colors.background },
-  backgroundImage: { opacity: 0.18 },
+const makeStyles = (t: Theme) => StyleSheet.create({
+  background: { flex: 1, backgroundColor: t.colors.background },
+  backgroundImage: { opacity: t.backdrop.imageOpacity },
   safeArea: { flex: 1 },
-  page: { flex: 1, paddingHorizontal: AppTheme.layout.screenPadding, paddingTop: AppTheme.spacing.lg, paddingBottom: 112 },
-  header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: AppTheme.spacing.lg, paddingTop: AppTheme.spacing.lg },
-  back: { padding: 6, marginTop: 2 },
-  eyebrow: { ...AppTheme.typography.kicker },
-  title: { color: AppTheme.text.primary, fontSize: 22, fontWeight: "700" },
-  meta: { color: AppTheme.text.secondary, fontSize: 13, marginTop: 2 },
-  card: { backgroundColor: AppTheme.surfaces.card, borderRadius: AppTheme.radius.lg, borderWidth: 1, borderColor: AppTheme.colors.primary, padding: AppTheme.spacing.md, marginBottom: AppTheme.spacing.sm, gap: 6 },
-  cardUrgent: { borderColor: AppTheme.colors.danger },
+  page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 112 },
+  header: { flexDirection: "row", gap: 4, alignItems: "flex-start", marginBottom: t.spacing.lg, paddingTop: t.spacing.lg },
+  // Volver: 44 px de área táctil, como en Recorridos.
+  back: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -11, marginTop: -8 },
+  eyebrow: { ...t.typography.kicker },
+  title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
+  meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },
+  // Superficie del tema; el contorno queda en los tres estilos (también en
+  // Minimal): es una oferta que pide respuesta, y en rojo cuando está por vencer.
+  card: { borderWidth: 1, borderColor: t.colors.primary, padding: t.spacing.md, marginBottom: t.spacing.sm, gap: 6 },
+  cardUrgent: { borderColor: t.status.rejected.text },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardType: { color: AppTheme.text.primary, fontSize: 16, fontWeight: "700" },
-  line: { color: AppTheme.text.primary, fontSize: 14 },
-  label: { color: AppTheme.text.secondary, fontWeight: "600" },
-  cardMeta: { color: AppTheme.text.secondary, fontSize: 13 },
-  badge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: AppTheme.borders.default },
-  badgeUrgent: { borderColor: AppTheme.colors.danger },
-  badgeText: { color: AppTheme.text.primary, fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },
-  badgeTextUrgent: { color: AppTheme.colors.danger },
+  cardType: { color: t.text.primary, fontSize: 16, fontWeight: "700" },
+  line: { color: t.text.primary, fontSize: 14 },
+  label: { color: t.text.secondary, fontWeight: "600" },
+  cardMeta: { color: t.text.secondary, fontSize: 13 },
+  badge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: t.borders.default },
+  badgeUrgent: { borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background },
+  badgeText: { color: t.text.primary, fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  badgeTextUrgent: { color: t.status.rejected.text },
   row: { flexDirection: "row", gap: 8, marginTop: 6 },
-  btn: { flex: 1, minHeight: 46, borderRadius: AppTheme.radius.md, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  btnYes: { backgroundColor: AppTheme.colors.primary, borderColor: AppTheme.colors.primary },
-  btnNo: { backgroundColor: "transparent", borderColor: AppTheme.borders.default },
+  btn: { flex: 1, minHeight: 46, borderRadius: t.radius.md, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  btnYes: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
+  btnNo: { backgroundColor: "transparent", borderColor: t.borders.default },
   btnDisabled: { opacity: 0.5 },
-  btnText: { color: AppTheme.text.inverse, fontWeight: "700", fontSize: 15 },
-  btnGhostText: { color: AppTheme.text.primary, fontWeight: "600", fontSize: 15 },
+  btnText: { color: t.text.onPrimary, fontWeight: "700", fontSize: 15 },
+  btnGhostText: { color: t.text.primary, fontWeight: "600", fontSize: 15 },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
-  emptyText: { color: AppTheme.text.secondary, textAlign: "center" },
-  errorBox: { borderWidth: 1, borderColor: AppTheme.colors.danger, borderRadius: AppTheme.radius.md, padding: 12, marginBottom: 12 },
-  errorText: { color: AppTheme.text.primary },
-  noticeBox: { borderWidth: 1, borderColor: AppTheme.colors.primary, borderRadius: AppTheme.radius.md, padding: 12, marginBottom: 12 },
-  noticeText: { color: AppTheme.text.primary },
+  emptyText: { color: t.text.secondary, textAlign: "center" },
+  errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
+  errorText: { color: t.text.primary },
+  noticeBox: { borderWidth: 1, borderColor: t.status.inTransit.border, backgroundColor: t.status.inTransit.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
+  noticeText: { color: t.text.primary },
 });

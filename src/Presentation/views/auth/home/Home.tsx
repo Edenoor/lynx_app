@@ -15,7 +15,9 @@ import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../../navigator/MainStackNavigator";
 import useViewModel from "./ViewModel";
-import global from "../../../theme/global";
+import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
+import type { Theme } from "../../../theme/createTheme";
+import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 
 type Props = NativeStackScreenProps<RootStackParamList, "HomeScreen">;
 
@@ -23,6 +25,8 @@ const sleep = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const { values, onChange, login, errorMessage, clearError } = useViewModel();
   const [loading, setLoading] = useState(false);
 
@@ -49,6 +53,7 @@ const onPressLogin = async () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ThemedStatusBar />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.content}
@@ -80,7 +85,7 @@ const onPressLogin = async () => {
             <TextInput
               value={values.username}
               placeholder="Ingresá tu usuario"
-              placeholderTextColor={global.COLORS.placeholder}
+              placeholderTextColor={theme.colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
@@ -96,7 +101,7 @@ const onPressLogin = async () => {
             <TextInput
               value={values.password}
               placeholder="Ingresá tu contraseña"
-              placeholderTextColor={global.COLORS.placeholder}
+              placeholderTextColor={theme.colors.placeholder}
               secureTextEntry
               editable={!loading}
               style={styles.input}
@@ -155,15 +160,15 @@ const onPressLogin = async () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: global.COLORS.background,
+    backgroundColor: t.colors.background,
   },
 
   content: {
     flex: 1,
-    paddingHorizontal: global.SPACING.lg,
+    paddingHorizontal: t.spacing.lg,
     justifyContent: "center",
     overflow: "hidden",
   },
@@ -176,7 +181,7 @@ const styles = StyleSheet.create({
   mapLine: {
     position: "absolute",
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.045)",
+    backgroundColor: t.borders.soft,
   },
 
   mapLineOne: {
@@ -204,7 +209,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 2,
     borderRadius: 999,
-    backgroundColor: global.COLORS.primary,
+    backgroundColor: t.colors.primary,
   },
 
   routeLineOne: {
@@ -230,92 +235,95 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: global.COLORS.primary,
+    backgroundColor: t.colors.primary,
     opacity: 0.7,
   },
 
   header: {
     alignItems: "center",
-    marginBottom: global.SPACING.xl,
+    marginBottom: t.spacing.xl,
   },
 
+  // Silueta blanca: se tiñe con el color de marca para verse sobre fondo claro.
   logo: {
     width: 104,
     height: 104,
-    marginBottom: global.SPACING.sm,
+    marginBottom: t.spacing.sm,
+    tintColor: t.colors.primary,
   },
 
   brand: {
-    color: global.COLORS.text,
-    fontSize: global.FONT.size.xl,
+    color: t.colors.text,
+    fontSize: t.font.size.xl,
     fontWeight: "900",
     letterSpacing: 9,
-    marginBottom: global.SPACING.xl,
+    marginBottom: t.spacing.xl,
   },
 
   title: {
-    color: global.COLORS.text,
-    fontSize: global.FONT.size.xxl,
+    color: t.colors.text,
+    fontSize: t.font.size.xxl,
     fontWeight: "400",
     letterSpacing: -0.8,
   },
 
   titleAccent: {
-    color: global.COLORS.primary,
+    color: t.colors.primary,
     fontWeight: "800",
   },
 
   subtitle: {
-    color: global.COLORS.textMuted,
-    fontSize: global.FONT.size.md,
-    marginTop: global.SPACING.sm,
+    color: t.colors.textMuted,
+    fontSize: t.font.size.md,
+    marginTop: t.spacing.sm,
   },
 
+  // Un solo panel opaco y sin sombra: en Android la sombra (elevation) de una
+  // superficie translúcida se ve a través de ella como un segundo recuadro.
   formPanel: {
-    borderRadius: global.BORDER_RADIUS.xl,
-    backgroundColor: global.COLORS.card,
+    borderRadius: t.radius.xl,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: global.COLORS.borderStrong,
-    padding: global.SPACING.lg,
-    gap: global.SPACING.md,
-    ...global.SHADOWS.card,
+    borderColor: t.borders.default,
+    padding: t.spacing.lg,
+    gap: t.spacing.md,
   },
 
   inputGroup: {
-    gap: global.SPACING.sm,
+    gap: t.spacing.sm,
   },
 
   label: {
-    color: global.COLORS.textSecondary,
-    fontSize: global.FONT.size.md,
+    color: t.colors.textSecondary,
+    fontSize: t.font.size.md,
     fontWeight: "500",
   },
 
   input: {
     height: 54,
-    borderRadius: global.BORDER_RADIUS.lg,
-    backgroundColor: global.COLORS.input,
+    borderRadius: t.radius.lg,
+    backgroundColor: t.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: global.COLORS.border,
-    color: global.COLORS.text,
-    fontSize: global.FONT.size.md,
-    paddingHorizontal: global.SPACING.md,
+    borderColor: t.borders.medium,
+    color: t.colors.text,
+    fontSize: t.font.size.md,
+    paddingHorizontal: t.spacing.md,
   },
 
   separator: {
     height: 1,
-    backgroundColor: global.COLORS.border,
+    backgroundColor: t.colors.border,
     opacity: 0.5,
   },
 
   primaryButton: {
     height: 58,
-    borderRadius: global.BORDER_RADIUS.lg,
+    borderRadius: t.radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: global.SPACING.sm,
-    backgroundColor: global.COLORS.primary,
-    ...global.SHADOWS.glow,
+    marginTop: t.spacing.sm,
+    backgroundColor: t.colors.primary,
+    ...t.shadows.glow,
   },
 
   primaryButtonDisabled: {
@@ -323,67 +331,66 @@ const styles = StyleSheet.create({
   },
 
   primaryButtonText: {
-    color: global.COLORS.white,
-    fontSize: global.FONT.size.lg,
+    color: t.text.onPrimary,
+    fontSize: t.font.size.lg,
     fontWeight: "800",
   },
 
   footer: {
-    marginTop: global.SPACING.xl,
+    marginTop: t.spacing.xl,
     alignItems: "center",
-    gap: global.SPACING.md,
+    gap: t.spacing.md,
   },
 
   link: {
-    color: global.COLORS.primarySoft,
-    fontSize: global.FONT.size.md,
+    color: t.text.accent,
+    fontSize: t.font.size.md,
     fontWeight: "700",
   },
 
   footerDivider: {
     flexDirection: "row",
     alignItems: "center",
-    gap: global.SPACING.sm,
+    gap: t.spacing.sm,
     opacity: 0.55,
   },
 
   footerLine: {
     width: 86,
     height: 1,
-    backgroundColor: global.COLORS.borderStrong,
+    backgroundColor: t.colors.borderStrong,
   },
 
   footerDot: {
     width: 5,
     height: 5,
     borderRadius: 999,
-    backgroundColor: global.COLORS.textSecondary,
+    backgroundColor: t.colors.textSecondary,
   },
 
   secondaryLink: {
-    color: global.COLORS.textMuted,
-    fontSize: global.FONT.size.md,
+    color: t.colors.textMuted,
+    fontSize: t.font.size.md,
     fontWeight: "500",
   },
 
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 99,
-    backgroundColor: "rgba(5, 8, 14, 0.72)",
+    backgroundColor: t.overlays.camera,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: global.SPACING.lg,
+    paddingHorizontal: t.spacing.lg,
   },
 
   loadingCard: {
     width: "100%",
     maxWidth: 260,
-    borderRadius: global.BORDER_RADIUS.xxl,
-    backgroundColor: global.COLORS.cardElevated,
+    borderRadius: t.radius.xxl,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: global.COLORS.borderStrong,
-    paddingVertical: global.SPACING.xl,
-    paddingHorizontal: global.SPACING.lg,
-    ...global.SHADOWS.card,
+    borderColor: t.borders.default,
+    paddingVertical: t.spacing.xl,
+    paddingHorizontal: t.spacing.lg,
   },
 });

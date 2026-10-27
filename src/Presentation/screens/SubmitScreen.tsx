@@ -14,12 +14,15 @@ import { useOnboarding } from "../onboarding/OnboardingContext";
 import { uploadDriverDocuments } from "../onboarding/UploadDriverDocuments";
 import { RoundedButton } from "../components/RoundedButton";
 import { LynxLoader } from "../components/LynxLoader";
-import global from "../theme/global";
+import { useThemedStyles } from "../theme/ThemeContext";
+import type { Theme } from "../theme/createTheme";
+import { ThemedStatusBar } from "../theme/ThemedStatusBar";
 import { saveDriverOnboardingBackend } from "../onboarding/SaveDriverOnboardingBackend";
 
 type SubmitStatus = "sending" | "success" | "error";
 
 export function SubmitScreen() {
+  const styles = useThemedStyles(makeStyles);
   const { state, dispatch, userKey } = useOnboarding();
   const { user } = useContext(UserContext);
 
@@ -94,11 +97,12 @@ setStatus("success");
       source={require("../../../assets/background-1.png")}
       style={styles.background}
       resizeMode="cover"
+      imageStyle={styles.backgroundImage}
     >
       <View style={styles.overlay} />
 
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" backgroundColor="#05080E" />
+        <ThemedStatusBar />
 
         <View style={styles.screen}>
           <View style={styles.card}>
@@ -163,21 +167,25 @@ setStatus("success");
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) => StyleSheet.create({
+  // Imagen de fondo como en las pantallas del chofer: tenue y solo en Classic.
+  backgroundImage: {
+    opacity: t.backdrop.imageOpacity,
+  },
   background: {
     flex: 1,
-    backgroundColor: "#05080E",
+    backgroundColor: t.surfaces.screen,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,14,0.48)",
+    backgroundColor: t.overlays.background,
   },
   safe: {
     flex: 1,
   },
   screen: {
     flex: 1,
-    paddingHorizontal: global.SPACING.md,
+    paddingHorizontal: t.spacing.md,
     paddingTop:
       Platform.OS === "android"
         ? (StatusBar.currentHeight ?? 24) + 28
@@ -187,9 +195,9 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 26,
-    backgroundColor: "rgba(13,22,35,0.76)",
+    backgroundColor: t.surfaces.cardStrong,
     borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.18)",
+    borderColor: t.borders.strong,
     padding: 22,
     gap: 14,
     alignItems: "center",
@@ -198,15 +206,15 @@ const styles = StyleSheet.create({
     width: 74,
     height: 74,
     borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.14)",
+    backgroundColor: t.status.confirmed.background,
     borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.28)",
+    borderColor: t.status.confirmed.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,
   },
   successIcon: {
-    color: "#22C55E",
+    color: t.status.confirmed.text,
     fontSize: 36,
     fontWeight: "900",
   },
@@ -214,26 +222,26 @@ const styles = StyleSheet.create({
     width: 74,
     height: 74,
     borderRadius: 999,
-    backgroundColor: "rgba(248,113,113,0.14)",
+    backgroundColor: t.status.rejected.background,
     borderWidth: 1,
-    borderColor: "rgba(248,113,113,0.28)",
+    borderColor: t.status.rejected.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,
   },
   errorIcon: {
-    color: "#F87171",
+    color: t.status.rejected.text,
     fontSize: 32,
     fontWeight: "900",
   },
   kicker: {
-    color: global.COLORS.blue,
+    color: t.text.accent,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
   },
   title: {
-    color: "#F8FAFC",
+    color: t.text.primary,
     fontSize: 28,
     lineHeight: 32,
     fontWeight: "900",
@@ -241,14 +249,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   subtitle: {
-    color: "#CBD5E1",
+    color: t.text.secondary,
     fontSize: 14,
     lineHeight: 21,
     fontWeight: "500",
     textAlign: "center",
   },
   resetText: {
-    color: "#94A3B8",
+    color: t.text.muted,
     fontSize: 13,
     fontWeight: "700",
     marginTop: 4,

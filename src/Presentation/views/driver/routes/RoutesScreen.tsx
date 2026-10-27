@@ -21,6 +21,7 @@ import {
 import { errorMessage } from "../errorMessage";
 import { fetchMyOffers } from "../turbo/turboApi";
 import { routeStatusKey } from "./routeStatus";
+import { capitalize } from "./collectionLabels";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -85,13 +86,14 @@ export default function RoutesScreen({ navigation }: Props) {
         <View style={styles.page}>
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              <Pressable onPress={() => navigation.goBack()} hitSlop={8}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
+              <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
               <Text style={styles.eyebrow}>Recorridos de reparto</Text>
             </View>
-            <View style={styles.dateRow}>
-              <Pressable onPress={() => setDate(shiftDate(date, -1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-back" size={22} color={theme.text.primary} /></Pressable>
-              <Text style={styles.title}>{prettyDate(date)}</Text>
-              <Pressable onPress={() => setDate(shiftDate(date, 1))} style={styles.dateBtn} hitSlop={8}><Ionicons name="chevron-forward" size={22} color={theme.text.primary} /></Pressable>
+            {/* Navegación por días: bloque aparte del «volver», con botones de 44 px. */}
+            <View style={[theme.card, styles.dateRow]}>
+              <Pressable onPress={() => setDate(shiftDate(date, -1))} style={styles.dateBtn} accessibilityRole="button" accessibilityLabel="Día anterior"><Ionicons name="chevron-back" size={22} color={theme.text.primary} /></Pressable>
+              <Text style={styles.title}>{capitalize(prettyDate(date))}</Text>
+              <Pressable onPress={() => setDate(shiftDate(date, 1))} style={styles.dateBtn} accessibilityRole="button" accessibilityLabel="Día siguiente"><Ionicons name="chevron-forward" size={22} color={theme.text.primary} /></Pressable>
             </View>
             {date !== todayIso() ? <Pressable onPress={() => setDate(todayIso())}><Text style={styles.link}>Volver a hoy</Text></Pressable> : null}
           </View>
@@ -163,12 +165,15 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   backgroundImage: { opacity: t.backdrop.imageOpacity },
   safeArea: { flex: 1 },
   page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 112 },
-  header: { marginBottom: t.spacing.lg, paddingTop: t.spacing.lg, gap: t.spacing.xs },
-  headerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  header: { marginBottom: t.spacing.lg, paddingTop: t.spacing.lg, gap: t.spacing.md },
+  // Volver: 44 px de área táctil; el ícono queda alineado con el contenido.
+  headerTop: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: -11 },
+  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: t.radius.full },
   eyebrow: { ...t.typography.kicker },
-  dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  dateBtn: { padding: 6 },
-  title: { color: t.text.primary, fontSize: 20, fontWeight: "700", textTransform: "capitalize", flex: 1, textAlign: "center" },
+  dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: t.spacing.xs, paddingVertical: t.spacing.xs },
+  dateBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: t.radius.full },
+  // Solo la primera letra en mayúscula («Lunes 27 de octubre»).
+  title: { color: t.text.primary, fontSize: 18, fontWeight: "700", flex: 1, textAlign: "center" },
   link: { color: t.text.accent, textAlign: "center", marginTop: 4 },
   card: { padding: t.spacing.md, marginBottom: t.list.gap, gap: 6 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
