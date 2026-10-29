@@ -4,7 +4,7 @@
 // completar el recorrido. Sin mapa en esta etapa.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, ImageBackground, Linking, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, ImageBackground, Linking, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -12,6 +12,7 @@ import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import ThemedCard from "../../../components/ThemedCard";
+import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
   completeRoute, confirmLoad, declareStopCount, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, startRoute, todayIso,
@@ -119,8 +120,10 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
       <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
-        {/* «handled»: con el teclado abierto, el primer toque en «Confirmar» confirma (no solo cierra el teclado). */}
-        <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        {/* KeyboardScreen: la cantidad de bultos, la observación de la parada y
+            los importes del cierre no quedan tapados por el teclado (la app es
+            edge-to-edge: el adjustResize del manifest ya no corre nada). */}
+        <KeyboardScreen contentContainerStyle={styles.page}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
             {isPickup ? (
@@ -229,7 +232,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               <Text style={styles.btnText}>{allClosed ? "Completar recorrido" : "Cerrá todas las paradas para completar"}</Text>
             </Pressable>
           ) : null}
-        </ScrollView>
+        </KeyboardScreen>
       </SafeAreaView>
     </ImageBackground>
   );

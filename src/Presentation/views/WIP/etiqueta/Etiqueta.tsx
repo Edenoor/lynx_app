@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { ActivityIndicator, ScrollView, Text, ToastAndroid, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Text, ToastAndroid, TouchableOpacity, View } from 'react-native'
 import { CustomTextInput } from '../../../components/CustomTextInput'
+import { KeyboardScreen } from '../../../components/KeyboardScreen'
 import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
@@ -48,12 +49,12 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
   const [modalVisible, setModalVisible] = useState(false);
       
   return (
-    <View >
+    <View style={{ flex: 1 }}>
           
 
-        <View >
+        <View style={{ flex: 1 }}>
 
-          <ScrollView>
+          <KeyboardScreen contentContainerStyle={{ padding: 20 }}>
 
             <Text >DIRECCION</Text>
             
@@ -112,7 +113,7 @@ export const EtiquetaScreen = ({navigation, route}: Props) => {
 
             </View>
 
-          </ScrollView>
+          </KeyboardScreen>
 
         </View>
         {

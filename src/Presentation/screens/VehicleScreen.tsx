@@ -8,7 +8,6 @@ import {
   SafeAreaView,
   StatusBar,
   ImageBackground,
-  ScrollView,
   Pressable,
   Platform,
 } from "react-native";
@@ -19,6 +18,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
 import { RoundedButton } from "../components/RoundedButton";
 import { SelectableCard } from "../components/SelectableCard";
+import { KeyboardScreen } from "../components/KeyboardScreen";
 import { useAppTheme, useThemedStyles } from "../theme/ThemeContext";
 import type { Theme } from "../theme/createTheme";
 import { ThemedStatusBar } from "../theme/ThemedStatusBar";
@@ -130,12 +130,23 @@ dispatch({
       <SafeAreaView style={styles.safe}>
         <ThemedStatusBar />
 
-        <View style={styles.screen}>
-          <ScrollView
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+        {/* Patente, DNI y CUIL quedan abajo: con el teclado abierto la pantalla
+            se desplaza y «Continuar» sigue a la vista (ver KeyboardScreen). */}
+        <KeyboardScreen
+          contentContainerStyle={styles.content}
+          scrollProps={{ showsVerticalScrollIndicator: false }}
+          footer={
+            <View style={styles.footer}>
+              <View style={!canContinue && styles.disabledButton}>
+                <RoundedButton
+                  text="Continuar"
+                  onPress={onContinue}
+                  disabled={!canContinue}
+                />
+              </View>
+            </View>
+          }
+        >
             <View style={styles.header}>
               <Text style={styles.kicker}>VEHÍCULO</Text>
               <Text style={styles.title}>Registrá tu vehículo</Text>
@@ -252,18 +263,7 @@ dispatch({
     style={styles.input}
   />
 </View>
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <View style={!canContinue && styles.disabledButton}>
-              <RoundedButton
-                text="Continuar"
-                onPress={onContinue}
-                disabled={!canContinue}
-              />
-            </View>
-          </View>
-        </View>
+        </KeyboardScreen>
       </SafeAreaView>
     </ImageBackground>
   );
@@ -303,9 +303,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     backgroundColor: t.overlays.background,
   },
   safe: {
-    flex: 1,
-  },
-  screen: {
     flex: 1,
   },
 content: {

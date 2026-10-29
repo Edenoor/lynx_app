@@ -1,9 +1,10 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
-  TextInput, Pressable, KeyboardAvoidingView, Platform, Keyboard, ScrollView, TouchableWithoutFeedback
+  TextInput, Pressable, Keyboard, ScrollView
 } from 'react-native';
 import Constants from 'expo-constants';
+import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import global from '../../../theme/global';
 import { postJson } from '../../../config/Api';
 import { UserContext } from '../../../context/UserContext';
@@ -237,7 +238,8 @@ export const EnvioTradicionalScreen = () => {
     if (!visible || items.length === 0) return null;
     return (
       <View style={styles.suggList}>
-        <ScrollView keyboardShouldPersistTaps="handled">
+        {/* Lista propia dentro del desplazamiento de la pantalla: nestedScrollEnabled para Android. */}
+        <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
           {items.map((s) => (
             <Pressable key={s.place_id} onPress={() => onSelect(s)} style={styles.suggRow}>
               <Text style={styles.suggText}>{s.description}</Text>
@@ -248,14 +250,10 @@ export const EnvioTradicionalScreen = () => {
     );
   };
 
+  // KeyboardScreen: origen, destino y «Confirmar envío» siguen a la vista con el
+  // teclado abierto (también bajo el header nativo); tocar fuera de un campo lo cierra.
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
+    <KeyboardScreen style={styles.screen} contentContainerStyle={styles.container}>
           <Text style={styles.title}>Nuevo Envío</Text>
 
           {!GOOGLE_KEY ? (
@@ -311,14 +309,13 @@ export const EnvioTradicionalScreen = () => {
           >
             {loading ? <ActivityIndicator /> : <Text style={styles.buttonText}>Confirmar envío</Text>}
           </TouchableOpacity>
-        </View>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: global.COLORS.background, padding: 20, justifyContent: 'center' },
+  screen: { flex: 1, backgroundColor: global.COLORS.background },
+  container: { flexGrow: 1, padding: 20, justifyContent: 'center' },
   title: { fontSize: global.FONT.size.xl, fontWeight: 'bold', color: global.COLORS.text, marginBottom: 20, textAlign: 'center' },
   label: { color: global.COLORS.text, marginBottom: 6 },
   input: {

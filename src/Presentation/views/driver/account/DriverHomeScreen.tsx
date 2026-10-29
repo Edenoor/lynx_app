@@ -5,7 +5,7 @@
 // colecta o fin de un reparto.
 
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -14,6 +14,7 @@ import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import { SafeScreen } from "../../../components/SafeScreen";
+import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import { DriverHome, HomeCandidate, clearMyHome, fetchMyHome, saveMyHome, searchHomeAddress, shortAddress } from "./homeApi";
 import { errorMessage } from "../errorMessage";
 
@@ -136,7 +137,8 @@ export default function DriverHomeScreen() {
   return (
     <SafeScreen>
       <ThemedStatusBar />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {/* KeyboardScreen: la dirección y «Buscar» no quedan tapados por el teclado. */}
+      <KeyboardScreen contentContainerStyle={styles.content}>
         <Pressable style={styles.back} onPress={() => navigation.goBack()} hitSlop={10}>
           <Ionicons name="chevron-back" size={20} color={theme.text.secondary} />
           <Text style={styles.backText}>Mi cuenta</Text>
@@ -235,7 +237,7 @@ export default function DriverHomeScreen() {
             <Text style={styles.buttonSecondaryText}>Abrir configuración</Text>
           </Pressable>
         ) : null}
-      </ScrollView>
+      </KeyboardScreen>
     </SafeScreen>
   );
 }

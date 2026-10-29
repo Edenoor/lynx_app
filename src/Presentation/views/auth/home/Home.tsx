@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,9 @@ import {
   SafeAreaView,
   Image,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
+import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../../navigator/MainStackNavigator";
 import useViewModel from "./ViewModel";
@@ -29,6 +28,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const styles = useThemedStyles(makeStyles);
   const { values, onChange, login, errorMessage, clearError } = useViewModel();
   const [loading, setLoading] = useState(false);
+  // «Siguiente» en usuario pasa el foco a la contraseña.
+  const passwordRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (errorMessage) {
@@ -54,19 +55,21 @@ const onPressLogin = async () => {
   return (
     <SafeAreaView style={styles.container}>
       <ThemedStatusBar />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.content}
-      >
-        <View pointerEvents="none" style={styles.mapLayer}>
-          <View style={[styles.mapLine, styles.mapLineOne]} />
-          <View style={[styles.mapLine, styles.mapLineTwo]} />
-          <View style={[styles.mapLine, styles.mapLineThree]} />
-          <View style={[styles.routeLine, styles.routeLineOne]} />
-          <View style={[styles.routeLine, styles.routeLineTwo]} />
-          <View style={styles.routeDotTop} />
-        </View>
+      {/* Decoración de fondo: fuera del desplazamiento, no se mueve con el teclado. */}
+      <View pointerEvents="none" style={styles.mapLayer}>
+        <View style={[styles.mapLine, styles.mapLineOne]} />
+        <View style={[styles.mapLine, styles.mapLineTwo]} />
+        <View style={[styles.mapLine, styles.mapLineThree]} />
+        <View style={[styles.routeLine, styles.routeLineOne]} />
+        <View style={[styles.routeLine, styles.routeLineTwo]} />
+        <View style={styles.routeDotTop} />
+      </View>
 
+      {/* Con el teclado abierto se ven el campo activo e «Ingresar» (ver KeyboardScreen). */}
+      <KeyboardScreen
+        contentContainerStyle={styles.content}
+        scrollProps={{ showsVerticalScrollIndicator: false }}
+      >
         <View style={styles.header}>
           <Image
             source={require("../../../../../assets/adaptive-icon-white.png")}
@@ -89,6 +92,9 @@ const onPressLogin = async () => {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
               style={styles.input}
               onChangeText={(text) => onChange("username", text)}
             />
@@ -99,11 +105,14 @@ const onPressLogin = async () => {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Contraseña</Text>
             <TextInput
+              ref={passwordRef}
               value={values.password}
               placeholder="Ingresá tu contraseña"
               placeholderTextColor={theme.colors.placeholder}
               secureTextEntry
               editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={onPressLogin}
               style={styles.input}
               onChangeText={(text) => onChange("password", text)}
             />
@@ -147,7 +156,7 @@ const onPressLogin = async () => {
             <Text style={styles.secondaryLink}>Crear cuenta</Text>
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardScreen>
 
       {loading && (
         <View style={styles.loadingOverlay}>
@@ -164,13 +173,17 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: t.colors.background,
+    // Recorta las líneas decorativas que se salen de la pantalla.
+    overflow: "hidden",
   },
 
+  // Llena la pantalla con el formulario centrado y, con el teclado abierto,
+  // se desplaza (contenido del ScrollView de KeyboardScreen).
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.xl,
     justifyContent: "center",
-    overflow: "hidden",
   },
 
   mapLayer: {
