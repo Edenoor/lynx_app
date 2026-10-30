@@ -20,6 +20,9 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Alertas es la del chofer, sin su barra de pestañas (esas pantallas no están acá).
+const SellerNotificationsScreen = () => <NotificationsScreen area="seller" />;
+
 export const SellerStackNavigator = () => {
   return (
     <Stack.Navigator
@@ -58,7 +61,7 @@ export const SellerStackNavigator = () => {
       />
       <Stack.Screen
         name="NotificationsScreen"
-        component={NotificationsScreen}
+        component={SellerNotificationsScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

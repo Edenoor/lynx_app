@@ -240,13 +240,17 @@ const Item = ({ item, onPress }: { item: Noti; onPress: () => void }) => {
   );
 };
 
-const NotificationsScreen: React.FC = () => {
+// La comparten el chofer y el vendedor. La barra de pestañas y «LYNX DRIVER»
+// son del chofer (en el stack del vendedor esas pantallas no existen); el
+// vendedor vuelve con la flecha.
+const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = "driver" }) => {
   const navigation = useNavigation<any>();
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const { items, markRead, markAllRead, remove, clear } = useNotifications();
   const [selected, setSelected] = useState<Noti | null>(null);
   const [live, setLive] = useState<LiveRoute | null>(null);
+  const driverStack = area === "driver";
 
   const selectedRouteId = selected && LIVE_ROUTE_KINDS.includes(selected.kind) ? routeIdOf(selected.data) : null;
   useEffect(() => {
@@ -373,7 +377,17 @@ const NotificationsScreen: React.FC = () => {
     <View style={styles.container}>
       <ThemedStatusBar />
       <View style={styles.header}>
-        <Text style={styles.kicker}>LYNX DRIVER</Text>
+        {!driverStack ? (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={12}
+            accessibilityLabel="Volver"
+            style={styles.back}
+          >
+            <Ionicons name="arrow-back" size={26} color={theme.text.primary} />
+          </TouchableOpacity>
+        ) : null}
+        <Text style={styles.kicker}>{driverStack ? "LYNX DRIVER" : "LYNX"}</Text>
         <Text style={styles.title}>Alertas</Text>
         <Text style={styles.subtitle}>
           {unreadCount > 0
@@ -431,7 +445,7 @@ const NotificationsScreen: React.FC = () => {
         }
       />
 
-      <DriverBottomNavigation activeTab="activity" onPress={handleTabPress} />
+      {driverStack ? <DriverBottomNavigation activeTab="activity" onPress={handleTabPress} /> : null}
 
       <Modal
         transparent
@@ -578,6 +592,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     paddingTop: t.layout.headerTopPadding,
     paddingHorizontal: t.layout.screenPadding,
     paddingBottom: t.spacing.md,
+  },
+
+  back: {
+    alignSelf: "flex-start",
+    marginBottom: t.spacing.sm,
   },
 
   kicker: {

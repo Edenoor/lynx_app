@@ -759,6 +759,12 @@ const setDriverApi = () => {
         check(`${name}: barra de estado con íconos oscuros`, all(tree, (x) => x.type === "StatusBar").some((x) => x.props.style === "dark"));
       }
       check(`${name}: igual con cualquier preferencia`, outputs[0] === outputs[1]);
+      if (C !== HomeScreen) {
+        nav.calls = [];
+        const t = await mount(RealReact.createElement(FixedTheme, { theme: PUBLIC_THEME }, RealReact.createElement(C, { navigation: nav })));
+        await press(t, "Entendido");
+        check(`${name}: «Entendido» vuelve al login`, JSON.stringify(nav.calls) === JSON.stringify([["goBack"]]), JSON.stringify(nav.calls));
+      }
     }
     useTheme(createTheme({ scheme: "dark" }));
     const tree = await mount(RealReact.createElement(FixedTheme, { theme: PUBLIC_THEME }, RealReact.createElement(HomeScreen, { navigation: nav })));
@@ -974,6 +980,36 @@ const setDriverApi = () => {
     await pressable(tree, "Cerrar sesión").props.onPress();
     tree = await settle();
     check("Seller: cerrar sesión la cierra sin navegar a mano (sin RESET a HomeScreen)", session.removed === 1 && !nav.calls.some((c) => c[0] === "reset"), JSON.stringify(nav.calls));
+  }
+
+  // 20b) Seller: el menú de envío y Envío tradicional son blancos (texto legible
+  // sobre blanco) y Alertas no trae la barra del chofer: vuelve con la flecha.
+  {
+    const { ClientScreen } = L("src/Presentation/views/client/Landing/Client.tsx");
+    const { EnvioTradicionalScreen } = L("src/Presentation/views/client/Landing/EnvioTradicionalScreen.tsx");
+    const Alerts = L("src/Presentation/views/common/NotificationScreen.tsx").default;
+    useTheme(createTheme({ scheme: "dark" }));
+    nav.calls = [];
+    let tree = await mount(RealReact.createElement(ClientScreen, { navigation: nav, route: { params: undefined } }));
+    tree = await press(tree, "Solicitar envío");
+    const menu = all(tree, (x) => x.type === "Modal" && textOf(x).includes("¿Qué tipo de envío"))[0];
+    const leg = menu ? legibility(menu, "#FFFFFF") : { bad: ["sin menú"], texts: 0 };
+    check(`Seller: menú de envío legible sobre blanco (${leg.texts} textos)`, leg.texts >= 3 && !leg.bad.length, leg.bad.join(" · "));
+    tree = await mount(RealReact.createElement(EnvioTradicionalScreen, { navigation: nav, route: { params: undefined } }));
+    const inputs = all(tree, (x) => x.type === "TextInput");
+    const onWhite = (c?: string) => (c ? contrast(over(c, "#FFFFFF"), "#FFFFFF") : 0);
+    check("Envío tradicional: lo escrito se lee sobre el campo blanco", inputs.length === 2 && inputs.every((x) => flat(x.props.style).backgroundColor === "#FFFFFF" && onWhite(flat(x.props.style).color) >= 4.5));
+    check("Envío tradicional: la ayuda del campo se ve", inputs.every((x) => onWhite(x.props.placeholderTextColor) >= 2.5), inputs.map((x) => x.props.placeholderTextColor).join(", "));
+    setDriverApi();
+    tree = await mount(RealReact.createElement(Alerts, { area: "seller" }));
+    const txt = textOf(tree);
+    check("Alertas del vendedor: sin la barra ni la marca del chofer", !["Inicio", "Colectas", "QR", "LYNX DRIVER"].some((s) => txt.includes(s)) && txt.includes("LYNX"));
+    nav.calls = [];
+    byLabel(tree, "Volver")[0].props.onPress();
+    await settle();
+    check("Alertas del vendedor: la flecha vuelve", JSON.stringify(nav.calls) === JSON.stringify([["goBack"]]), JSON.stringify(nav.calls));
+    tree = await mount(RealReact.createElement(Alerts));
+    check("Alertas del chofer: con su barra y sin flecha", textOf(tree).includes("LYNX DRIVER") && textOf(tree).includes("Colectas") && !byLabel(tree, "Volver").length);
   }
 
   // 21) MainStackNavigator: con sesión registra solo el stack del rol; sin

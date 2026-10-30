@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
@@ -14,6 +15,7 @@ import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 export const RegisterScreen = () => {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
+  const navigation = useNavigation();
   return (
     <View style={styles.container}>
       <ThemedStatusBar />
@@ -53,7 +55,7 @@ export const RegisterScreen = () => {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
           <Text style={styles.buttonText}>Entendido</Text>
         </TouchableOpacity>
       </ScrollView>

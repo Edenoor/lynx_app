@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
-import global from '../../../theme/global';
+import global, { LIGHT_COLORS } from '../../../theme/global';
 import { postJson } from '../../../config/Api';
 import { UserContext } from '../../../context/UserContext';
 
@@ -272,6 +272,7 @@ export const EnvioTradicionalScreen = () => {
             onFocus={() => setOriginLocked(false)}
             onChangeText={(t) => { setOriginQuery(t); setOrigin(null); }}
             placeholder="Ingresá la dirección de origen"
+            placeholderTextColor={LIGHT_COLORS.placeholder}
             style={styles.input}
             returnKeyType="next"
             autoCapitalize="words"
@@ -291,6 +292,7 @@ export const EnvioTradicionalScreen = () => {
             onFocus={() => setDestLocked(false)}
             onChangeText={(t) => { setDestQuery(t); setDestination(null); }}
             placeholder="Ingresá la dirección de destino"
+            placeholderTextColor={LIGHT_COLORS.placeholder}
             style={styles.input}
             returnKeyType="done"
             autoCapitalize="words"
@@ -318,7 +320,9 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: 20, justifyContent: 'center' },
   title: { fontSize: global.FONT.size.xl, fontWeight: 'bold', color: global.COLORS.text, marginBottom: 20, textAlign: 'center' },
   label: { color: global.COLORS.text, marginBottom: 6 },
+  // Campos y sugerencias son blancos: texto de la paleta clara.
   input: {
+    color: LIGHT_COLORS.text,
     borderWidth: 1,
     borderColor: global.COLORS.gray,
     paddingHorizontal: 12,
@@ -339,7 +343,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   suggRow: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  suggText: { color: global.COLORS.text },
+  suggText: { color: LIGHT_COLORS.text },
   button: { backgroundColor: global.COLORS.primary, padding: 15, borderRadius: global.BORDER_RADIUS.md, marginTop: 8 },
   buttonText: { textAlign: 'center', fontWeight: 'bold', color: global.COLORS.text },
   warning: { padding: 12, borderRadius: 8, backgroundColor: '#fff4cc', marginBottom: 12 },

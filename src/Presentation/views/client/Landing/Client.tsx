@@ -13,7 +13,7 @@ import useViewModel from './ViewModel';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../../../navigator/SellerStackNavigator';
 
-import global from '../../../theme/global';
+import global, { LIGHT_COLORS } from '../../../theme/global';
 
 // ✅ helpers de push
 import { setupPushAndRegisterDevice, attachNotificationListeners } from '../../../config/Push';
@@ -279,9 +279,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
+  // El modal es blanco: texto de la paleta clara (global.COLORS es la oscura).
   modalTitle: {
     fontSize: global.FONT.size.lg,
     fontWeight: 'bold',
+    color: LIGHT_COLORS.text,
     marginBottom: global.SPACING.md,
   },
   modalOption: {
@@ -289,7 +291,7 @@ const styles = StyleSheet.create({
   },
   modalOptionText: {
     fontSize: global.FONT.size.md,
-    color: global.COLORS.text,
+    color: LIGHT_COLORS.text,
   },
   modalCancel: {
     fontSize: global.FONT.size.md,
