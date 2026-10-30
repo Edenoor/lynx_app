@@ -1,6 +1,7 @@
 // src/Presentation/config/Api.tsx
 import { readSession } from "../../Data/sources/local/SessionStorage";
 import { handleUnauthorized } from "../../Data/sources/remote/api/ApiDelivery";
+import { parseJsonBody } from "./jsonBody";
 
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.wynflex.com.ar"
@@ -43,16 +44,16 @@ const requestJson = async (
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
-  let json: any;
-
+  // Sin JSON no hay éxito (ver jsonBody.ts); si ni se pudo leer, tampoco.
+  let text: string | null;
   try {
-    json = await res.json();
+    text = await res.text();
   } catch {
-    json = { ok: res.ok, status: res.status };
+    text = null;
   }
-
-  if (typeof json?.ok !== "boolean") json.ok = res.ok;
-  if (typeof json?.status !== "number") json.status = res.status;
+  const json: any = text === null
+    ? { ok: false, status: res.status, error: "No se pudo leer la respuesta del servidor" }
+    : parseJsonBody(text, res.status);
 
   if (res.status === 401) {
     await handleUnauthorized();
@@ -98,19 +99,9 @@ const sendJsonWithTimeout = async (method: "POST" | "PUT", path: string, body: a
     xhr.timeout = timeoutMs;
     xhr.setRequestHeader("Content-Type", "application/json");
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.onload = () => {
-      const okStatus = xhr.status >= 200 && xhr.status < 300;
-      let parsed: any;
-      try {
-        parsed = JSON.parse(xhr.responseText);
-      } catch {
-        parsed = { ok: okStatus, status: xhr.status };
-      }
-      if (parsed === null || typeof parsed !== "object") parsed = { ok: okStatus, status: xhr.status };
-      if (typeof parsed.ok !== "boolean") parsed.ok = okStatus;
-      if (typeof parsed.status !== "number") parsed.status = xhr.status;
-      resolve(parsed);
-    };
+    // Sin JSON no hay éxito: así el GPS no da por subidas posiciones que
+    // contestó una página HTML (las deja en el buffer y reintenta).
+    xhr.onload = () => resolve(parseJsonBody(xhr.responseText, xhr.status));
     xhr.ontimeout = () => reject(new Error(`sin respuesta en ${timeoutMs} ms`));
     xhr.onerror = () => reject(new Error("sin red"));
     xhr.onabort = () => reject(new Error("request abortado"));
