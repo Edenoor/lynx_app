@@ -238,8 +238,10 @@ const normalizeCurrentDelivery = (item: any): Envio => {
     cadete: item?.cadete || item?.driver_name || item?.driver || null,
     zona: item?.zona || item?.zone || item?.localidad || item?.provincia || null,
     localidad: item?.localidad || item?.provincia || item?.zona || null,
-    metodo_envio:
-      item?.metodo_envio || item?.delivery_type || item?.type || item?.tipo_envio || "flex",
+    // Un Turbo viene con tipo_envio "flex": lo que lo marca es is_turbo.
+    metodo_envio: item?.is_turbo
+      ? "turbo"
+      : item?.metodo_envio || item?.delivery_type || item?.type || item?.tipo_envio || "flex",
     precio_chofer:
       item?.precio_chofer !== undefined && item?.precio_chofer !== null
         ? String(item.precio_chofer)

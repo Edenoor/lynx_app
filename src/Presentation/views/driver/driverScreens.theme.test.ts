@@ -1012,6 +1012,26 @@ const setDriverApi = () => {
     check("Alertas del chofer: con su barra y sin flecha", textOf(tree).includes("LYNX DRIVER") && textOf(tree).includes("Colectas") && !byLabel(tree, "Volver").length);
   }
 
+  // 20c) Envíos: un Turbo lleva su etiqueta. El servidor manda las filas de
+  // deliveries tal cual (tipo_envio "flex" también en los Turbo; lo que los
+  // marca es is_turbo), y la tarjeta y el detalle dicen «Turbo».
+  {
+    useTheme(createTheme({ scheme: "dark" }));
+    envios.currentDeliveries = [
+      { id: 21, tracking: "46001", direccion: "Gurruchaga 1500", nombre_fantasia: "Kiosco Norte", status: "En camino", tipo_envio: "flex", is_turbo: true },
+      { id: 22, tracking: "46002", direccion: "Thames 800", nombre_fantasia: "Kiosco Sur", status: "En camino", tipo_envio: "flex", is_turbo: false },
+    ];
+    let tree = await mount(screens[1][1]());
+    const turbo = textOf(pressable(tree, "Gurruchaga 1500"));
+    const flex = textOf(pressable(tree, "Thames 800"));
+    check("Envíos: el Turbo dice «Turbo» en la tarjeta", turbo.includes("Turbo") && !turbo.includes("Flex"), turbo);
+    check("Envíos: el resto sigue diciendo «Flex»", flex.includes("Flex") && !flex.includes("Turbo"), flex);
+    tree = await press(tree, "Gurruchaga 1500");
+    const detalle = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("DETALLE"));
+    check("Envíos: el detalle del Turbo dice Método «Turbo»", !!detalle && textOf(detalle).includes("Turbo"));
+    envios.currentDeliveries = DELIVERIES;
+  }
+
   // 21) MainStackNavigator: con sesión registra solo el stack del rol; sin
   // sesión, el login. Es lo que lleva al login después de cerrar sesión.
   {
