@@ -31,6 +31,7 @@ import {
   startDriverTracking,
   flushDriverPositions,
   readCurrentPosition,
+  onTrackingChange,
 } from "../../../config/DriverLocation";
 
 import {
@@ -175,6 +176,7 @@ export const DriverScreen = ({ navigation }: Props) => {
   const [saving, setSaving] = useState(false);
   const [available] = useState<boolean>(true);
   // Modo en que quedó el seguimiento: si no es "background", se muestra un aviso fijo.
+  // "forbidden": el servidor lo apagó con un 403 (sin ficha de chofer activa).
   const [trackingMode, setTrackingMode] = useState<string | null>(null);
   // Posición real para el mapa: undefined = buscando, null = no disponible.
   const [myPosition, setMyPosition] = useState<
@@ -411,7 +413,8 @@ export const DriverScreen = ({ navigation }: Props) => {
       // bloqueada; se apaga al cerrar sesión, no al salir de esta pantalla.
       const tracking = await startDriverTracking({ available });
       if (cancelled) return;
-      setTrackingMode(tracking.ok ? tracking.mode : tracking.reason === "error" ? "fallback" : "off");
+      // Si la primera subida ya volvió con 403, ese aviso queda.
+      setTrackingMode((prev) => (prev === "forbidden" ? prev : tracking.ok ? tracking.mode : tracking.reason === "error" ? "fallback" : "off"));
       const position = tracking.ok ? await readCurrentPosition() : null;
       if (cancelled) return;
       setMyPosition(position);
@@ -466,6 +469,13 @@ export const DriverScreen = ({ navigation }: Props) => {
       }
     };
   }, [userId, username, available, defaultVehicleType, add]);
+
+  // Un 403 de una subida del GPS (también en segundo plano) apaga el
+  // seguimiento: se avisa acá, con el aviso fijo de arriba.
+  useEffect(
+    () => onTrackingChange((s) => { if (s.error === "forbidden") setTrackingMode("forbidden"); }),
+    []
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -632,10 +642,12 @@ export const DriverScreen = ({ navigation }: Props) => {
         showsVerticalScrollIndicator={false}
       >
         {trackingMode && trackingMode !== "background" ? (
-          <Pressable onPress={() => Linking.openSettings()} style={styles.trackingBanner}>
+          <Pressable onPress={trackingMode === "forbidden" ? undefined : () => Linking.openSettings()} style={styles.trackingBanner}>
             <Ionicons name="warning-outline" size={18} color="#1A1A1A" />
             <Text style={styles.trackingBannerText}>
-              {trackingMode === "off"
+              {trackingMode === "forbidden"
+                ? "Tu usuario no tiene ficha de chofer activa: se detuvo el seguimiento. Hablá con coordinación."
+                : trackingMode === "off"
                 ? "Ubicación desactivada: tu recorrido no se está siguiendo. Tocá para abrir Ajustes y permitirla."
                 : trackingMode === "fallback"
                   ? "No se pudo activar el seguimiento en segundo plano: solo se comparte con la app abierta. Tocá para revisar Ajustes."

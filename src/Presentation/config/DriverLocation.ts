@@ -25,6 +25,7 @@ import { AppState } from "react-native";
 
 import { postJsonWithTimeout } from "./Api";
 import { renewSessionIfNeeded } from "./SessionRenewal";
+import { classifyUpload } from "./locationUpload";
 
 export const LOCATION_TASK = "lynx-driver-location";
 
@@ -124,6 +125,9 @@ export const clearDriverPositionsBuffer = () =>
 
 let lastFlushAt = 0;
 let sessionExpired = false;
+// El servidor contestó 403 (sin ficha de chofer activa): como con la sesión
+// vencida, no se vuelve a intentar hasta el próximo startDriverTracking.
+let trackingForbidden = false;
 
 type FlushResult = { sent: number; pending: number; stopped?: boolean };
 
@@ -179,7 +183,7 @@ const flushNow = async (opts: { available?: boolean }): Promise<FlushResult> => 
   let sent = 0;
   let available = opts.available;
 
-  if (sessionExpired && available === undefined) return { sent, pending: await pendingPositionsCount() };
+  if ((sessionExpired || trackingForbidden) && available === undefined) return { sent, pending: await pendingPositionsCount() };
 
   // Con la app en segundo plano esta es la única parte que sigue corriendo:
   // acá se renueva la sesión antes de que venza (C7). No se espera: se renueva
@@ -205,33 +209,44 @@ const flushNow = async (opts: { available?: boolean }): Promise<FlushResult> => 
       return { sent, pending };
     }
 
-    if (res?.sessionExpired || res?.status === 401) {
+    // Cómo se clasifica cada respuesta: config/locationUpload.ts.
+    const verdict = classifyUpload(res);
+
+    if (verdict === "session") {
       sessionExpired = true;
       console.log("[Lynx Location] Sesión vencida: se detiene el seguimiento");
       await stopLocationUpdatesQuietly();
       return { sent, pending: await pendingPositionsCount(), stopped: true };
     }
 
-    const accepted = Boolean(res?.ok);
-
-    // 5xx, 408 y 429 son fallas del servidor o del camino (reinicio del api, 502
-    // del proxy, límite de pedidos), no del lote: se conserva igual que cuando
-    // no hay red y se reintenta en el próximo ciclo. Solo un rechazo 4xx
-    // descarta el lote.
-    const status = Number(res?.status ?? 0);
-    if (!accepted && (status === 0 || status >= 500 || status === 408 || status === 429)) {
+    // Sin red del lado de Lynx (5xx, 408, 429, o una respuesta que no es JSON:
+    // un proxy o un portal cautivo): no es culpa del lote. Se conserva igual que
+    // cuando no hay red y se reintenta en el próximo ciclo.
+    if (verdict === "retry") {
       const pending = await markBufferDelayed();
-      console.log("[Lynx Location] El servidor no pudo recibir el lote (", status, "), quedan", pending, "posiciones en el buffer");
+      console.log("[Lynx Location] El servidor no pudo recibir el lote (", res?.invalidResponse ? "respuesta sin JSON" : res?.status, "), quedan", pending, "posiciones en el buffer");
       return { sent, pending };
     }
 
+    // 403: el usuario no tiene ficha de chofer activa. Se apaga ANTES de tocar
+    // el buffer: lo guardado no se borra (el tope lo acota y se limpia al
+    // cerrar sesión) y la pantalla de Inicio avisa.
+    if (verdict === "forbidden") {
+      trackingForbidden = true;
+      console.log("[Lynx Location] El servidor rechazó al chofer (403):", res?.error ?? res?.message, "; se detiene el seguimiento");
+      await stopLocationUpdatesQuietly();
+      setTrackingStatus("off", "forbidden");
+      return { sent, pending: await pendingPositionsCount(), stopped: true };
+    }
+
+    const accepted = verdict === "accepted";
     if (accepted) {
       sent += Number(res.accepted ?? 0) + Number(res.duplicated ?? 0);
       lastFlushAt = Date.now();
     } else {
-      // 400/403/422: el servidor rechazó el lote entero. Reintentarlo no lo va
-      // a arreglar (lote inválido, chofer sin ficha): se descarta para no
-      // trabar el resto y se deja constancia.
+      // 400/422: el servidor rechazó el lote entero. Reintentarlo no lo va a
+      // arreglar (lote inválido): se descarta para no trabar el resto y se deja
+      // constancia.
       console.log("[Lynx Location] Lote rechazado por el servidor:", res?.status, res?.error ?? res?.message);
     }
 
@@ -239,10 +254,6 @@ const flushNow = async (opts: { available?: boolean }): Promise<FlushResult> => 
     const pending = batch.length ? await removeFromBuffer(batch) : await pendingPositionsCount();
     available = undefined;
 
-    if (!accepted && res?.status === 403) {
-      await stopLocationUpdatesQuietly();
-      return { sent, pending, stopped: true };
-    }
     if (!batch.length) break; // era solo el aviso de disponibilidad
   }
 
@@ -401,14 +412,27 @@ export const isDriverTrackingActive = async () => {
 
 // Diagnóstico: cómo quedó el seguimiento en este teléfono. Viaja en cada lote
 // para poder verlo desde el servidor sin depender de los logs del celular.
-type TrackingStatus = { mode: string; error?: string; at: string };
+// Las pantallas se suscriben con onTrackingChange: un cambio que no sale de
+// startDriverTracking (por ejemplo, el 403 de una subida en segundo plano)
+// también tiene que verse en Inicio.
+export type TrackingStatus = { mode: string; error?: string; at: string };
 let trackingStatus: TrackingStatus | null = null;
+const trackingListeners = new Set<(status: TrackingStatus) => void>();
 const setTrackingStatus = (mode: string, error?: string) => {
-  trackingStatus = { mode, ...(error ? { error } : {}), at: new Date().toISOString() };
+  const status: TrackingStatus = { mode, ...(error ? { error } : {}), at: new Date().toISOString() };
+  trackingStatus = status;
+  trackingListeners.forEach((listener) => listener(status));
+};
+export const onTrackingChange = (listener: (status: TrackingStatus) => void) => {
+  trackingListeners.add(listener);
+  return () => {
+    trackingListeners.delete(listener);
+  };
 };
 
 export const startDriverTracking = async (opts: { available?: boolean } = {}): Promise<StartResult> => {
   sessionExpired = false;
+  trackingForbidden = false;
 
   const fg = await Location.getForegroundPermissionsAsync();
   const fgFinal = fg.granted ? fg : await Location.requestForegroundPermissionsAsync();
