@@ -27,6 +27,7 @@ import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, exe
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 import DeclaredCountForm from "./DeclaredCountForm";
 import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
+import { turboPickupError, turboPickupItems } from "./turboPickup";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -222,7 +223,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
           ) : null}
 
           {route.stops.map((s) => (
-            <StopCard key={s.id} routeId={route.id} stop={s} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
+            <StopCard key={s.id} routeId={route.id} stop={s} stops={route.stops} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
               open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} onStopSaved={replaceStop} />
           ))}
 
@@ -248,8 +249,8 @@ function Stat({ value, label, warn }: { value: number; label: string; warn?: boo
   );
 }
 
-function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, open, onToggle, act, onStopSaved }: {
-  routeId: number; stop: Stop; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void;
+function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, busy, open, onToggle, act, onStopSaved }: {
+  routeId: number; stop: Stop; stops: Stop[]; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void;
   act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>; onStopSaved: (stop: Stop) => void;
 }) {
   const theme = useAppTheme();
@@ -261,17 +262,24 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
   // Marcar envíos como colectados: en una colecta (PICKUP) eso se hace en
   // LightData durante este MVP; el retiro de un Turbo se sigue marcando acá.
   const collectsHere = isPickup && (routeType !== "PICKUP" || LYNX_COLLECT_ENABLED);
+  // En el retiro de un Turbo se listan solo los envíos del recorrido (los de
+  // sus paradas de entrega), no los pendientes de la tienda: ver turboPickup.ts.
+  const turboPickup = isPickup && routeType === "TURBO";
+  const turboItems = turboPickup ? turboPickupItems(stops, stop) : null;
   const directions = isPickup
     ? directionsUrl({ latitude: stop.latitude_snapshot, longitude: stop.longitude_snapshot, address: stop.store_address })
     : null;
 
   useEffect(() => {
-    if (open && collectsHere && stop.status === "ARRIVED") {
+    if (open && collectsHere && !turboPickup && stop.status === "ARRIVED") {
       fetchPendingAtStore(routeId, stop.id).then(setPending).catch(() => setPending([]));
     }
-  }, [open, collectsHere, stop.status, stop.id, routeId, stop.collected_count]);
+  }, [open, collectsHere, turboPickup, stop.status, stop.id, routeId, stop.collected_count]);
 
   const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value, notes || undefined));
+  // Un envío ajeno al Turbo lo rechaza el servidor (409 TURBO_NOT_IN_ROUTE): se explica.
+  const collectTurbo = (deliveryId: number) =>
+    act(() => recordOutcome(routeId, stop.id, deliveryId, "COLLECTED", notes || undefined).catch((e) => { throw turboPickupError(e); }));
   // Entregado / No entregado abren el cierre con la declaración del Baúl.
   const [closing, setClosing] = useState<{ deliveryId: number; outcome: "DELIVERED" | "NOT_DELIVERED" } | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -395,19 +403,38 @@ function StopCard({ routeId, stop, routeType, routeStatus, inProgress, busy, ope
 
           {collectsHere && stop.status === "ARRIVED" ? (
             <>
-              <Text style={styles.panelText}>Envíos de la tienda pendientes de retiro. Marcá cada bulto que te entregan.</Text>
-              {pending === null ? <ActivityIndicator color={theme.text.accent} /> : pending.filter((p) => !collectedIds.has(p.delivery_id)).length === 0 ? (
-                <Text style={styles.stopMeta}>No quedan envíos pendientes en esta tienda.</Text>
-              ) : pending.filter((p) => !collectedIds.has(p.delivery_id)).map((p) => (
-                <View key={p.delivery_id} style={styles.deliveryRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.deliveryTitle}>{p.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(p.tracking ?? p.delivery_id)}</Text></Text>
-                    <Text style={styles.stopMeta}>CP {p.codigo_postal ?? "—"}</Text>
-                  </View>
-                  <Pressable onPress={() => outcome(p.delivery_id, "COLLECTED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Colecté</Text></Pressable>
-                </View>
-              ))}
-              {stop.deliveries.length ? <Text style={styles.stopMeta}>Colectados en esta parada: {stop.deliveries.map((d) => String(d.tracking ?? d.delivery_id)).join(", ")}</Text> : null}
+              {turboItems ? (
+                <>
+                  <Text style={styles.panelText}>Envíos de este Turbo. Marcá el bulto cuando te lo entregan.</Text>
+                  {turboItems.length === 0 ? <Text style={styles.stopMeta}>Este Turbo no tiene envíos para retirar.</Text> : turboItems.map((d) => (
+                    <View key={d.delivery_id} style={styles.deliveryRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.deliveryTitle}>{d.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(d.tracking ?? d.delivery_id)}</Text></Text>
+                        <Text style={styles.stopMeta}>{d.collected ? "Colectado" : OPS_LABEL[d.ops_status] ?? d.ops_status}{d.codigo_postal ? ` · CP ${d.codigo_postal}` : ""}</Text>
+                      </View>
+                      {!d.collected ? (
+                        <Pressable onPress={() => collectTurbo(d.delivery_id)} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Colecté</Text></Pressable>
+                      ) : null}
+                    </View>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.panelText}>Envíos de la tienda pendientes de retiro. Marcá cada bulto que te entregan.</Text>
+                  {pending === null ? <ActivityIndicator color={theme.text.accent} /> : pending.filter((p) => !collectedIds.has(p.delivery_id)).length === 0 ? (
+                    <Text style={styles.stopMeta}>No quedan envíos pendientes en esta tienda.</Text>
+                  ) : pending.filter((p) => !collectedIds.has(p.delivery_id)).map((p) => (
+                    <View key={p.delivery_id} style={styles.deliveryRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.deliveryTitle}>{p.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(p.tracking ?? p.delivery_id)}</Text></Text>
+                        <Text style={styles.stopMeta}>CP {p.codigo_postal ?? "—"}</Text>
+                      </View>
+                      <Pressable onPress={() => outcome(p.delivery_id, "COLLECTED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Colecté</Text></Pressable>
+                    </View>
+                  ))}
+                  {stop.deliveries.length ? <Text style={styles.stopMeta}>Colectados en esta parada: {stop.deliveries.map((d) => String(d.tracking ?? d.delivery_id)).join(", ")}</Text> : null}
+                </>
+              )}
               {!stop.store_ready_at ? (
                 <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "store-ready"))} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}>
                   <Text style={styles.btnGhostText}>La tienda tenía todo listo</Text>

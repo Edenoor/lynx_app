@@ -57,9 +57,16 @@ export const OPS_LABEL: Record<string, string> = {
   OUT_FOR_DELIVERY: "En calle", DELIVERED: "Entregado", NOT_DELIVERED: "No entregado", CANCELLED: "Cancelado",
 };
 
-// Las respuestas traen ok:false con el mensaje del servidor; acá se convierten en excepción.
+// Las respuestas traen ok:false con el mensaje del servidor; acá se convierten
+// en excepción. El `code` y el status viajan en el error para los casos que la
+// pantalla distingue (por ejemplo, TURBO_NOT_IN_ROUTE en el retiro de un Turbo).
 const unwrap = <T,>(res: any): T => {
-  if (!res || res.ok === false) throw new Error(res?.error || res?.message || "Error del servidor");
+  if (!res || res.ok === false) {
+    throw Object.assign(new Error(res?.error || res?.message || "Error del servidor"), {
+      code: res?.code ?? null,
+      status: Number(res?.status ?? 0),
+    });
+  }
   return res as T;
 };
 

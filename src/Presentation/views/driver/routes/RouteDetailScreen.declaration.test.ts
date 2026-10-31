@@ -44,10 +44,11 @@ const alerts: any[][] = [];
 const calls: any[][] = [];
 let currentRoute: any = null;
 let putImpl: (p: string, b: any) => Promise<any> = async () => ({ ok: true });
+let postImpl: (p: string, b: any) => Promise<any> = async () => ({ ok: true });
 const ApiMock = {
   getJson: async (p: string) => { calls.push(["GET", p]); return { ok: true, route: currentRoute }; },
   putJson: (p: string, b: any) => { calls.push(["PUT", p, b]); return putImpl(p, b); },
-  postJson: async (p: string, b: any) => { calls.push(["POST", p, b]); return { ok: true }; },
+  postJson: (p: string, b: any) => { calls.push(["POST", p, b]); return postImpl(p, b); },
 };
 
 const RN = {
@@ -121,6 +122,7 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 const Detail = L("src/Presentation/views/driver/routes/RouteDetailScreen.tsx").default;
 const { NO_NETWORK } = L("src/Presentation/views/driver/errorMessage.ts");
+const { TURBO_NOT_IN_ROUTE_MESSAGE } = L("src/Presentation/views/driver/routes/turboPickup.ts");
 
 const stop = (p: any = {}) => ({
   id: 70, route_id: 5, sequence: 1, type: "PICKUP", status: "ARRIVED", arrived_at: null, completed_at: null, notes: null,
@@ -135,11 +137,12 @@ const route = (p: any = {}) => ({
 });
 
 // Orden de useState: detalle (route, busy, error, count, openStop, deadline) = 0-5;
-// la parada abierta, que va primera (pending, notes, closing, closeError, declareError) = 6-10;
-// su formulario (editing, text, invalid) = 11-13; después las demás paradas.
-const IDX = { route: 0, declareError: 10, editing: 11, invalid: 13 };
-const draw = (r: any, o: { open?: number; editing?: boolean; text?: string; declareError?: string } = {}) => {
-  states = [r, false, null, "", o.open ?? r.stops[0]?.id, null, undefined, undefined, undefined, undefined, o.declareError, o.editing, o.text];
+// KeyboardScreen (offset) = 6;
+// la parada abierta, que va primera (pending, notes, closing, closeError, declareError) = 7-11;
+// su formulario (editing, text, invalid) = 12-14; después las demás paradas.
+const IDX = { route: 0, error: 2, declareError: 11, editing: 12, invalid: 14 };
+const draw = (r: any, o: { open?: number; editing?: boolean; text?: string; declareError?: string; pending?: any[] } = {}) => {
+  states = [r, false, null, "", o.open ?? r.stops[0]?.id, null, undefined, o.pending, undefined, undefined, undefined, o.declareError, o.editing, o.text];
   stateIdx = 0; sets = []; calls.length = 0; alerts.length = 0;
   currentRoute = r;
   return render(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: r.id, name: "MAÑANERO 02" } } }));
@@ -342,6 +345,52 @@ const check = async (name: string, fn: () => unknown) => {
       address: "Calle 1", postal_code: "5000", receiver_name: "Ana", deliveries: [] };
     const txt = textOf(draw(route({ type: "DELIVERY", template_id: null, stops: [delivery] })));
     assert.ok(!txt.includes("Paquetes retirados") && !txt.includes("Sin informar"));
+  });
+
+  // Retiro de un Turbo: el recorrido es la parada de retiro más la de entrega
+  // con su envío. Los pendientes de la tienda (/pending) traen además lo
+  // ajeno; se inyectan para ver que no se listan.
+  const turboRoute = (pickupDeliveries: any[] = []) => route({
+    type: "TURBO", template_id: null, driver_confirmation: null, confirmation_state: null,
+    stops: [
+      stop({ deliveries: pickupDeliveries }),
+      { id: 71, route_id: 5, sequence: 2, type: "DELIVERY", status: "PENDING", arrived_at: null, completed_at: null, notes: null,
+        address: "Sarmiento 20", postal_code: "1000", receiver_name: "Comprador",
+        deliveries: [{ delivery_id: 501, tracking: "46501", nombre_destinatario: "Comprador", direccion: "Sarmiento 20", codigo_postal: "1000", tipo_envio: "flex", ops_status: "ENTERED", outcome: null, outcome_at: null, notes: null }] },
+    ],
+  });
+  const storePending = [
+    { delivery_id: 501, tracking: "46501", nombre_destinatario: "Comprador", codigo_postal: "1000", ops_status: "ENTERED" },
+    { delivery_id: 777, tracking: "46777", nombre_destinatario: "Otro de la tienda", codigo_postal: "1400", ops_status: "ENTERED" },
+  ];
+  const colecte = (t: any) => find(t, (n) => n.type === "Pressable" && textOf(n).trim() === "Colecté");
+
+  await check("Turbo: el retiro lista solo el envío del recorrido, no los pendientes de la tienda", () => {
+    const t = draw(turboRoute(), { pending: storePending });
+    const txt = textOf(t);
+    assert.equal(colecte(t).length, 1, "un solo «Colecté»");
+    assert.ok(txt.includes("46501") && !txt.includes("46777"), "sin el ajeno");
+  });
+
+  await check("Turbo: «Colecté» registra el envío del recorrido en la parada de retiro", async () => {
+    postImpl = async () => ({ ok: true, stop: stop() });
+    colecte(draw(turboRoute(), { pending: [] }))[0].props.onPress();
+    await tick(); await tick();
+    assert.deepEqual(calls.filter((c) => c[0] === "POST"), [["POST", "/v2/routes/5/stops/70/outcomes", { delivery_id: 501, outcome: "COLLECTED", notes: null }]]);
+  });
+
+  await check("Turbo: ya colectado, sin «Colecté» y dice «Colectado»", () => {
+    const t = draw(turboRoute([{ delivery_id: 501, tracking: "46501", outcome: "COLLECTED" }]), { pending: [] });
+    assert.equal(colecte(t).length, 0);
+    assert.ok(textOf(t).includes("Colectado · CP 1000"));
+  });
+
+  await check("Turbo: si el servidor rechaza un envío ajeno (409 TURBO_NOT_IN_ROUTE), lo explica", async () => {
+    postImpl = async () => ({ ok: false, status: 409, code: "TURBO_NOT_IN_ROUTE", error: "turbo_not_in_route" });
+    colecte(draw(turboRoute(), { pending: [] }))[0].props.onPress();
+    await tick(); await tick();
+    assert.deepEqual(setsAt(IDX.error).filter(Boolean), [TURBO_NOT_IN_ROUTE_MESSAGE]);
+    postImpl = async () => ({ ok: true });
   });
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
