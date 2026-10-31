@@ -1,12 +1,14 @@
 // src/Presentation/views/driver/errorMessage.ts
 // Texto de error para mostrarle al chofer. Sin red, el `fetch` de React Native
 // rechaza con «Network request failed», en inglés y sin decir qué hacer: eso se
-// traduce. Los mensajes del servidor ya vienen en castellano y pasan tal cual.
+// traduce. Lo mismo los rechazos del envío con tiempo límite de Api.tsx («sin
+// red», «sin respuesta en N ms»). Los mensajes del servidor ya vienen en
+// castellano y pasan tal cual.
 // Módulo puro (sin React Native) para poder probarlo solo.
 
 export const NO_NETWORK = "Sin conexión. Revisá la señal y probá de nuevo.";
 
-const NETWORK = /network request failed|failed to fetch|network ?error|request timed out/i;
+const NETWORK = /network request failed|failed to fetch|network ?error|request timed out|^sin red$|^sin respuesta en \d+ ms$/i;
 
 export function errorMessage(e: unknown, fallback: string): string {
   const raw = (e as { message?: unknown } | null | undefined)?.message;

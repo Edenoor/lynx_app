@@ -88,7 +88,12 @@ export const postJsonWithTimeout = (path: string, body: any, timeoutMs: number) 
 export const putJsonWithTimeout = (path: string, body: any, timeoutMs: number) =>
   sendJsonWithTimeout("PUT", path, body, timeoutMs);
 
-const sendJsonWithTimeout = async (method: "POST" | "PUT", path: string, body: any, timeoutMs: number) => {
+// GET con el mismo límite: para una consulta que se repite sola (el sondeo de
+// ofertas Turbo), así una colgada no deja la pantalla sin refrescar.
+export const getJsonWithTimeout = (path: string, timeoutMs: number) =>
+  sendJsonWithTimeout("GET", path, undefined, timeoutMs);
+
+const sendJsonWithTimeout = async (method: "GET" | "POST" | "PUT", path: string, body: any, timeoutMs: number) => {
   const finalPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${API_URL}${finalPath}`;
   const token = await getStoredToken();
@@ -105,7 +110,7 @@ const sendJsonWithTimeout = async (method: "POST" | "PUT", path: string, body: a
     xhr.ontimeout = () => reject(new Error(`sin respuesta en ${timeoutMs} ms`));
     xhr.onerror = () => reject(new Error("sin red"));
     xhr.onabort = () => reject(new Error("request abortado"));
-    xhr.send(JSON.stringify(body));
+    xhr.send(body === undefined ? null : JSON.stringify(body));
   });
 
   if (json.status === 401) {

@@ -2,7 +2,14 @@
 // Cliente de /v2/turbo para el chofer: ofertas de turbo y su vencimiento.
 // El servidor identifica al chofer por el token; acá no viaja ningún id.
 
-import { getJson, postJson } from "../../../config/Api";
+import { getJson, getJsonWithTimeout, postJson, postJsonWithTimeout } from "../../../config/Api";
+
+// Ofertas: con límite nativo (ver postJsonWithTimeout). Un `fetch` sin límite
+// dejaba el «Acepto» girando para siempre y el sondeo colgado. Sin respuesta,
+// rechaza con un Error común: el servidor pudo haberlo ejecutado igual.
+const OFFERS_TIMEOUT_MS = 10_000;
+const ACCEPT_TIMEOUT_MS = 15_000;
+const DECLINE_TIMEOUT_MS = 10_000;
 
 export type TurboOffer = {
   id: number;
@@ -43,19 +50,28 @@ export class TurboApiError extends Error {
   }
 }
 
+// Una respuesta que no es JSON no la mandó el servidor (un proxy, un portal
+// cautivo): se rechaza con un Error común, sin status, y cuenta como «no se
+// sabe qué pasó», igual que sin red.
 const unwrap = <T,>(res: any): T => {
+  if (res?.invalidResponse && !res.sessionExpired) throw new Error(res.message || "Respuesta inesperada del servidor");
   if (!res || res.ok === false) {
     throw new TurboApiError(res?.error || res?.message || "Error del servidor", res?.code ?? null, Number(res?.status ?? 0));
   }
   return res as T;
 };
 
-export const fetchMyOffers = async () => unwrap<{ offers: TurboOffer[] }>(await getJson("/v2/turbo/offers/mine")).offers;
+export const fetchMyOffers = async () =>
+  unwrap<{ offers: TurboOffer[] }>(await getJsonWithTimeout("/v2/turbo/offers/mine", OFFERS_TIMEOUT_MS)).offers;
 
+// Idempotente en el servidor: si ya es tuyo devuelve `already: true`.
 export const acceptOffer = async (routeId: number) =>
-  unwrap<{ route: { id: number } }>(await postJson(`/v2/turbo/offers/${routeId}/accept`, {}));
+  unwrap<{ route: { id: number }; already?: boolean }>(
+    await postJsonWithTimeout(`/v2/turbo/offers/${routeId}/accept`, {}, ACCEPT_TIMEOUT_MS),
+  );
 
-export const declineOffer = async (routeId: number) => unwrap<{ ok: true }>(await postJson(`/v2/turbo/offers/${routeId}/decline`, {}));
+export const declineOffer = async (routeId: number) =>
+  unwrap<{ ok: true }>(await postJsonWithTimeout(`/v2/turbo/offers/${routeId}/decline`, {}, DECLINE_TIMEOUT_MS));
 
 // Solo para la cabecera del recorrido; si el servidor no lo expone, la pantalla lo omite.
 export const fetchDispatch = async (routeId: number) =>

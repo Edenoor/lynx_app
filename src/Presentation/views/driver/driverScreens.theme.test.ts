@@ -120,10 +120,14 @@ const nav = { calls: [] as any[], navigate: (...a: any[]) => nav.calls.push(["na
 const alerts: any[] = [];
 const lastNav = () => nav.calls[nav.calls.length - 1];
 const api = { calls: [] as string[], replies: {} as Record<string, any> };
+// Una respuesta armada que es un Error rechaza (sin red, sin respuesta a
+// tiempo); una lista se consume de a una por pedido (la última se repite).
 const reply = (method: string, p: string) => {
   api.calls.push(`${method} ${p}`);
   const key = Object.keys(api.replies).find((k) => `${method} ${p}`.startsWith(k));
-  return Promise.resolve(key ? api.replies[key] : { ok: true });
+  const armed = key ? api.replies[key] : { ok: true };
+  const r = Array.isArray(armed) ? (armed.length > 1 ? armed.shift() : armed[0]) : armed;
+  return r instanceof Error ? Promise.reject(r) : Promise.resolve(r);
 };
 const host = (name: string) => name;
 // Esquema nativo: lo que se le pide a Appearance y lo que informa useColorScheme.
@@ -206,7 +210,10 @@ const UserContext = RealReact.createContext({ user: null, isAuthLoading: false }
 // Preferencia guardada en el dispositivo (AsyncStorage) y lo que se escribe.
 const storage = { stored: { version: 1, colorMode: "system", style: "marble", radius: "rounded" } as any, saved: [] as any[] };
 const RELATIVE_MOCKS: [string, any][] = [
-  ["config/Api", { getJson: (p: string) => reply("GET", p), postJson: (p: string) => reply("POST", p), putJson: (p: string) => reply("PUT", p) }],
+  ["config/Api", {
+    getJson: (p: string) => reply("GET", p), postJson: (p: string) => reply("POST", p), putJson: (p: string) => reply("PUT", p),
+    getJsonWithTimeout: (p: string) => reply("GET", p), postJsonWithTimeout: (p: string) => reply("POST", p), putJsonWithTimeout: (p: string) => reply("PUT", p),
+  }],
   ["Envios/ViewModel", { __esModule: true, default: () => envios }],
   ["client/Landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, username: "vendedor", rol: "SELLER" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
   ["config/Push", { setupPushAndRegisterDevice: async () => null, attachNotificationListeners: () => () => {} }],
@@ -659,6 +666,66 @@ const setDriverApi = () => {
     pressable(card90(), "Paso").props.onPress();
     tree = await settle();
     check("Turbo: pasar hace el mismo pedido y saca la oferta", api.calls[0] === "POST /v2/turbo/offers/90/decline" && !textOf(tree).includes("Turbo #90"));
+
+    // La cuenta regresiva la manda el servidor (seconds_left): con el reloj del
+    // teléfono adelantado, expires_at ya pasó pero la oferta sigue viva.
+    setDriverApi();
+    api.replies["GET /v2/turbo/offers/mine"] = { ok: true, offers: [{ ...turbos()[0], expires_at: new Date(Date.now() - 60_000).toISOString(), seconds_left: 40 }] };
+    tree = await mount(screens[5][1]());
+    const left = textOf(all(card90(), (x) => x.type === "Text" && /para responder|vencida/.test(textOf(x)))[0]);
+    check("Turbo: con el reloj del teléfono adelantado cuenta con seconds_left (no «vencida»)", /^(39|40) s para responder$/.test(left), left);
+    check("Turbo: y «Acepto» queda habilitado", pressable(card90(), "Acepto").props.disabled === false);
+
+    // «Acepto» sin respuesta: la tarjeta queda confirmando y se reintenta; el
+    // servidor contesta «ya es tuyo» y se abre el recorrido.
+    setDriverApi();
+    api.replies["POST /v2/turbo/offers/90/accept"] = [new Error("sin red"), { ok: true, already: true, route: { id: 90 } }];
+    tree = await mount(screens[5][1]());
+    nav.calls = []; api.calls = [];
+    pressable(card90(), "Acepto").props.onPress();
+    tree = await settle();
+    check("Turbo: sin respuesta al aceptar, la tarjeta queda «Confirmando el Turbo…» y no navega", textOf(card90()).includes("Confirmando el Turbo") && !nav.calls.length, textOf(card90()));
+    check("Turbo: mientras confirma, las otras ofertas no se pueden aceptar", all(tree, (x) => x.type === "Pressable" && textOf(x) === "Acepto").every((x) => x.props.disabled === true));
+    await new Promise((r) => setTimeout(r, 1700));
+    tree = await settle();
+    check("Turbo: el reintento responde «ya es tuyo» y abre el recorrido", api.calls.filter((c) => c === "POST /v2/turbo/offers/90/accept").length === 2 && same(lastNav(), ["navigate", "RouteDetailScreen", { routeId: 90 }]), api.calls.join(", "));
+
+    // Ningún intento responde: aviso con «Reintentar» y «Ver recorridos».
+    setDriverApi();
+    api.replies["POST /v2/turbo/offers/90/accept"] = [new Error("sin red"), new Error("sin respuesta en 15000 ms"), new Error("sin red"), { ok: true, route: { id: 90 } }];
+    tree = await mount(screens[5][1]());
+    nav.calls = []; api.calls = [];
+    pressable(card90(), "Acepto").props.onPress();
+    await new Promise((r) => setTimeout(r, 3300));
+    tree = await settle();
+    check("Turbo: sin confirmar después de 3 intentos, lo dice y ofrece «Reintentar» y «Ver recorridos»", textOf(card90()).includes("No pudimos confirmar el Turbo #90") && api.calls.filter((c) => c.endsWith("/90/accept")).length === 3 && !nav.calls.length, textOf(card90()));
+    tree = await press(card90(), "Ver recorridos");
+    check("Turbo: «Ver recorridos» abre Recorridos", same(lastNav(), ["navigate", "RoutesScreen"]));
+    tree = await press(card90(), "Reintentar");
+    check("Turbo: «Reintentar» vuelve a aceptar y abre el recorrido", same(lastNav(), ["navigate", "RouteDetailScreen", { routeId: 90 }]));
+
+    // Respuesta final del servidor: la tarjeta se va con su mensaje, sin reintentar.
+    setDriverApi();
+    api.replies["POST /v2/turbo/offers/90/accept"] = { ok: false, status: 409, code: "TAKEN", error: "ya lo tomó otro chofer" };
+    tree = await mount(screens[5][1]());
+    api.calls = [];
+    pressable(card90(), "Acepto").props.onPress();
+    tree = await settle();
+    check("Turbo: 409 TAKEN saca la tarjeta con el mensaje del servidor, sin reintentar", !textOf(tree).includes("Turbo #90") && textOf(tree).includes("ya lo tomó otro chofer") && api.calls.filter((c) => c.endsWith("/accept")).length === 1);
+
+    // «Paso» sin respuesta: la tarjeta sigue (si no, vuelve en el próximo sondeo).
+    setDriverApi();
+    api.replies["POST /v2/turbo/offers/90/decline"] = new Error("sin red");
+    tree = await mount(screens[5][1]());
+    pressable(card90(), "Paso").props.onPress();
+    tree = await settle();
+    check("Turbo: si «Paso» no llega, la tarjeta sigue y avisa en castellano", !!card90() && textOf(tree).includes("No se pudo avisar que pasás") && textOf(tree).includes("Sin conexión"), textOf(tree));
+    setDriverApi();
+    api.replies["POST /v2/turbo/offers/90/decline"] = { ok: false, status: 409, code: "NOT_OFFERED", error: "no tenés una oferta pendiente de este turbo" };
+    tree = await mount(screens[5][1]());
+    pressable(card90(), "Paso").props.onPress();
+    tree = await settle();
+    check("Turbo: «Paso» de una oferta que ya no está (409) la saca", !card90());
   }
 
   // 8) QR: mismas opciones y destinos; Colectar sigue derivando a LightData.

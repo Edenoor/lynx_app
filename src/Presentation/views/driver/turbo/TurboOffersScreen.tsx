@@ -3,9 +3,15 @@
 // cuánto queda para contestar y hasta qué hora hay que entregar. Acepto lo
 // asigna (el primero que toca se lo queda); Paso lo rechaza. Se refresca sola
 // porque el push puede no llegar.
+//
+// Si el «Acepto» no tiene respuesta (sin red, sin respuesta a tiempo) no se sabe
+// si quedó asignado: la tarjeta queda con «Confirmando el Turbo…» aunque el
+// sondeo ya no la traiga, se reintenta (el servidor es idempotente) y, si nada
+// contesta, queda el aviso con «Reintentar» y «Ver recorridos». Cada sondeo que
+// vuelve a responder reintenta una vez, hasta tener una respuesta del servidor.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
@@ -16,32 +22,95 @@ import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { acceptOffer, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
+import { AcceptOutcome, acceptWithConfirm, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
+import { errorMessage } from "../errorMessage";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboOffersScreen">;
+type Offer = WithLocalExpiry<TurboOffer>;
+// El «Acepto» en curso: «confirming» mientras se espera (y se reintenta);
+// «unknown» si ningún intento tuvo respuesta.
+type PendingAccept = { offer: Offer; phase: "confirming" | "unknown" };
 
 const REFRESH_MS = 10_000;
 
 export default function TurboOffersScreen({ navigation }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
-  const [offers, setOffers] = useState<TurboOffer[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [pending, setPendingState] = useState<PendingAccept | null>(null);
   const [now, setNow] = useState(Date.now());
   const mounted = useRef(true);
+  const focused = useRef(false);
+  // Copia para los callbacks (el sondeo, el resultado de un intento).
+  const pendingRef = useRef<PendingAccept | null>(null);
+  const setPending = (p: PendingAccept | null) => { pendingRef.current = p; setPendingState(p); };
+  // Un solo pedido de aceptación en vuelo (el doble toque y el sondeo no lo repiten).
+  const accepting = useRef(false);
+
+  const drop = (routeId: number) => setOffers((prev) => prev.filter((o) => o.route_id !== routeId));
+
+  const settle = (o: Offer, r: AcceptOutcome) => {
+    const visible = mounted.current && focused.current;
+    if (r.kind === "unknown") {
+      setPending({ offer: o, phase: "unknown" });
+      // Fuera de la pantalla nadie ve el aviso de la tarjeta.
+      if (!visible) {
+        Alert.alert("No pudimos confirmar el Turbo", `No sabemos si el Turbo #${o.route_id} quedó a tu nombre. Si quedó asignado, aparece en Recorridos.`, [
+          { text: "Cerrar", style: "cancel" },
+          { text: "Ver recorridos", onPress: () => navigation.navigate("RoutesScreen") },
+        ]);
+      }
+      return;
+    }
+    setPending(null);
+    drop(o.route_id);
+    if (r.kind === "gone") {
+      // TAKEN / EXPIRED / NOT_OFFERING: la oferta ya no vale, la tarjeta se va con el mensaje del servidor.
+      if (visible) setNotice(errorMessage(r.error, "Este Turbo ya no está disponible."));
+      return;
+    }
+    if (visible) {
+      setNotice("Turbo asignado. Ya está en tus recorridos.");
+      navigation.navigate("RouteDetailScreen", { routeId: o.route_id });
+    } else {
+      // El chofer salió de la pantalla mientras se confirmaba.
+      Alert.alert("Turbo asignado", `El Turbo #${o.route_id} quedó a tu nombre.`, [
+        { text: "Cerrar", style: "cancel" },
+        { text: "Ver recorrido", onPress: () => navigation.navigate("RouteDetailScreen", { routeId: o.route_id }) },
+      ]);
+    }
+  };
+
+  const confirm = async (o: Offer, tries?: number) => {
+    if (accepting.current) return;
+    accepting.current = true;
+    try {
+      settle(o, await acceptWithConfirm(o.route_id, acceptOffer, { tries }));
+    } finally {
+      accepting.current = false;
+    }
+  };
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    // El vencimiento se ancla a cuando sale el pedido (ver turboOffer.ts).
+    const startedAt = Date.now();
     try {
-      const list = await fetchMyOffers();
+      const list = withLocalExpiry(await fetchMyOffers(), startedAt);
       if (mounted.current) { setOffers(list); setError(null); }
+      // El servidor volvió a responder: un Acepto sin confirmar se reintenta una vez.
+      const p = pendingRef.current;
+      if (p?.phase === "unknown") void confirm(p.offer, 1);
     } catch (e: any) {
-      if (mounted.current && !silent) setError(e?.message ?? "No se pudieron cargar las ofertas");
+      if (mounted.current && !silent) setError(errorMessage(e, "No se pudieron cargar las ofertas"));
     } finally {
       if (mounted.current) setLoading(false);
     }
+    // Sin dependencias: confirm y settle solo usan refs, setters y navigation.
   }, []);
 
   useEffect(() => {
@@ -54,37 +123,46 @@ export default function TurboOffersScreen({ navigation }: Props) {
   const loadedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      focused.current = true;
       load(loadedOnce.current);
       loadedOnce.current = true;
       setNow(Date.now());
       const poll = setInterval(() => load(true), REFRESH_MS);
       const tick = setInterval(() => setNow(Date.now()), 1000);
       const sub = AppState.addEventListener("change", (s) => { if (s === "active") load(true); });
-      return () => { clearInterval(poll); clearInterval(tick); sub.remove(); };
+      return () => { focused.current = false; clearInterval(poll); clearInterval(tick); sub.remove(); };
     }, [load]),
   );
 
-  const drop = (routeId: number) => setOffers((prev) => prev.filter((o) => o.route_id !== routeId));
+  const onAccept = (o: Offer) => {
+    if (pendingRef.current) return;
+    setPending({ offer: o, phase: "confirming" }); setNotice(null); setError(null);
+    void confirm(o);
+  };
 
-  const onAccept = async (o: TurboOffer) => {
+  const onRetry = () => {
+    const p = pendingRef.current;
+    if (!p || accepting.current) return;
+    setPending({ offer: p.offer, phase: "confirming" });
+    void confirm(p.offer);
+  };
+
+  // La tarjeta sale solo si el servidor tomó la respuesta (o la oferta ya no
+  // está: 409/404). Si no llegó, sigue y vuelve a aparecer en el próximo sondeo.
+  const onDecline = async (o: Offer) => {
     setBusy(o.route_id); setNotice(null); setError(null);
     try {
-      await acceptOffer(o.route_id);
+      await declineOffer(o.route_id);
       drop(o.route_id);
-      setNotice("Turbo asignado. Ya está en tus recorridos.");
-      navigation.navigate("RouteDetailScreen", { routeId: o.route_id });
     } catch (e: any) {
-      // TAKEN / EXPIRED: la oferta ya no vale, la tarjeta se va con el mensaje del servidor.
-      if (e instanceof TurboApiError && e.status === 409) { drop(o.route_id); setNotice(e.message); }
-      else setError(e?.message ?? "No se pudo aceptar el turbo");
+      if (e instanceof TurboApiError && (e.status === 409 || e.status === 404)) drop(o.route_id);
+      else setError(`No se pudo avisar que pasás. ${errorMessage(e, "Probá de nuevo.")}`);
     } finally { setBusy(null); }
   };
 
-  const onDecline = async (o: TurboOffer) => {
-    setBusy(o.route_id); setNotice(null); setError(null);
-    try { await declineOffer(o.route_id); } catch (_e) { /* si ya venció, da igual */ }
-    drop(o.route_id); setBusy(null);
-  };
+  // La tarjeta del Acepto en curso se ve aunque el sondeo ya no la traiga
+  // (si el servidor la asignó, deja de venir como oferta).
+  const shown = pending && !offers.some((o) => o.route_id === pending.offer.route_id) ? [pending.offer, ...offers] : offers;
 
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
@@ -114,16 +192,17 @@ export default function TurboOffersScreen({ navigation }: Props) {
           {notice ? <View style={styles.noticeBox}><Text style={styles.noticeText}>{notice}</Text></View> : null}
 
           <FlatList
-            data={offers}
+            data={shown}
             keyExtractor={(o) => String(o.route_id)}
             refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} tintColor={theme.text.accent} />}
             ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
               <View style={styles.empty}><Ionicons name="flash-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No hay turbos ofrecidos ahora.</Text></View>
             )}
             renderItem={({ item }) => {
-              const left = Math.max(0, Math.round((new Date(item.expires_at).getTime() - now) / 1000));
+              const left = secondsLeft(item, now);
               const urgent = left <= 15;
-              const disabled = busy !== null || left === 0;
+              const mine = pending?.offer.route_id === item.route_id ? pending : null;
+              const disabled = busy !== null || pending !== null || left === 0;
               return (
                 <View style={[theme.card, styles.card, urgent && styles.cardUrgent]}>
                   <View style={styles.cardTop}>
@@ -139,14 +218,33 @@ export default function TurboOffersScreen({ navigation }: Props) {
                     {km(item.distance_km) ? `Tienda a ${km(item.distance_km)} de vos` : ""}
                     {item.deadline_at ? ` · entregar antes de las ${hhmm(item.deadline_at)}` : ""}
                   </Text>
-                  <View style={styles.row}>
-                    <Pressable onPress={() => onAccept(item)} disabled={disabled} style={[styles.btn, styles.btnYes, disabled && styles.btnDisabled]}>
-                      {busy === item.route_id ? <ActivityIndicator color={theme.text.onPrimary} /> : <Text style={styles.btnText}>Acepto</Text>}
-                    </Pressable>
-                    <Pressable onPress={() => onDecline(item)} disabled={disabled} style={[styles.btn, styles.btnNo, disabled && styles.btnDisabled]}>
-                      <Text style={styles.btnGhostText}>Paso</Text>
-                    </Pressable>
-                  </View>
+                  {mine?.phase === "confirming" ? (
+                    <View style={styles.confirming}>
+                      <ActivityIndicator color={theme.text.accent} />
+                      <Text style={styles.line}>Confirmando el Turbo…</Text>
+                    </View>
+                  ) : mine ? (
+                    <>
+                      <Text style={styles.line}>No pudimos confirmar el Turbo #{item.route_id}. Si quedó asignado, aparece en Recorridos.</Text>
+                      <View style={styles.row}>
+                        <Pressable onPress={onRetry} style={[styles.btn, styles.btnYes]}>
+                          <Text style={styles.btnText}>Reintentar</Text>
+                        </Pressable>
+                        <Pressable onPress={() => navigation.navigate("RoutesScreen")} style={[styles.btn, styles.btnNo]}>
+                          <Text style={styles.btnGhostText}>Ver recorridos</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={styles.row}>
+                      <Pressable onPress={() => onAccept(item)} disabled={disabled} style={[styles.btn, styles.btnYes, disabled && styles.btnDisabled]}>
+                        <Text style={styles.btnText}>Acepto</Text>
+                      </Pressable>
+                      <Pressable onPress={() => onDecline(item)} disabled={disabled} style={[styles.btn, styles.btnNo, disabled && styles.btnDisabled]}>
+                        {busy === item.route_id ? <ActivityIndicator color={theme.text.primary} /> : <Text style={styles.btnGhostText}>Paso</Text>}
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
               );
             }}
@@ -185,6 +283,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   badgeText: { color: t.text.primary, fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },
   badgeTextUrgent: { color: t.status.rejected.text },
   row: { flexDirection: "row", gap: 8, marginTop: 6 },
+  confirming: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 46, marginTop: 6 },
   btn: { flex: 1, minHeight: 46, borderRadius: t.radius.md, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   btnYes: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
   btnNo: { backgroundColor: "transparent", borderColor: t.borders.default },

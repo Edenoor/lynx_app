@@ -28,6 +28,8 @@ eq("vacío", splitAddressQuery("   "), { direccion: "" });
 // Mensajes de error
 eq("sin red (fetch de RN)", errorMessage(new TypeError("Network request failed"), "x"), NO_NETWORK);
 eq("sin red (web)", errorMessage(new TypeError("Failed to fetch"), "x"), NO_NETWORK);
+eq("sin red y sin respuesta a tiempo (envío con límite de Api.tsx)", [errorMessage(new Error("sin red"), "x"), errorMessage(new Error("sin respuesta en 15000 ms"), "x")], [NO_NETWORK, NO_NETWORK]);
+eq("un mensaje del servidor que solo empieza igual pasa tal cual", errorMessage(new Error("sin respuesta del depósito"), "x"), "sin respuesta del depósito");
 eq("mensaje del servidor pasa tal cual", errorMessage(new Error("La parada ya está cerrada"), "x"), "La parada ya está cerrada");
 eq("sin mensaje: el de respaldo", errorMessage(new Error(""), "No se pudo"), "No se pudo");
 eq("no es un Error", errorMessage(undefined, "No se pudo"), "No se pudo");
