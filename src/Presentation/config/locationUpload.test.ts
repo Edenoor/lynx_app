@@ -4,7 +4,7 @@
 //   node /tmp/location-upload/locationUpload.test.js
 
 import { parseJsonBody } from "./jsonBody";
-import { classifyUpload } from "./locationUpload";
+import { classifyUpload, trackingPolicyOf } from "./locationUpload";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -29,6 +29,14 @@ eq("401 (sesión vencida, también con HTML)", [classifyUpload({ ok: false, stat
 eq("500, 408 y 429: se reintenta", [500, 408, 429].map((s) => classifyUpload(json({ ok: false }, s))), ["retry", "retry", "retry"]);
 eq("sin status ni respuesta: se reintenta", [classifyUpload({ ok: false }), classifyUpload(null)], ["retry", "retry"]);
 eq("cuerpo vacío 204: aceptado (vale el código)", classifyUpload(parseJsonBody("", 204)), "accepted");
+
+// Franja horaria del GPS.
+const pausa = json({ ok: true, accepted: 0, duplicated: 3, tracking: { activo: false, motivo: "fuera_de_franja", reanuda_a: "07:00" } }, 200);
+eq("fuera del horario: el lote cuenta como recibido", classifyUpload(pausa), "accepted");
+eq("fuera del horario: apagar hasta las 07:00", trackingPolicyOf(pausa), { activo: false, reanudaA: "07:00" });
+eq("consulta en horario: prendido", trackingPolicyOf(json({ ok: true, tracking: { activo: true, motivo: "en_franja", hasta: "22:00" } }, 200)), { activo: true, reanudaA: null });
+eq("sin política (servidor viejo o en horario): null", [trackingPolicyOf(json({ ok: true, accepted: 3 }, 200)), trackingPolicyOf(null), trackingPolicyOf(html(200))], [null, null, null]);
+eq("política rara: sin `activo` booleano no vale; hora rara se ignora", [trackingPolicyOf({ tracking: { activo: "no" } }), trackingPolicyOf({ tracking: { activo: false, reanuda_a: "7" } })], [null, { activo: false, reanudaA: null }]);
 
 if (failed) { console.log(`\n${failed} prueba(s) fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");
