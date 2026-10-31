@@ -761,6 +761,48 @@ const setDriverApi = () => {
     camera.permission = { granted: true };
   }
 
+  // 9b) Planta: la estantería mueve solo el bulto que quedó en planta, con la
+  // regla del Picker (pickerScan). Cada lectura termina en un Alert; tocar
+  // «Escanear otro» o «Reintentar» libera la cámara para la siguiente.
+  {
+    useTheme(createTheme({ scheme: "dark" }));
+    const SHELF = "LYNX:SHELF:3f2c1a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f";
+    const received = (id: number, tracking: string) => ({
+      ok: true, delivery: { id, tracking, store: "Tienda Uno", receiver: "Ana", direccion: null, postal_code: "1000", tipo_envio: "flex", is_turbo: false },
+      shelf: { id: 3, code: "NORTE-1", name: null, unclassified: false, suggested: null },
+      ops: { from: "ENTERED", to: "SHELVED", transitions: ["ARRIVED_WAREHOUSE", "SHELVED"], already_here: false }, alerts: [],
+    });
+    const scanAll = async (codes: string[]) => {
+      api.calls = []; alerts.length = 0;
+      let tree = await mount(RealReact.createElement(Scan, { navigation: nav, route: { params: { mode: "planta" } } }));
+      for (const data of codes) {
+        all(tree, (x) => x.type === "CameraView")[0].props.onBarcodeScanned({ data });
+        tree = await settle();
+        alerts[alerts.length - 1]?.[2]?.find((b: any) => b.text === "Escanear otro" || b.text === "Reintentar")?.onPress();
+        tree = await settle();
+      }
+    };
+    const lastAlert = () => (alerts[alerts.length - 1] ?? []).slice(0, 2).join(" · ");
+
+    api.replies = { "POST /v2/warehouse/receive": [received(1, "T-A"), { ok: false, status: 404, error: "El envío no está en Lynx" }] };
+    await scanAll(["46001", "46002", SHELF]);
+    check("Planta: si la recepción del siguiente falla, la estantería no mueve el bulto anterior", !api.calls.some((c) => c.startsWith("PUT ")), api.calls.join(", "));
+    check("Planta: y pide escanear primero el paquete", lastAlert().startsWith("Escaneá primero el paquete"), lastAlert());
+
+    api.replies = { "POST /v2/warehouse/receive": { ...received(2, "T-C"), shelf: null, ops: { from: "DELIVERED", to: "DELIVERED", transitions: [], already_here: false }, alerts: [{ code: "CLOSED", text: "Envío entregado" }] } };
+    await scanAll(["46003", SHELF]);
+    check("Planta: un bulto cerrado no queda para mover", !api.calls.some((c) => c.startsWith("PUT ")), api.calls.join(", "));
+
+    api.replies = { "POST /v2/warehouse/receive": received(1, "T-A"), "PUT /v2/warehouse/deliveries/1/shelf": new Error("sin respuesta en 15000 ms") };
+    await scanAll(["46001", SHELF]);
+    check("Planta: sin respuesta al mover, avisa que no se sabe si se movió (no «ninguna modificación»)", lastAlert().includes("No sabemos si se movió") && !lastAlert().includes("No se realizó ninguna modificación"), lastAlert());
+
+    api.replies = { "POST /v2/warehouse/receive": received(1, "T-A"), "PUT /v2/warehouse/deliveries/1/shelf": { ok: true, from: "NORTE-1", shelf: { id: 4, code: "NORTE-2", name: null } } };
+    await scanAll(["46001", SHELF]);
+    check("Planta: bulto y después estantería lo mueve, con el mismo pedido", api.calls.includes("PUT /v2/warehouse/deliveries/1/shelf") && lastAlert().startsWith("→ NORTE-2"), `${api.calls.join(", ")} | ${lastAlert()}`);
+    check("Planta: la recepción muestra la estantería", (alerts[0] ?? [])[0] === "→ NORTE-1", String((alerts[0] ?? [])[0]));
+  }
+
   // 10) Cargador compartido: el logo (silueta blanca) se ve también en claro.
   {
     const { LynxPulseLoader } = L("src/Presentation/components/LynxPulseLoader.tsx");

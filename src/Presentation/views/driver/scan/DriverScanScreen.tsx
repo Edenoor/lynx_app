@@ -40,13 +40,16 @@ import {
 import {
   API_URL,
   getJson,
-  postJson,
-  putJson,
 } from "../../../config/Api";
 import {
   playScanError,
   playScanSuccess,
 } from "../../../config/ScanSound";
+import {
+  PendingPackage,
+  processScan,
+} from "../../picker/pickerScan";
+import { presentOutcome } from "../../picker/pickerOutcome";
 
 type Props = StackScreenProps<
   DriverStackParamList,
@@ -951,166 +954,55 @@ export default function DriverScanScreen({
    * el bulto. Si después se escanea el QR de una estantería
    * (LYNX:SHELF:…), el último bulto recibido se mueve ahí.
    *
+   * La regla es la del Picker (views/picker/pickerScan.ts): el «último
+   * bulto» queda armado solo si quedó en planta, una recepción que falla lo
+   * desarma (antes la estantería movía el bulto anterior), los pedidos
+   * tienen tiempo límite nativo y, sin respuesta, se avisa que no se sabe si
+   * se movió. Acá solo se muestra el resultado (presentOutcome) en el Alert.
+   *
    * Pide warehouse_access en el servidor: es una pantalla de depósito, no
    * de chofer.
    */
 
   const lastReceivedRef =
-    useRef<{
-      id: number;
-      tracking: string;
-    } | null>(null);
+    useRef<PendingPackage | null>(
+      null
+    );
 
   const handlePlanta =
     useCallback(
       async (
         payload: ScanPayload
       ) => {
-        const raw =
-          payload.raw;
-
-        // Segundo escaneo: la estantería a la que se mueve el último bulto.
-        if (
-          raw.startsWith(
-            "LYNX:SHELF:"
-          )
-        ) {
-          const last =
-            lastReceivedRef.current;
-
-          if (!last) {
-            throw new Error(
-              "Escaneá primero el bulto y después la estantería."
-            );
-          }
-
-          const moved =
-            await putJson(
-              `/v2/warehouse/deliveries/${last.id}/shelf`,
-              {
-                shelf_qr: raw,
-              }
-            );
-
-          if (
-            moved?.ok ===
-            false
-          ) {
-            throw new Error(
-              moved?.error ||
-                "No se pudo mover el bulto."
-            );
-          }
-
-          Vibration.vibrate(
-            80
-          );
-
-          playScanSuccess();
-
-          Alert.alert(
-            `→ ${
-              moved?.shelf
-                ?.code ??
-              "movido"
-            }`,
-            `${last.tracking} movido${
-              moved?.from
-                ? ` de ${moved.from}`
-                : ""
-            } a ${
-              moved?.shelf
-                ?.code ??
-              "la estantería"
-            }.`,
-            [
-              {
-                text:
-                  "Escanear otro",
-                onPress:
-                  resetScanner,
-              },
-              {
-                text:
-                  "Cerrar",
-                onPress:
-                  close,
-              },
-            ]
-          );
-
-          return;
-        }
-
         const r =
-          await postJson(
-            "/v2/warehouse/receive",
-            {
-              qr: raw,
-            }
-          );
-
-        if (
-          r?.ok === false
-        ) {
-          throw new Error(
-            r?.error ||
-              "No se pudo recibir el bulto."
-          );
-        }
-
-        const shelfCode =
-          r?.shelf?.code ??
-          "NO ENTRA";
-
-        const tracking =
-          String(
-            r?.delivery
-              ?.tracking ??
-              r?.delivery
-                ?.id ??
-              ""
+          await processScan(
+            payload.raw,
+            lastReceivedRef.current
           );
 
         lastReceivedRef.current =
-          r?.delivery?.id
-            ? {
-                id: Number(
-                  r.delivery.id
-                ),
-                tracking,
-              }
-            : null;
+          r.pending;
 
-        const alerts: {
-          code: string;
-          text: string;
-        }[] =
-          Array.isArray(
-            r?.alerts
-          )
-            ? r.alerts
-            : [];
+        const view =
+          presentOutcome(
+            r.outcome,
+            ""
+          );
 
-        // Con avisos vibra distinto: el operador no tiene que leer para
-        // saber que hay algo que mirar.
+        const ok =
+          view.tone ===
+          "success";
+
+        // Con avisos o sin éxito vibra distinto: el operador no tiene que
+        // leer para saber que hay algo que mirar.
         Vibration.vibrate(
-          alerts.length
-            ? [0, 120, 80, 120]
-            : 80
+          ok &&
+            !view.warnings.length
+            ? 80
+            : [0, 120, 80, 120]
         );
 
-        // Éxito solo si quedó en planta (ingresó o ya estaba). Cerrado o en
-        // recorrido: el servidor respondió, pero el bulto no se recibió.
-        if (
-          (r?.ops?.transitions?.length ||
-            r?.ops?.already_here) &&
-          !alerts.some(
-            (a) =>
-              a.code === "CLOSED" ||
-              a.code === "IN_ROUTE"
-          )
-        ) {
+        if (ok) {
           playScanSuccess();
         } else {
           playScanError();
@@ -1118,64 +1010,46 @@ export default function DriverScanScreen({
 
         const lines: string[] =
           [
-            `${tracking} · ${
-              r?.delivery
-                ?.store ??
-              ""
-            }`,
-            `${
-              r?.delivery
-                ?.receiver ??
-              ""
-            } · CP ${
-              r?.delivery
-                ?.postal_code ??
-              "—"
-            }`,
-            "",
-            r?.ops
-              ?.already_here
-              ? "Ya estaba en planta."
-              : `Ingreso registrado: ${
-                  r?.ops?.to ??
-                  ""
-                }.`,
+            ...(view.shelf
+              ? [view.title]
+              : []),
+            ...view.lines.filter(
+              Boolean
+            ),
           ];
 
         if (
-          r?.shelf
-            ?.suggested
-        ) {
-          // Dónde está y dónde le corresponde: el operador necesita las dos
-          // para decidir si lo mueve (pedido en las pruebas del 15-sep-2026).
-          lines.push(
-            r?.shelf?.code &&
-              r.shelf.code !==
-                r.shelf.suggested
-              ? `Está en ${r.shelf.code}; por su CP le corresponde ${r.shelf.suggested}.`
-              : `El mapa dice ${r.shelf.suggested}.`
-          );
-        }
-
-        if (
-          alerts.length
+          view.warnings.length
         ) {
           lines.push(
             "",
-            ...alerts.map(
-              (a) =>
-                `⚠ ${a.text}`
+            ...view.warnings.map(
+              (w) =>
+                `⚠ ${w}`
             )
           );
         }
 
+        if (view.raw) {
+          lines.push(
+            "",
+            `Leído: ${view.raw.slice(
+              0,
+              200
+            )}`
+          );
+        }
+
         Alert.alert(
-          `→ ${shelfCode}`,
+          view.shelf
+            ? `→ ${view.shelf}`
+            : view.title,
           lines.join("\n"),
           [
             {
-              text:
-                "Escanear otro",
+              text: ok
+                ? "Escanear otro"
+                : "Reintentar",
               onPress:
                 resetScanner,
             },
