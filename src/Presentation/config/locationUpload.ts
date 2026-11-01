@@ -42,3 +42,16 @@ export function trackingPolicyOf(res: any): TrackingPolicy | null {
   const reanudaA = typeof t.reanuda_a === "string" && /^\d{2}:\d{2}$/.test(t.reanuda_a) ? t.reanuda_a : null;
   return { activo: t.activo, reanudaA };
 }
+
+// Próximo instante en que en Buenos Aires (UTC-3 todo el año, sin horario de
+// verano) son las `hhmm` de `reanuda_a`: la hora del aviso «Empezó tu
+// horario». Si ya pasó hoy (o es justo ahora), mañana. null = hora rara.
+const AR_OFFSET_MS = 3 * 60 * 60_000;
+export function nextResumeDate(hhmm: string | null, now: Date = new Date()): Date | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  const ar = new Date(now.getTime() - AR_OFFSET_MS); // la hora de Buenos Aires, en los campos UTC
+  let at = Date.UTC(ar.getUTCFullYear(), ar.getUTCMonth(), ar.getUTCDate(), Number(m[1]), Number(m[2])) + AR_OFFSET_MS;
+  if (at <= now.getTime()) at += 24 * 60 * 60_000;
+  return new Date(at);
+}

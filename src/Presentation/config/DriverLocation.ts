@@ -29,7 +29,7 @@ import { AppState } from "react-native";
 
 import { getJsonWithTimeout, postJsonWithTimeout } from "./Api";
 import { renewSessionIfNeeded } from "./SessionRenewal";
-import { classifyUpload, trackingPolicyOf, TrackingPolicy } from "./locationUpload";
+import { classifyUpload, nextResumeDate, trackingPolicyOf, TrackingPolicy } from "./locationUpload";
 
 export const LOCATION_TASK = "lynx-driver-location";
 
@@ -463,7 +463,8 @@ export const onTrackingChange = (listener: (status: TrackingStatus) => void) => 
 //
 // LIMITACIÓN: con la app cerrada o en segundo plano nada la despierta a la
 // hora de inicio. El GPS vuelve cuando el chofer abre la app o le llega un
-// push con la app abierta.
+// push con la app abierta. Para que la abra, al pausar se programa un aviso
+// local para esa hora (ver «Aviso de inicio del horario»).
 
 // Lo que pidió la pantalla al arrancar, para volver a arrancar igual. null =
 // no hay chofer siguiendo (sin sesión, o un vendedor): no se consulta nada.
@@ -480,6 +481,53 @@ const stopPausedPoll = () => {
   }
 };
 
+/* Aviso de inicio del horario */
+
+// Una notificación local a la hora de inicio, «Empezó tu horario: abrí Lynx»:
+// al tocarla se abre la app y, en primer plano, el GPS vuelve. Un solo aviso
+// (identificador fijo): cada pausa lo reemplaza, y al volver el GPS o al
+// cerrar sesión se cancela. Va en su propio canal, «Horario del GPS», para
+// que el chofer lo pueda silenciar sin silenciar los Turbos. En Android 11
+// expo-notifications usa una alarma exacta; desde Android 12, sin el permiso
+// de alarmas exactas, puede llegar más tarde.
+export const RESUME_NOTICE_ID = "lynx-gps-horario";
+export const RESUME_CHANNEL_ID = "gps-horario";
+let resumeChannelReady = false;
+
+const cancelResumeNotice = async () => {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(RESUME_NOTICE_ID);
+  } catch (e) {
+    console.log("[Lynx Location] No se pudo cancelar el aviso de inicio:", e);
+  }
+};
+
+const scheduleResumeNotice = async (resumeAt: string | null) => {
+  await cancelResumeNotice();
+  const date = nextResumeDate(resumeAt);
+  if (!date) return;
+  try {
+    if (!resumeChannelReady) {
+      await Notifications.setNotificationChannelAsync(RESUME_CHANNEL_ID, {
+        name: "Horario del GPS",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+      resumeChannelReady = true;
+    }
+    await Notifications.scheduleNotificationAsync({
+      identifier: RESUME_NOTICE_ID,
+      content: {
+        title: "Empezó tu horario",
+        body: "Abrí Lynx para compartir tu ubicación y recibir Turbos.",
+        data: { type: "GPS_RESUME" },
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: RESUME_CHANNEL_ID },
+    });
+  } catch (e) {
+    console.log("[Lynx Location] No se pudo programar el aviso de inicio:", e);
+  }
+};
+
 const pauseTracking = async (resumeAt: string | null) => {
   pausedUntil = resumeAt ?? "";
   await stopLocationUpdatesQuietly();
@@ -488,6 +536,9 @@ const pauseTracking = async (resumeAt: string | null) => {
       if (AppState.currentState === "active") void refreshTrackingPolicy();
     }, PAUSED_POLL_MS);
   }
+  // Solo con un chofer siguiendo: una respuesta que llega después de cerrar
+  // sesión no programa nada.
+  if (wanted) void scheduleResumeNotice(resumeAt);
   setTrackingStatus("off", "schedule", resumeAt);
 };
 
@@ -538,6 +589,7 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
 const startTracking = async (opts: { available?: boolean }): Promise<StartResult> => {
   pausedUntil = null;
   stopPausedPoll();
+  void cancelResumeNotice();
 
   const fg = await Location.getForegroundPermissionsAsync();
   const fgFinal = fg.granted ? fg : await Location.requestForegroundPermissionsAsync();
@@ -609,6 +661,7 @@ export const stopDriverTracking = async (opts: { available?: boolean } = {}) => 
   wanted = null;
   pausedUntil = null;
   stopPausedPoll();
+  await cancelResumeNotice();
   await stopLocationUpdatesQuietly();
   try {
     await flushDriverPositions({ available: opts.available });

@@ -34,6 +34,8 @@ const intervals = new Map<number, { fn: () => void; ms: number }>();
 let nextInterval = 1;
 (globalThis as any).setInterval = (fn: () => void, ms: number) => { const id = nextInterval++; intervals.set(id, { fn, ms }); return id; };
 (globalThis as any).clearInterval = (id: number) => { intervals.delete(id); };
+// Avisos locales programados (expo-notifications), por identificador.
+const notices = { scheduled: new Map<string, any>(), channels: [] as any[], cancels: 0 };
 const fix = () => ({ coords: { latitude: -34.6, longitude: -58.4, accuracy: 10, speed: 0, heading: 0 }, timestamp: Date.now() });
 
 const MOCKS: Record<string, any> = {
@@ -50,7 +52,14 @@ const MOCKS: Record<string, any> = {
   },
   "expo-task-manager": { defineTask: () => {} },
   "expo-battery": { getBatteryLevelAsync: async () => 0.5 },
-  "expo-notifications": { addNotificationReceivedListener: (fn: () => void) => { pushListeners.push(fn); return { remove: () => {} }; } },
+  "expo-notifications": {
+    addNotificationReceivedListener: (fn: () => void) => { pushListeners.push(fn); return { remove: () => {} }; },
+    setNotificationChannelAsync: async (id: string, channel: any) => { notices.channels.push([id, channel]); return null; },
+    scheduleNotificationAsync: async (req: any) => { notices.scheduled.set(req.identifier, req); return req.identifier; },
+    cancelScheduledNotificationAsync: async (id: string) => { notices.cancels++; notices.scheduled.delete(id); },
+    SchedulableTriggerInputTypes: { DATE: "date" },
+    AndroidImportance: { DEFAULT: 5 },
+  },
   "@react-native-async-storage/async-storage": {
     __esModule: true,
     default: {
@@ -311,6 +320,63 @@ const check = async (name: string, fn: () => unknown) => {
     correrIntervalos();
     await settle();
     assert.deepEqual([gets.length, intervals.size], [0, 0]);
+  });
+
+  /* ===== Aviso «Empezó tu horario» ===== */
+
+  const avisos = () => [...notices.scheduled.values()];
+  const reiniciarAvisos = () => { notices.scheduled.clear(); notices.channels = []; notices.cancels = 0; };
+
+  await check("en pausa programa «Empezó tu horario» para la próxima hora de inicio, en su canal", async () => {
+    const gps = nuevo();
+    reiniciarAvisos();
+    policy = () => fuera("07:00");
+    const antes = Date.now();
+    await gps.startDriverTracking({ available: true });
+    await settle();
+    assert.equal(avisos().length, 1);
+    const [aviso] = avisos();
+    assert.equal(aviso.identifier, gps.RESUME_NOTICE_ID);
+    assert.deepEqual([aviso.content.title, aviso.content.body], ["Empezó tu horario", "Abrí Lynx para compartir tu ubicación y recibir Turbos."]);
+    assert.equal(aviso.content.data.type, "GPS_RESUME");
+    assert.equal(aviso.trigger.type, "date");
+    assert.equal(aviso.trigger.channelId, gps.RESUME_CHANNEL_ID);
+    const at = aviso.trigger.date.getTime();
+    assert.ok(at > antes && at <= antes + 24 * 3600_000, "dentro de las próximas 24 h");
+    assert.equal(new Date(at - 3 * 3600_000).toISOString().slice(11, 16), "07:00", "a las 07:00 de Buenos Aires");
+    assert.deepEqual(notices.channels.map(([id, c]) => [id, c.name]), [[gps.RESUME_CHANNEL_ID, "Horario del GPS"]]);
+  });
+
+  await check("una pausa nueva reemplaza el aviso (mismo identificador) y al volver el GPS se cancela", async () => {
+    const gps = nuevo();
+    reiniciarAvisos();
+    policy = () => fuera("07:00");
+    await gps.startDriverTracking({ available: true });
+    policy = () => fuera("08:30"); // cambiaron la franja en el panel
+    correrIntervalos();
+    await settle();
+    assert.equal(avisos().length, 1, "uno solo");
+    assert.equal(new Date(avisos()[0].trigger.date.getTime() - 3 * 3600_000).toISOString().slice(11, 16), "08:30");
+
+    policy = enFranja;
+    appState.listeners.forEach((fn) => fn("active"));
+    await settle();
+    assert.equal(native.starts, 1);
+    assert.equal(avisos().length, 0, "con el GPS prendido no hay aviso pendiente");
+  });
+
+  await check("al cerrar sesión se cancela, y una respuesta que llega después no lo vuelve a programar", async () => {
+    const gps = nuevo();
+    reiniciarAvisos();
+    policy = () => fuera("07:00");
+    await gps.startDriverTracking({ available: true });
+    await settle();
+    assert.equal(avisos().length, 1);
+    storage.set(BUFFER_KEY, JSON.stringify(positions(2)));
+    respond = () => parseJsonBody(JSON.stringify({ ok: true, accepted: 0, duplicated: 2, tracking: { activo: false, motivo: "fuera_de_franja", reanuda_a: "07:00" } }), 200);
+    await gps.stopDriverTracking({ available: false });
+    await settle();
+    assert.equal(avisos().length, 0);
   });
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
