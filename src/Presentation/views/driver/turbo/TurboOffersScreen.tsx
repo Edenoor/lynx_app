@@ -24,6 +24,7 @@ import type { DriverStackParamList } from "../../../navigator/DriverStackNavigat
 import { acceptOffer, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
 import { AcceptOutcome, acceptWithConfirm, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
 import { errorMessage } from "../errorMessage";
+import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboOffersScreen">;
 type Offer = WithLocalExpiry<TurboOffer>;
@@ -73,6 +74,9 @@ export default function TurboOffersScreen({ navigation }: Props) {
       if (visible) setNotice(errorMessage(r.error, "Este Turbo ya no está disponible."));
       return;
     }
+    // Un Turbo asignado mantiene el GPS fuera del horario: si estaba en pausa,
+    // vuelve en el acto.
+    void refreshTrackingPolicy();
     if (visible) {
       setNotice("Turbo asignado. Ya está en tus recorridos.");
       navigation.navigate("RouteDetailScreen", { routeId: o.route_id });

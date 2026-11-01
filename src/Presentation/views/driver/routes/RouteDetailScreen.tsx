@@ -28,6 +28,7 @@ import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode"
 import DeclaredCountForm from "./DeclaredCountForm";
 import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
 import { turboPickupError, turboPickupItems } from "./turboPickup";
+import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 
@@ -65,11 +66,15 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     try { await fn(); await load(); } catch (e: any) { (onError ?? setError)(errorMessage(e, "No se pudo completar la acción")); } finally { setBusy(false); }
   };
 
+  // Con el recorrido cargado o en curso el GPS sigue fuera del horario: si
+  // estaba en pausa (antes de las 07:00, después de las 22:00) se pregunta en
+  // el acto, sin esperar al sondeo ni a volver a primer plano.
   const onConfirmLoad = () =>
     act(async () => {
       const n = Number(count);
       if (!Number.isInteger(n) || n < 0) throw new Error("Ingresá la cantidad de bultos que recibiste");
       const r = await confirmLoad(routeId, n);
+      void refreshTrackingPolicy();
       if (!r.loaded && r.discrepancy) {
         Alert.alert(
           "La cantidad no coincide",
@@ -81,6 +86,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const onStart = () =>
     act(async () => {
       const r = await startRoute(routeId);
+      void refreshTrackingPolicy();
       // Flex que no figura «En camino» en Mercado Libre: se avisa, no se frena.
       if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
     });

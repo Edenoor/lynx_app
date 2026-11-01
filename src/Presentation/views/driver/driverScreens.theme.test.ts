@@ -209,6 +209,7 @@ const onboarding = {
 const UserContext = RealReact.createContext({ user: null, isAuthLoading: false });
 // Preferencia guardada en el dispositivo (AsyncStorage) y lo que se escribe.
 const storage = { stored: { version: 1, colorMode: "system", style: "marble", radius: "rounded" } as any, saved: [] as any[] };
+const gpsPolicy = { refreshes: 0 };
 const RELATIVE_MOCKS: [string, any][] = [
   ["config/Api", {
     getJson: (p: string) => reply("GET", p), postJson: (p: string) => reply("POST", p), putJson: (p: string) => reply("PUT", p),
@@ -217,6 +218,8 @@ const RELATIVE_MOCKS: [string, any][] = [
   ["Envios/ViewModel", { __esModule: true, default: () => envios }],
   ["client/Landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, username: "vendedor", rol: "SELLER" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
   ["config/Push", { setupPushAndRegisterDevice: async () => null, attachNotificationListeners: () => () => {} }],
+  // Cuántas veces una pantalla pidió la política del GPS (franja horaria).
+  ["config/DriverLocation", { refreshTrackingPolicy: () => { gpsPolicy.refreshes++; return Promise.resolve(); } }],
   ["landing/ViewModel", { __esModule: true, default: () => ({ user: { first_name: "Ana María", email: "ana@lynx.test", username: "ana" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
   ["remote/api/ApiDelivery", { ApiDelivery: { post: () => { throw new Error("sin red en la prueba"); } } }],
   ["components/LynxPulseLoader", { LynxPulseLoader: host("LynxPulseLoader") }],
@@ -656,9 +659,10 @@ const setDriverApi = () => {
     let tree = await mount(screens[5][1]());
     check("Turbo: consulta las mismas ofertas", api.calls[0] === "GET /v2/turbo/offers/mine");
     const card90 = () => all(tree, (x) => x.type === "View" && flat(x.props.style).gap === 6 && textOf(x).includes("Turbo #90"))[0];
-    api.calls = [];
+    api.calls = []; gpsPolicy.refreshes = 0;
     pressable(card90(), "Acepto").props.onPress();
     tree = await settle();
+    check("Turbo: aceptado, pregunta la política del GPS (un Turbo asignado lo mantiene prendido)", gpsPolicy.refreshes === 1, String(gpsPolicy.refreshes));
     check("Turbo: aceptar hace el mismo pedido y abre el recorrido", api.calls[0] === "POST /v2/turbo/offers/90/accept" && same(lastNav(), ["navigate", "RouteDetailScreen", { routeId: 90 }]));
     setDriverApi();
     tree = await mount(screens[5][1]());
@@ -708,9 +712,10 @@ const setDriverApi = () => {
     setDriverApi();
     api.replies["POST /v2/turbo/offers/90/accept"] = { ok: false, status: 409, code: "TAKEN", error: "ya lo tomó otro chofer" };
     tree = await mount(screens[5][1]());
-    api.calls = [];
+    api.calls = []; gpsPolicy.refreshes = 0;
     pressable(card90(), "Acepto").props.onPress();
     tree = await settle();
+    check("Turbo: si el Turbo ya no está (409), no pregunta la política del GPS", gpsPolicy.refreshes === 0, String(gpsPolicy.refreshes));
     check("Turbo: 409 TAKEN saca la tarjeta con el mensaje del servidor, sin reintentar", !textOf(tree).includes("Turbo #90") && textOf(tree).includes("ya lo tomó otro chofer") && api.calls.filter((c) => c.endsWith("/accept")).length === 1);
 
     // «Paso» sin respuesta: la tarjeta sigue (si no, vuelve en el próximo sondeo).

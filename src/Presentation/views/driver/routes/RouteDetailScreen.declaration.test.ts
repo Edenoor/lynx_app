@@ -71,6 +71,9 @@ const MOCKS: Record<string, any> = {
   "@react-navigation/native": { useIsFocused: () => true },
 };
 const nav = { navigate: () => {}, goBack: () => {}, addListener: () => () => {} };
+// DriverLocation simulado: cuántas veces la pantalla pidió la política del GPS.
+const gps = { refreshes: 0 };
+const DriverLocationMock = { refreshTrackingPolicy: () => { gps.refreshes++; return Promise.resolve(); } };
 
 const cache = new Map<string, { exports: any }>();
 function load(file: string): any {
@@ -89,6 +92,7 @@ function load(file: string): any {
     if (spec.startsWith(".")) {
       const base = path.resolve(path.dirname(file), spec);
       if (base.endsWith(path.join("config", "Api"))) return ApiMock;
+      if (base.endsWith(path.join("config", "DriverLocation"))) return DriverLocationMock;
       for (const ext of [".ts", ".tsx"]) if (fs.existsSync(base + ext)) return load(base + ext);
       throw new Error("no encuentro " + spec + " desde " + file);
     }
@@ -391,6 +395,43 @@ const check = async (name: string, fn: () => unknown) => {
     await tick(); await tick();
     assert.deepEqual(setsAt(IDX.error).filter(Boolean), [TURBO_NOT_IN_ROUTE_MESSAGE]);
     postImpl = async () => ({ ok: true });
+  });
+
+  /* ===== GPS en pausa por la franja: cargar o salir lo vuelve a preguntar ===== */
+
+  const delivery = (status: string) => route({ type: "DELIVERY", status, load_expected_count: 12, scheduled_date: "2026-10-26", stops: [stop({ type: "DELIVERY", status: "PENDING" })] });
+
+  await check("GPS: «Salir a la calle» pregunta la política del GPS apenas el servidor confirma", async () => {
+    putImpl = async () => ({ ok: true, route: delivery("IN_PROGRESS") });
+    gps.refreshes = 0;
+    const t = draw(delivery("LOADED"));
+    pressableWith(t, "Salir a la calle").props.onPress();
+    await tick(); await tick();
+    assert.deepEqual(puts().map((c) => c[1]), ["/v2/routes/5/start"]);
+    assert.equal(gps.refreshes, 1);
+    putImpl = async () => ({ ok: true });
+  });
+
+  await check("GPS: «Confirmar» la carga también pregunta; si el servidor la rechaza, no", async () => {
+    putImpl = async () => ({ ok: true, loaded: true, discrepancy: null, route: delivery("LOADED") });
+    gps.refreshes = 0;
+    states = [];
+    const draft = (r: any) => {
+      states = [r, false, null, "12", undefined, null];
+      stateIdx = 0; sets = []; calls.length = 0; alerts.length = 0;
+      currentRoute = r;
+      return render(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: r.id, name: "MAÑANERO 02" } } }));
+    };
+    pressableWith(draft(delivery("ASSIGNED")), "Confirmar").props.onPress();
+    await tick(); await tick();
+    assert.deepEqual(puts().map((c) => [c[1], c[2]]), [["/v2/routes/5/confirm-load", { load_confirmed_count: 12 }]]);
+    assert.equal(gps.refreshes, 1, "después de confirmar");
+
+    putImpl = async () => ({ ok: false, status: 409, error: "el recorrido no está asignado" });
+    pressableWith(draft(delivery("ASSIGNED")), "Confirmar").props.onPress();
+    await tick(); await tick();
+    assert.equal(gps.refreshes, 1, "con error no se pregunta");
+    putImpl = async () => ({ ok: true });
   });
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
