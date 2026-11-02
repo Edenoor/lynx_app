@@ -68,7 +68,9 @@ type PendingPosition = {
 export type StartResult =
   | { ok: true; mode: "background" | "foreground-only" }
   | { ok: true; mode: "paused"; resumeAt: string | null }
-  | { ok: false; reason: "foreground-permission" | "background-permission" | "error"; error?: string };
+  | { ok: false; reason: "foreground-permission" | "background-permission" | "error"; error?: string }
+  // Un cierre de sesión (o un arranque posterior) lo dejó sin efecto.
+  | { ok: false; reason: "cancelled" };
 
 /* =========================
    Buffer local con candado
@@ -473,6 +475,10 @@ let wanted: { available?: boolean } | null = null;
 // no la dijo. null = no está en pausa.
 let pausedUntil: string | null = null;
 let pausedPollTimer: ReturnType<typeof setInterval> | null = null;
+// Cada arranque y cada cierre de sesión la incrementan. Un arranque (o una
+// consulta de la franja) que estaba esperando la red, los permisos o el
+// servicio nativo compara la suya al volver: si cambió, no prende nada.
+let generation = 0;
 
 const stopPausedPoll = () => {
   if (pausedPollTimer !== null) {
@@ -559,11 +565,12 @@ let policyInflight: Promise<void> | null = null;
 export const refreshTrackingPolicy = (): Promise<void> => {
   if (!wanted) return Promise.resolve();
   if (policyInflight) return policyInflight;
+  const gen = generation;
   const run = (async () => {
     const policy = await fetchTrackingPolicy();
-    if (!policy || !wanted) return;
+    if (!policy || !wanted || gen !== generation) return;
     if (!policy.activo) await pauseTracking(policy.reanudaA);
-    else if (pausedUntil !== null && AppState.currentState === "active") await startTracking(wanted);
+    else if (pausedUntil !== null && AppState.currentState === "active") await startTracking(wanted, gen);
   })();
   policyInflight = run;
   return run.finally(() => {
@@ -575,24 +582,27 @@ export const startDriverTracking = async (opts: { available?: boolean } = {}): P
   sessionExpired = false;
   trackingForbidden = false;
   wanted = { ...opts };
+  const gen = ++generation;
 
   // Fuera del horario no se arranca ni se piden permisos. Sin respuesta se
   // arranca como siempre: el primer envío trae la política.
   const policy = await fetchTrackingPolicy();
+  if (gen !== generation) return { ok: false, reason: "cancelled" };
   if (policy && !policy.activo) {
     await pauseTracking(policy.reanudaA);
     return { ok: true, mode: "paused", resumeAt: policy.reanudaA };
   }
-  return startTracking(opts);
+  return startTracking(opts, gen);
 };
 
-const startTracking = async (opts: { available?: boolean }): Promise<StartResult> => {
+const startTracking = async (opts: { available?: boolean }, gen: number): Promise<StartResult> => {
   pausedUntil = null;
   stopPausedPoll();
   void cancelResumeNotice();
 
   const fg = await Location.getForegroundPermissionsAsync();
   const fgFinal = fg.granted ? fg : await Location.requestForegroundPermissionsAsync();
+  if (gen !== generation) return { ok: false, reason: "cancelled" };
   if (!fgFinal.granted) {
     setTrackingStatus("off", "foreground-permission");
     return { ok: false, reason: "foreground-permission" };
@@ -602,6 +612,7 @@ const startTracking = async (opts: { available?: boolean }): Promise<StartResult
   // en ese orden y en Android 11+ lo lleva a Ajustes).
   const bg = await Location.getBackgroundPermissionsAsync();
   const bgFinal = bg.granted ? bg : await Location.requestBackgroundPermissionsAsync();
+  if (gen !== generation) return { ok: false, reason: "cancelled" };
 
   if (!bgFinal.granted) {
     setTrackingStatus("foreground-only", "background-permission");
@@ -640,6 +651,13 @@ const startTracking = async (opts: { available?: boolean }): Promise<StartResult
         },
       });
     }
+    // El cierre de sesión llegó mientras se abría el servicio y no lo vio
+    // prendido: se apaga acá. Si en cambio ya hay otro arranque (un login
+    // nuevo), el servicio queda para ese.
+    if (gen !== generation) {
+      if (!wanted) await stopLocationUpdatesQuietly();
+      return { ok: false, reason: "cancelled" };
+    }
     setTrackingStatus("background");
     stopFallback();
     startHeartbeat();
@@ -647,6 +665,7 @@ const startTracking = async (opts: { available?: boolean }): Promise<StartResult
     return { ok: true, mode: "background" };
   } catch (e: any) {
     console.log("[Lynx Location] No se pudo iniciar el seguimiento en segundo plano:", e?.message ?? e);
+    if (gen !== generation) return { ok: false, reason: "cancelled" };
     setTrackingStatus("fallback", String(e?.message ?? e));
     startFallback();
     startHeartbeat();
@@ -658,6 +677,7 @@ const startTracking = async (opts: { available?: boolean }): Promise<StartResult
 // Fin de operación: se apaga la captura y se sube lo que quede, informando
 // la disponibilidad. Llamar ANTES de borrar la sesión (necesita el token).
 export const stopDriverTracking = async (opts: { available?: boolean } = {}) => {
+  generation++;
   wanted = null;
   pausedUntil = null;
   stopPausedPoll();

@@ -22,7 +22,10 @@ const ts = require(path.join(APP, "node_modules", "typescript"));
 
 const BUFFER_KEY = "driver_positions_buffer";
 const storage = new Map<string, string>();
-const native = { stops: 0, starts: 0, started: true, permissionChecks: 0 };
+const native = { stops: 0, starts: 0, started: true, permissionChecks: 0, background: true };
+// Pausas para cortar un arranque a mitad de camino: mientras haya una promesa,
+// el permiso o el servicio nativo esperan a que se resuelva.
+const holds: { permission?: Promise<void>; start?: Promise<void> } = {};
 let posts: any[] = [];
 let respond: (body: any) => any = () => ({ ok: true, status: 200 });
 // GET /v2/driver-locations/me/policy (franja horaria).
@@ -42,9 +45,10 @@ const MOCKS: Record<string, any> = {
   "expo-location": {
     hasStartedLocationUpdatesAsync: async () => native.started,
     stopLocationUpdatesAsync: async () => { native.stops++; native.started = false; },
-    startLocationUpdatesAsync: async () => { native.starts++; native.started = true; },
-    getForegroundPermissionsAsync: async () => { native.permissionChecks++; return { granted: true }; },
-    getBackgroundPermissionsAsync: async () => { native.permissionChecks++; return { granted: true }; },
+    startLocationUpdatesAsync: async () => { native.starts++; await holds.start; native.started = true; },
+    getForegroundPermissionsAsync: async () => { native.permissionChecks++; await holds.permission; return { granted: true }; },
+    getBackgroundPermissionsAsync: async () => { native.permissionChecks++; return { granted: native.background }; },
+    requestBackgroundPermissionsAsync: async () => ({ granted: native.background }),
     getLastKnownPositionAsync: async () => fix(),
     getCurrentPositionAsync: async () => fix(),
     Accuracy: { High: 4, Balanced: 3 },
@@ -377,6 +381,178 @@ const check = async (name: string, fn: () => unknown) => {
     await gps.stopDriverTracking({ available: false });
     await settle();
     assert.equal(avisos().length, 0);
+  });
+
+  /* ===== Cierre de sesión con un arranque a mitad de camino ===== */
+
+  // Una respuesta que se entrega a mano: el arranque queda esperando la red.
+  const pendiente = () => {
+    let release: (answer: any) => void = () => {};
+    const answer = new Promise((r) => { release = r; });
+    return { answer, release: (a: any) => release(a) };
+  };
+  const apagado = () => {
+    assert.equal(native.started, false, "el servicio de ubicación queda apagado");
+    assert.equal(intervals.size, 0, "sin latido, sin modo de respaldo ni sondeo");
+  };
+
+  for (const [nombre, respuesta] of [
+    ["en horario", enFranja],
+    ["sin el endpoint de la franja (404)", () => parseJsonBody(JSON.stringify({ message: "Not found" }), 404)],
+    ["sin red", () => { throw new Error("sin red"); }],
+  ] as const) {
+    await check(`logout mientras se consulta la franja (${nombre}): no prende el GPS`, async () => {
+      const gps = nuevo();
+      const red = pendiente();
+      policy = () => red.answer.then(respuesta);
+      const start = gps.startDriverTracking({ available: true });
+      await settle();
+      await gps.stopDriverTracking({ available: false });
+      red.release(null);
+      const resultado = await start;
+      await settle();
+      assert.deepEqual([native.starts, native.permissionChecks], [0, 0], "ni servicio ni permisos");
+      apagado();
+      assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+    });
+  }
+
+  await check("logout mientras se consulta la franja (fuera de horario): no pausa ni programa el aviso", async () => {
+    const gps = nuevo();
+    reiniciarAvisos();
+    const red = pendiente();
+    policy = () => red.answer.then(() => fuera("07:00"));
+    const seen: any[] = [];
+    gps.onTrackingChange((s: any) => seen.push(s));
+    const start = gps.startDriverTracking({ available: true });
+    await settle();
+    await gps.stopDriverTracking({ available: false });
+    red.release(null);
+    const resultado = await start;
+    await settle();
+    assert.deepEqual([avisos().length, seen.length], [0, 0], "sin aviso y sin «GPS en pausa»");
+    apagado();
+    assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+  });
+
+  await check("logout mientras se piden los permisos: no prende el GPS", async () => {
+    const gps = nuevo();
+    policy = enFranja;
+    const permiso = pendiente();
+    holds.permission = permiso.answer as Promise<void>;
+    const start = gps.startDriverTracking({ available: true });
+    await settle();
+    await gps.stopDriverTracking({ available: false });
+    permiso.release(null);
+    holds.permission = undefined;
+    const resultado = await start;
+    await settle();
+    assert.equal(native.starts, 0);
+    apagado();
+    assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+  });
+
+  await check("logout mientras se piden los permisos, sin «siempre»: no arranca el modo de respaldo", async () => {
+    const gps = nuevo();
+    policy = enFranja;
+    native.background = false;
+    const permiso = pendiente();
+    holds.permission = permiso.answer as Promise<void>;
+    const start = gps.startDriverTracking({ available: true });
+    await settle();
+    await gps.stopDriverTracking({ available: false });
+    permiso.release(null);
+    holds.permission = undefined;
+    try {
+      const resultado = await start;
+      await settle();
+      apagado();
+      assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+    } finally {
+      native.background = true;
+    }
+  });
+
+  await check("logout mientras se abre el servicio nativo: se apaga al terminar de abrir", async () => {
+    const gps = nuevo();
+    policy = enFranja;
+    const servicio = pendiente();
+    holds.start = servicio.answer as Promise<void>;
+    const start = gps.startDriverTracking({ available: true });
+    await settle();
+    assert.equal(native.starts, 1, "ya se pidió abrir el servicio");
+    await gps.stopDriverTracking({ available: false });
+    servicio.release(null);
+    holds.start = undefined;
+    const resultado = await start;
+    await settle();
+    apagado();
+    assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+  });
+
+  await check("logout mientras una consulta de la franja (en pausa) está en curso: no lo vuelve a prender", async () => {
+    const gps = nuevo();
+    policy = () => fuera("07:00");
+    assert.equal((await gps.startDriverTracking({ available: true })).mode, "paused");
+    const red = pendiente();
+    policy = () => red.answer.then(enFranja);
+    appState.listeners.forEach((fn) => fn("active"));
+    await settle();
+    await gps.stopDriverTracking({ available: false });
+    red.release(null);
+    await settle();
+    assert.equal(native.starts, 0);
+    apagado();
+  });
+
+  await check("dos arranques a la vez: el primero queda sin efecto y el GPS se abre una sola vez", async () => {
+    const gps = nuevo();
+    const red = pendiente();
+    policy = () => red.answer.then(enFranja);
+    const primero = gps.startDriverTracking({ available: true });
+    await settle();
+    policy = enFranja;
+    assert.equal((await gps.startDriverTracking({ available: true })).mode, "background");
+    red.release(null);
+    const resultado = await primero;
+    await settle();
+    assert.deepEqual([native.starts, native.started], [1, true]);
+    assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+  });
+
+  await check("logout y login nuevo con el arranque viejo pendiente: queda el del login nuevo", async () => {
+    const gps = nuevo();
+    const red = pendiente();
+    policy = () => red.answer.then(enFranja);
+    const viejo = gps.startDriverTracking({ available: true });
+    await settle();
+    await gps.stopDriverTracking({ available: false });
+    policy = enFranja;
+    assert.equal((await gps.startDriverTracking({ available: true })).mode, "background");
+    red.release(null);
+    const resultado = await viejo;
+    await settle();
+    assert.deepEqual([native.starts, native.started], [1, true], "un solo servicio, prendido");
+    assert.equal(intervals.size, 1, "solo el latido del login nuevo");
+    assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
+  });
+
+  await check("login nuevo mientras el arranque viejo abre el servicio: no se lo apaga al nuevo", async () => {
+    const gps = nuevo();
+    policy = enFranja;
+    const servicio = pendiente();
+    holds.start = servicio.answer as Promise<void>;
+    const viejo = gps.startDriverTracking({ available: true });
+    await settle();
+    await gps.stopDriverTracking({ available: false });
+    holds.start = undefined;
+    const nuevoLogin = gps.startDriverTracking({ available: true });
+    servicio.release(null);
+    const resultado = await viejo;
+    assert.equal((await nuevoLogin).mode, "background");
+    await settle();
+    assert.equal(native.started, true, "sigue prendido para el login nuevo");
+    assert.deepEqual(resultado, { ok: false, reason: "cancelled" });
   });
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
