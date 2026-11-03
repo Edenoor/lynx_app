@@ -22,7 +22,8 @@ import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { acceptOffer, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
-import { AcceptOutcome, acceptWithConfirm, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
+import { AcceptOutcome, acceptWithConfirm, NO_RETIRAR_ANTES, plazoParaResponder, programadoLabel, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
+import { todayIso } from "../routes/routesApi";
 import { errorMessage } from "../errorMessage";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 
@@ -207,20 +208,32 @@ export default function TurboOffersScreen({ navigation }: Props) {
               const urgent = left <= 15;
               const mine = pending?.offer.route_id === item.route_id ? pending : null;
               const disabled = busy !== null || pending !== null || left === 0;
+              // Programado (ML lo prometió para otro día): el día y la franja, y
+              // que no se retire antes.
+              const programado = programadoLabel(item, todayIso(), hhmm);
               return (
                 <View style={[theme.card, styles.card, urgent && styles.cardUrgent]}>
                   <View style={styles.cardTop}>
                     <Text style={styles.cardType}>Turbo #{item.route_id}</Text>
                     <View style={[styles.badge, urgent && styles.badgeUrgent]}>
                       <Ionicons name="time-outline" size={14} color={urgent ? theme.status.rejected.icon : theme.text.primary} />
-                      <Text style={[styles.badgeText, urgent && styles.badgeTextUrgent]}>{left === 0 ? "vencida" : `${left} s para responder`}</Text>
+                      <Text style={[styles.badgeText, urgent && styles.badgeTextUrgent]}>{plazoParaResponder(left)}</Text>
                     </View>
                   </View>
+                  {programado ? (
+                    <>
+                      <Text style={styles.programado}>{programado}</Text>
+                      <View style={styles.warnBox}>
+                        <Ionicons name="alert-circle-outline" size={18} color={theme.status.pending.text} />
+                        <Text style={styles.warnText}>{NO_RETIRAR_ANTES}</Text>
+                      </View>
+                    </>
+                  ) : null}
                   <Text style={styles.line}><Text style={styles.label}>Retiro · </Text>{item.store_name ?? "tienda"}{item.store_address ? ` · ${item.store_address}` : ""}</Text>
                   <Text style={styles.line}><Text style={styles.label}>Entrega · </Text>{item.receiver_name ?? "comprador"}{item.delivery_address ? ` · ${item.delivery_address}` : ""}{item.delivery_postal_code ? ` · CP ${item.delivery_postal_code}` : ""}</Text>
                   <Text style={styles.cardMeta}>
                     {km(item.distance_km) ? `Tienda a ${km(item.distance_km)} de vos` : ""}
-                    {item.deadline_at ? ` · entregar antes de las ${hhmm(item.deadline_at)}` : ""}
+                    {item.deadline_at && !programado ? ` · entregar antes de las ${hhmm(item.deadline_at)}` : ""}
                   </Text>
                   {mine?.phase === "confirming" ? (
                     <View style={styles.confirming}>
@@ -282,6 +295,9 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   line: { color: t.text.primary, fontSize: 14 },
   label: { color: t.text.secondary, fontWeight: "600" },
   cardMeta: { color: t.text.secondary, fontSize: 13 },
+  programado: { color: t.status.pending.text, fontSize: 15, fontWeight: "700" },
+  warnBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", borderWidth: 1, borderColor: t.status.pending.border, backgroundColor: t.status.pending.background, borderRadius: t.radius.md, padding: 10 },
+  warnText: { flex: 1, color: t.text.primary, fontSize: 13 },
   badge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: t.borders.default },
   badgeUrgent: { borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background },
   badgeText: { color: t.text.primary, fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },

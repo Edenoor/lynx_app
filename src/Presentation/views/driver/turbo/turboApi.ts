@@ -26,12 +26,18 @@ export type TurboOffer = {
   delivery_postal_code: string | null;
   receiver_name: string | null;
   seconds_left?: number;
+  // Programado: Mercado Libre lo prometió para otro día (la fecha del
+  // recorrido) y la franja empieza a esta hora. Para hoy, la fecha de hoy.
+  scheduled_date?: string | null;
+  window_start_at?: string | null;
 };
 
 export type TurboDispatch = {
   route_id: number;
-  status: "OFFERING" | "ASSIGNED" | "ESCALATED" | "CANCELLED";
+  status: "SCHEDULED" | "OFFERING" | "ASSIGNED" | "ESCALATED" | "CANCELLED";
   deadline_at: string | null;
+  window_start_at?: string | null;
+  scheduled_date?: string | null;
   distance_km: string | number | null;
   store_name?: string | null;
 };

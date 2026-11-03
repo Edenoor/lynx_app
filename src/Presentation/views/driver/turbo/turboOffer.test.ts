@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/turbo/turboOffer.ts src/Presentation/views/driver/turbo/turboOffer.test.ts
 //   node /tmp/turbo-offer/turboOffer.test.js
 
-import { acceptWithConfirm, isDefinitive, secondsLeft, withLocalExpiry } from "./turboOffer";
+import { acceptWithConfirm, esProgramado, isDefinitive, NO_RETIRAR_ANTES, plazoParaResponder, programadoLabel, secondsLeft, withLocalExpiry } from "./turboOffer";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -54,6 +54,18 @@ class HttpError extends Error {
   eq("HTML con 200 en los tres intentos: no se sabe", await run([html, html, html]), { kind: "unknown", error: "Respuesta inesperada del servidor (200)", calls: 3, sleeps: 2 });
   eq("502 y después asignado", await run([new HttpError("Bad Gateway", 502), { ok: true }]), { kind: "assigned", error: null, calls: 2, sleeps: 1 });
   eq("un solo intento (el del sondeo): sin red queda en «no se sabe»", (await acceptWithConfirm(90, async () => { throw new Error("sin red"); }, { tries: 1, sleep: async () => {} })).kind, "unknown");
+
+  // Programados (promesa de ML para otro día): día, franja y que no se retire antes.
+  const hora = (iso: string) => iso.slice(11, 16);
+  const prog = { scheduled_date: "2026-11-04", window_start_at: "2026-11-04T11:00:00", deadline_at: "2026-11-04T13:00:00" };
+  eq("programado para mañana: día y franja", programadoLabel(prog, "2026-11-03", hora), "Para mañana, miércoles 04/11, de 11:00 a 13:00");
+  eq("programado para dentro de dos días: el día de la semana", programadoLabel(prog, "2026-11-02", hora), "Para miércoles 04/11, de 11:00 a 13:00");
+  eq("sin inicio de franja: antes de la hora límite", programadoLabel({ ...prog, window_start_at: null }, "2026-11-03", hora), "Para mañana, miércoles 04/11, antes de las 13:00");
+  eq("el día prometido ya no es programado", [programadoLabel(prog, "2026-11-04", hora), esProgramado(prog, "2026-11-04")], [null, false]);
+  eq("una oferta de hoy (o sin fecha) no es programada", [programadoLabel({ scheduled_date: null }, "2026-11-03", hora), esProgramado({}, "2026-11-03")], [null, false]);
+  eq("el cartel dice por qué no retirarlo", /app de Flex/.test(NO_RETIRAR_ANTES) && /entregarlo hoy/.test(NO_RETIRAR_ANTES), true);
+  eq("plazo en segundos, minutos u horas", [plazoParaResponder(45), plazoParaResponder(119), plazoParaResponder(720), plazoParaResponder(48000), plazoParaResponder(7200), plazoParaResponder(0)],
+    ["45 s para responder", "119 s para responder", "12 min para responder", "13 h 20 min para responder", "2 h para responder", "vencida"]);
 
   if (failed) { console.log(`\n${failed} prueba(s) fallaron`); process.exit(1); }
   console.log("\nTodas las pruebas pasaron");

@@ -19,6 +19,7 @@ import {
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
+import { NO_RETIRAR_ANTES, programadoLabel } from "../turbo/turboOffer";
 import OutcomeForm from "./OutcomeForm";
 import { buildDeclaration, cobranzaOf, OutcomeDraft } from "./outcomeDeclaration";
 import { errorMessage } from "../errorMessage";
@@ -47,7 +48,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const [count, setCount] = useState("");
   const [openStop, setOpenStop] = useState<number | null>(null);
   // Solo en un Turbo: hasta qué hora hay que entregar (regla de Mercado Libre).
-  const [deadline, setDeadline] = useState<string | null>(null);
+  // Y desde qué hora (el inicio de la franja de ML), para un Turbo de otro día.
+  // Un solo estado: las pruebas de pantalla toman los useState por orden.
+  const [turboWindow, setTurboWindow] = useState<{ deadline: string | null; start: string | null } | null>(null);
+  const deadline = turboWindow?.deadline ?? null;
+  const windowStart = turboWindow?.start ?? null;
 
   const load = useCallback(async () => {
     try { const r = await fetchRoute(routeId); setRoute(r); setError(null); }
@@ -56,7 +61,9 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (route?.type !== "TURBO") return;
-    fetchDispatch(routeId).then((d) => setDeadline(d?.deadline_at ?? null)).catch(() => setDeadline(null));
+    fetchDispatch(routeId)
+      .then((d) => setTurboWindow({ deadline: d?.deadline_at ?? null, start: d?.window_start_at ?? null }))
+      .catch(() => setTurboWindow(null));
   }, [route?.type, routeId]);
 
   // Ejecuta una acción, recarga y muestra el error del servidor si lo hay
@@ -117,6 +124,8 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const today = todayIso();
   const later = startsLater(route, today);
   const day = executionDayLabel(route.scheduled_date, today);
+  // Un Turbo de otro día (programado): se comienza ese día y no se retira antes.
+  const programado = route.type === "TURBO" ? programadoLabel({ scheduled_date: route.scheduled_date, window_start_at: windowStart, deadline_at: deadline }, today, hhmm) : null;
   const inProgress = route.status === "IN_PROGRESS";
   const allClosed = route.stops.every((s) => s.status === "DONE" || s.status === "SKIPPED");
   const declared = isPickup ? declarationSummary(route.stops) : null;
@@ -147,10 +156,18 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
                 <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
                 <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
                 <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos</Text>
-                {route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
+                {programado ? <Text style={styles.deadline}>{programado}</Text>
+                  : route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
               </View>
             )}
           </View>
+
+          {programado ? (
+            <View style={styles.warnBox}>
+              <Ionicons name="alert-circle-outline" size={18} color={theme.status.pending.text} />
+              <Text style={styles.warnText}>{NO_RETIRAR_ANTES}</Text>
+            </View>
+          ) : null}
 
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
@@ -493,6 +510,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
   meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },
   deadline: { color: t.status.pending.text, fontSize: 14, fontWeight: "700", marginTop: 4 },
+  warnBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", borderWidth: 1, borderColor: t.status.pending.border, backgroundColor: t.status.pending.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
+  warnText: { flex: 1, color: t.text.primary, fontSize: 14 },
   link: { color: t.text.accent },
   // Fondo, radio y sombra: ThemedCard.
   panel: { borderColor: t.borders.primary, padding: t.spacing.md, gap: 10 },
