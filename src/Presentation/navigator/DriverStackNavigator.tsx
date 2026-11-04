@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { DriverScreen } from "../views/driver/landing/Driver";
@@ -19,6 +19,9 @@ import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
 import TurboOffersScreen from "../views/driver/turbo/TurboOffersScreen";
 import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
 import TurboTomorrowScreen from "../views/driver/turbo/TurboTomorrowScreen";
+import OfferNoticeBanner from "../components/driver/OfferNoticeBanner";
+import { resetDriverWork } from "../views/driver/work/workSource";
+import { resetOfferStore } from "../views/driver/offers/offerStore";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
@@ -32,13 +35,14 @@ export type DriverStackParamList = {
   AppearanceScreen: undefined;
   DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
-  // Recorridos de reparto, Turbo y ofertas (se entra desde Envíos).
+  // Recorridos de reparto y Turbo por día (se entra desde Envíos).
   RoutesScreen: undefined;
   // Colectas (PICKUP): pestaña de la barra.
   CollectionsScreen: undefined;
   // name: el de la colecta, cuando se conoce (el detalle no lo trae).
   // fromGroup: se abrió desde su grupo Turbo (si no, un Turbo agrupado abre el grupo).
   RouteDetailScreen: { routeId: number; name?: string; fromGroup?: boolean };
+  // Bandeja de ofertas: Turbos, lotes y recorridos ofrecidos.
   TurboOffersScreen: undefined;
   // Varios Turbos de una tienda con un solo retiro.
   TurboGroupScreen: { groupId: number };
@@ -53,7 +57,12 @@ export const DriverStackNavigator = () => {
 
   const onboardingCompleted = state.completedLocal === true;
 
+  // El stack se desmonta al cerrar sesión: lo leído no es del próximo chofer.
+  useEffect(() => () => { resetDriverWork(); resetOfferStore(); }, []);
+
+  // El aviso de oferta va encima de cualquier pantalla y no la bloquea.
   return (
+    <>
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!onboardingCompleted ? (
         <Stack.Screen name="Onboarding" component={OnboardingStackNavigator} />
@@ -85,5 +94,7 @@ export const DriverStackNavigator = () => {
         </>
       )}
     </Stack.Navigator>
+    {onboardingCompleted ? <OfferNoticeBanner /> : null}
+    </>
   );
 };

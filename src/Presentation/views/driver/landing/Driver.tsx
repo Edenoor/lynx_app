@@ -1,6 +1,6 @@
 // src/Presentation/views/driver/DriverScreen.tsx
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
@@ -16,6 +16,7 @@ import MapView, { Marker } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StackScreenProps } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import useViewModel from "./ViewModel";
 import useEnviosViewModel from "../Envios/ViewModel";
@@ -50,8 +51,11 @@ import {
 } from "../../../components/DriverBottomNavigation";
 import DriverPerformanceCard from "../../../components/DriverPerformanceCard";
 import DriverTurboStatusCard from "../../../components/DriverTurboStatusCard";
-import { fetchMyGroups, TurboLoad } from "../turbo/turboApi";
 import { loadText, loadTotal } from "../turbo/turboGroup";
+import MissionCard from "../../../components/driver/MissionCard";
+import { invalidateDriverWork, useDriverWork } from "../work/workSource";
+import { offerNoticeText } from "../offers/offerInbox";
+import { refreshOfferCount, showOfferNotice, useOfferCount } from "../offers/offerStore";
 
 interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
 
@@ -172,11 +176,17 @@ export const DriverScreen = ({ navigation }: Props) => {
 
   const { add } = useNotifications();
 
+  // Recorridos en la calle (misión activa) y ofertas sin contestar: los mismos
+  // datos que Envíos, leídos una vez.
+  const { work } = useDriverWork();
+  const missions = work?.missions ?? [];
+  // Turbos que lleva hoy contra su tope (null: sin dato, un servidor anterior).
+  const turboLoad = work?.turboLoad ?? null;
+  const offerCount = useOfferCount();
+
   const [turboOn, setTurboOn] = useState<boolean>(false);
   // null = todavía no se sabe; false = el coordinador no lo habilitó para turbos.
   const [turboEnabled, setTurboEnabled] = useState<boolean | null>(null);
-  // Turbos que lleva hoy contra su tope (null: sin dato, un servidor anterior).
-  const [turboLoad, setTurboLoad] = useState<TurboLoad | null>(null);
   const [saving, setSaving] = useState(false);
   const [available] = useState<boolean>(true);
   // Modo en que quedó el seguimiento: si no es "background", se muestra un aviso fijo.
@@ -351,10 +361,6 @@ export const DriverScreen = ({ navigation }: Props) => {
             add({ title, body, kind, data });
           },
 
-          // Turbo ofrecido. Si el chofer tocó la notificación, se abre la
-          // pantalla de ofertas (cuenta regresiva y botones); si llegó con la
-          // app abierta, solo se avisa: no se le cambia la pantalla a mitad de
-          // un escaneo o una entrega.
           // Avisos de recorridos: al tocar la notificación se abre lo que
           // corresponde; con la app abierta solo se avisa, sin cambiarle la
           // pantalla en medio de un escaneo o una entrega.
@@ -365,45 +371,48 @@ export const DriverScreen = ({ navigation }: Props) => {
             // 403), se abre la lista. Un recorrido ofrecido se contesta en
             // Recorridos de reparto. El detalle consulta el estado vigente.
             const openList = () => nav.navigate(isCollection ? "CollectionsScreen" : "RoutesScreen");
+            // Lo que muestran Inicio y Envíos cambió (colecta asignada, recorrido actualizado).
+            invalidateDriverWork();
+            if (kind === "ROUTE_OFFER") {
+              const openOffers = () => nav.navigate("TurboOffersScreen");
+              if (source === "response") openOffers();
+              else showOfferNotice({ ...offerNoticeText("ROUTE_OFFER"), open: openOffers });
+              return;
+            }
             const open =
-              kind === "PICKUP_REASSIGNED" || kind === "ROUTE_OFFER" || !routeId
+              kind === "PICKUP_REASSIGNED" || !routeId
                 ? openList
                 : () => nav.navigate("RouteDetailScreen", { routeId, name: raw?.template_name ? String(raw.template_name) : undefined });
             if (source === "response") {
               open();
               return;
             }
-            if (kind === "PICKUP_ASSIGNED" || kind === "ROUTE_CONFIRMATION" || kind === "ROUTE_OFFER") {
+            if (kind === "PICKUP_ASSIGNED" || kind === "ROUTE_CONFIRMATION") {
               const confirmation = kind === "ROUTE_CONFIRMATION" ? confirmationNoticeText(raw, todayIso()) : null;
               Alert.alert(
-                kind === "PICKUP_ASSIGNED" ? "Colecta asignada" : kind === "ROUTE_CONFIRMATION" ? "Confirmación de colecta" : "Recorrido ofrecido",
+                kind === "PICKUP_ASSIGNED" ? "Colecta asignada" : "Confirmación de colecta",
                 kind === "PICKUP_ASSIGNED"
                   ? `Se te asignó la colecta${routeId ? ` #${routeId}` : ""}. Confirmá si podés hacerla.`
                   : confirmation
                   ? `${confirmation.title}. ${confirmation.body}`
-                  : "Contestá desde Envíos › Recorridos de reparto antes de que venza.",
+                  : "Confirmá si podés hacerla.",
                 [
                   { text: "Ahora no", style: "cancel" },
-                  { text: kind === "ROUTE_OFFER" ? "Ver ofertas" : "Ver colecta", onPress: open },
+                  { text: "Ver colecta", onPress: open },
                 ],
               );
             }
           },
 
+          // Turbo ofrecido: si el chofer tocó la notificación se abre la
+          // bandeja; con la app abierta, un aviso arriba que no lo frena.
           onTurboOffer: ({ source, raw }) => {
             const openOffers = () => navigation.navigate("TurboOffersScreen" as never);
             if (source === "response") {
               openOffers();
               return;
             }
-            Alert.alert(
-              "Turbo disponible",
-              `${raw?.storeName ? `${raw.storeName}. ` : ""}Contestá antes de que venza: el primero que acepta se lo queda.`,
-              [
-                { text: "Ahora no", style: "cancel" },
-                { text: "Ver ofertas", onPress: openOffers },
-              ],
-            );
+            showOfferNotice({ ...offerNoticeText("TURBO_OFFER", raw), open: openOffers });
           },
         });
 
@@ -511,11 +520,7 @@ export const DriverScreen = ({ navigation }: Props) => {
     };
   }, [username]);
 
-  useEffect(() => {
-    const cargar = () => { fetchMyGroups(todayIso()).then((r) => setTurboLoad(r.load)).catch(() => {}); };
-    cargar();
-    return navigation.addListener("focus", cargar);
-  }, [navigation]);
+  useFocusEffect(useCallback(() => { void refreshOfferCount(); }, []));
 
   const toggleTurbo = async (val: boolean) => {
     if (!username) return;
@@ -703,6 +708,36 @@ export const DriverScreen = ({ navigation }: Props) => {
           </Pressable>
         </View>
 
+        {missions.length ? (
+          <View style={styles.missions}>
+            <MissionCard mission={missions[0]} onPress={() => (navigation as any).navigate(missions[0].target.screen, missions[0].target.params)} />
+            {missions.slice(1).map((m) => (
+              <MissionCard key={m.key} mission={m} compact onPress={() => (navigation as any).navigate(m.target.screen, m.target.params)} />
+            ))}
+          </View>
+        ) : null}
+
+        <Pressable
+          style={[theme.listItem, styles.offersRow, offerCount ? styles.offersRowActive : null]}
+          onPress={() => navigation.navigate("TurboOffersScreen")}
+          accessibilityRole="button"
+          accessibilityLabel={`Ofertas${offerCount ? `: ${offerCount} sin contestar` : ""}`}
+        >
+          <Ionicons name="pricetags-outline" size={20} color={offerCount ? theme.text.accent : theme.text.muted} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.offersTitle}>Ofertas</Text>
+            <Text style={styles.offersMeta}>
+              {offerCount ? `${offerCount === 1 ? "Una oferta" : `${offerCount} ofertas`} sin contestar` : "Turbos y recorridos ofrecidos"}
+            </Text>
+          </View>
+          {offerCount ? (
+            <View style={styles.offersBadge}>
+              <Text style={styles.offersBadgeText}>{offerCount > 99 ? "99+" : offerCount}</Text>
+            </View>
+          ) : null}
+          <Ionicons name="chevron-forward" size={18} color={theme.text.muted} />
+        </Pressable>
+
         <View style={styles.bottomCards}>
           <DriverTurboStatusCard
             active={turboOn}
@@ -881,6 +916,50 @@ export const DriverScreen = ({ navigation }: Props) => {
 };
 
 const makeStyles = (t: Theme) => StyleSheet.create({
+  missions: {
+    marginTop: t.spacing.md,
+  },
+
+  offersRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: t.spacing.md,
+    marginTop: t.spacing.md,
+  },
+
+  offersRowActive: {
+    borderWidth: 1,
+    borderColor: t.text.accent,
+  },
+
+  offersTitle: {
+    color: t.text.primary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  offersMeta: {
+    color: t.text.secondary,
+    fontSize: 13,
+  },
+
+  offersBadge: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 7,
+    borderRadius: 999,
+    backgroundColor: t.status.rejected.solid,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  offersBadgeText: {
+    color: t.status.rejected.onSolid,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
   container: {
     flex: 1,
     backgroundColor: t.surfaces.screen,

@@ -22,6 +22,8 @@ import StatusChip from "../../../components/StatusChip";
 import DriverBottomNavigation, {
   DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
+import ContinueBar, { CONTINUE_BAR_SPACE } from "../../../components/driver/ContinueBar";
+import { useDriverWork } from "../work/workSource";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
   fetchMyRoutes,
@@ -110,6 +112,8 @@ export default function CollectionsScreen({ navigation }: Props) {
   const [today, setToday] = useState(todayIso());
   const [loading, setLoading] = useState(true);
   const [respondiendo, setRespondiendo] = useState<number | null>(null);
+  // Recorridos en la calle: la barra «Continuar» vuelve al que está en curso.
+  const missions = useDriverWork().work?.missions ?? [];
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -207,7 +211,7 @@ export default function CollectionsScreen({ navigation }: Props) {
       <ThemedStatusBar />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
-          contentContainerStyle={styles.page}
+          contentContainerStyle={[styles.page, missions.length ? { paddingBottom: 132 + CONTINUE_BAR_SPACE } : null]}
           refreshControl={
             <RefreshControl
               refreshing={loading}
@@ -265,6 +269,12 @@ export default function CollectionsScreen({ navigation }: Props) {
             </View>
           ))}
         </ScrollView>
+
+        <ContinueBar
+          missions={missions}
+          onOpen={(m) => (navigation as any).navigate(m.target.screen, m.target.params)}
+          onSeeAll={() => navigation.navigate("DriverScreen")}
+        />
 
         <DriverBottomNavigation
           activeTab="collections"

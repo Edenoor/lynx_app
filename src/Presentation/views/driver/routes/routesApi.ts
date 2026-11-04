@@ -88,6 +88,15 @@ export const tomorrowIso = () => {
 export const fetchMyRoutes = async (date: string) =>
   unwrap<{ routes: RouteSummary[] }>(await getJson(`/v2/routes/mine?date=${date}`)).routes;
 
+// Los de `date` y, si el servidor ya lo soporta (contesta `open: true`), también
+// los abiertos de cualquier otro día. Uno que no lo soporta ignora `open` y
+// contesta solo los de `date`: `open` vuelve en false y la app revisa los días
+// anteriores de a uno (ver work/workSource.ts).
+export const fetchMyRoutesWithOpen = async (date: string) => {
+  const res = unwrap<{ routes: RouteSummary[]; open?: boolean }>(await getJson(`/v2/routes/mine?date=${date}&open=1`));
+  return { routes: res.routes ?? [], open: res.open === true };
+};
+
 // Confirmación de una colecta (de ese día): contestar de nuevo pisa la respuesta.
 export const respondConfirmation = async (id: number, response: "ACCEPTED" | "DECLINED") =>
   unwrap<{ route: RouteDetail }>(await putJson(`/v2/routes/${id}/confirmation`, { response })).route;

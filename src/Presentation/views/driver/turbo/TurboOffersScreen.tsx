@@ -1,4 +1,9 @@
 // src/Presentation/views/driver/turbo/TurboOffersScreen.tsx
+// Bandeja de ofertas del chofer: Turbos, lotes de Turbos y recorridos que
+// ofrece el coordinador, en una sola lista (lo que vence primero, arriba). Se
+// llega desde Inicio, Envíos y las notificaciones. Cada oferta se contesta con
+// su contrato de siempre.
+//
 // Turbos ofrecidos al chofer: cada tarjeta muestra tienda, destino, distancia,
 // cuánto queda para contestar y hasta qué hora hay que entregar. Acepto lo
 // asigna (el primero que toca se lo queda); Paso lo rechaza. Se refresca sola
@@ -24,13 +29,16 @@ import DriverBottomNavigation, { DriverTabKey } from "../../../components/Driver
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { acceptLote, acceptOffer, declineLote, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
 import { AcceptOutcome, acceptWithConfirm, isDefinitive, NO_RETIRAR_ANTES, plazoParaResponder, programadoLabel, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
-import { offerCards } from "./turboGroup";
-import { todayIso } from "../routes/routesApi";
+import { acceptRouteOffer, declineRouteOffer, fetchRouteOffers, RouteOffer, todayIso } from "../routes/routesApi";
+import { buildInbox, pendingOffers, routeOfferTitle } from "../offers/offerInbox";
+import { publishOfferCount } from "../offers/offerStore";
+import { invalidateDriverWork } from "../work/workSource";
 import { errorMessage } from "../errorMessage";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboOffersScreen">;
 type Offer = WithLocalExpiry<TurboOffer>;
+type OfferedRoute = WithLocalExpiry<RouteOffer>;
 // El «Acepto» en curso: «confirming» mientras se espera (y se reintenta);
 // «unknown» si ningún intento tuvo respuesta.
 type PendingAccept = { offer: Offer; phase: "confirming" | "unknown" };
@@ -41,6 +49,8 @@ export default function TurboOffersScreen({ navigation }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [offers, setOffers] = useState<Offer[]>([]);
+  // Recorridos que ofrece el coordinador (no Turbo).
+  const [routeOffers, setRouteOffers] = useState<OfferedRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -80,6 +90,7 @@ export default function TurboOffersScreen({ navigation }: Props) {
     // Un Turbo asignado mantiene el GPS fuera del horario: si estaba en pausa,
     // vuelve en el acto.
     void refreshTrackingPolicy();
+    invalidateDriverWork();
     if (visible) {
       setNotice("Turbo asignado. Ya está en tus recorridos.");
       navigation.navigate("RouteDetailScreen", { routeId: o.route_id });
@@ -107,8 +118,20 @@ export default function TurboOffersScreen({ navigation }: Props) {
     // El vencimiento se ancla a cuando sale el pedido (ver turboOffer.ts).
     const startedAt = Date.now();
     try {
-      const list = withLocalExpiry(await fetchMyOffers(), startedAt);
-      if (mounted.current) { setOffers(list); setError(null); }
+      // Los recorridos ofrecidos son otra fuente: si fallan, los Turbos se ven igual y el error queda arriba.
+      const [turboList, routeList] = await Promise.all([
+        fetchMyOffers(),
+        fetchRouteOffers().then((r) => ({ ok: true as const, list: r }), (e: unknown) => ({ ok: false as const, error: e })),
+      ]);
+      const list = withLocalExpiry(turboList, startedAt);
+      const offered = routeList.ok ? withLocalExpiry(routeList.list, startedAt) : null;
+      if (mounted.current) {
+        setOffers(list);
+        if (offered) setRouteOffers(offered);
+        if (offered) setError(null);
+        else if (!silent) setError(`No se pudieron cargar los recorridos ofrecidos. ${errorMessage(routeList.ok ? null : routeList.error, "Probá de nuevo.")}`);
+      }
+      if (offered) publishOfferCount(pendingOffers(list, offered));
       // El servidor volvió a responder: un Acepto sin confirmar se reintenta una vez.
       const p = pendingRef.current;
       if (p?.phase === "unknown") void confirm(p.offer, 1);
@@ -176,6 +199,7 @@ export default function TurboOffersScreen({ navigation }: Props) {
     try {
       const r = await acceptLote(groupId);
       void refreshTrackingPolicy();
+      invalidateDriverWork();
       dropLote(groupId);
       navigation.navigate("TurboGroupScreen", { groupId: r.group?.id ?? groupId });
     } catch (e: any) {
@@ -189,6 +213,27 @@ export default function TurboOffersScreen({ navigation }: Props) {
     catch (e: any) {
       if (e instanceof TurboApiError && (e.status === 409 || e.status === 404)) dropLote(groupId);
       else setError(`No se pudo avisar que pasás. ${errorMessage(e, "Probá de nuevo.")}`);
+    } finally { setBusy(null); }
+  };
+
+  // Recorrido ofrecido: aceptar o rechazar con POST /v2/offers/:routeId/…
+  // Sin respuesta no se sabe si quedó: no se reintenta solo, la tarjeta queda
+  // y el próximo sondeo dice cómo está.
+  const dropRouteOffer = (routeId: number) => setRouteOffers((prev) => prev.filter((o) => o.route_id !== routeId));
+  const onRouteOffer = async (o: OfferedRoute, accept: boolean) => {
+    if (busy !== null || pendingRef.current) return;
+    setBusy(o.route_id); setNotice(null); setError(null);
+    try {
+      await (accept ? acceptRouteOffer : declineRouteOffer)(o.route_id);
+      dropRouteOffer(o.route_id);
+      if (accept) {
+        invalidateDriverWork();
+        void refreshTrackingPolicy();
+        navigation.navigate("RouteDetailScreen", { routeId: o.route_id });
+      }
+    } catch (e: any) {
+      if (isDefinitive(e)) { dropRouteOffer(o.route_id); setNotice(errorMessage(e, "Este recorrido ya no está disponible.")); }
+      else setError(accept ? "No pudimos confirmar el recorrido. Si quedó a tu nombre, aparece en Envíos." : `No se pudo enviar la respuesta. ${errorMessage(e, "Probá de nuevo.")}`);
     } finally { setBusy(null); }
   };
 
@@ -214,9 +259,9 @@ export default function TurboOffersScreen({ navigation }: Props) {
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
             <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrow}>Turbo</Text>
-              <Text style={styles.title}>Turbos ofrecidos</Text>
-              <Text style={styles.meta}>El primero que acepta se lo queda. Si no contestás a tiempo, pasa a otro chofer.</Text>
+              <Text style={styles.eyebrow}>Ofertas</Text>
+              <Text style={styles.title}>Ofertas para vos</Text>
+              <Text style={styles.meta}>Turbos y recorridos ofrecidos. Si no contestás a tiempo, pasan a otro chofer.</Text>
             </View>
           </View>
           <Pressable onPress={() => navigation.navigate("TurboTomorrowScreen")} style={[styles.btn, styles.btnNo, styles.tomorrow]} accessibilityRole="button">
@@ -227,13 +272,42 @@ export default function TurboOffersScreen({ navigation }: Props) {
           {notice ? <View style={styles.noticeBox}><Text style={styles.noticeText}>{notice}</Text></View> : null}
 
           <FlatList
-            data={offerCards(shown)}
-            keyExtractor={(c) => (c.kind === "lote" ? `lote-${c.group_id}` : String(c.offer.route_id))}
+            data={buildInbox(shown, routeOffers)}
+            keyExtractor={(c) => c.key}
             refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} tintColor={theme.text.accent} />}
             ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
-              <View style={styles.empty}><Ionicons name="flash-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No hay turbos ofrecidos ahora.</Text></View>
+              <View style={styles.empty}><Ionicons name="flash-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No tenés ofertas ahora.</Text></View>
             )}
             renderItem={({ item: card }) => {
+              if (card.kind === "recorrido") {
+                const o = card.offer;
+                const left = secondsLeft(o, now);
+                const urgent = left <= 15;
+                const disabled = busy !== null || pending !== null || left === 0;
+                const addresses = (o.first_addresses ?? []).filter(Boolean);
+                return (
+                  <View style={[theme.card, styles.card, urgent && styles.cardUrgent]}>
+                    <View style={styles.cardTop}>
+                      <Text style={styles.cardType}>{routeOfferTitle(o)}</Text>
+                      <View style={[styles.badge, urgent && styles.badgeUrgent]}>
+                        <Ionicons name="time-outline" size={14} color={urgent ? theme.status.rejected.icon : theme.text.primary} />
+                        <Text style={[styles.badgeText, urgent && styles.badgeTextUrgent]}>{plazoParaResponder(left)}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.label}>Recorrido de reparto ofrecido por coordinación</Text>
+                    {addresses.length ? <Text style={styles.line} numberOfLines={2}>{addresses.join(" · ")}</Text> : null}
+                    <Text style={styles.cardMeta}>{o.scheduled_date ? `Para el ${o.scheduled_date.slice(8, 10)}/${o.scheduled_date.slice(5, 7)} · ` : ""}vence {hhmm(o.expires_at)}</Text>
+                    <View style={styles.row}>
+                      <Pressable onPress={() => onRouteOffer(o, true)} disabled={disabled} style={[styles.btn, styles.btnYes, disabled && styles.btnDisabled]}>
+                        {busy === o.route_id ? <ActivityIndicator color={theme.text.onPrimary} /> : <Text style={styles.btnText}>Aceptar</Text>}
+                      </Pressable>
+                      <Pressable onPress={() => onRouteOffer(o, false)} disabled={disabled} style={[styles.btn, styles.btnNo, disabled && styles.btnDisabled]}>
+                        <Text style={styles.btnGhostText}>Rechazar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              }
               if (card.kind === "lote") {
                 const first = card.offers[0];
                 const left = secondsLeft(first, now);

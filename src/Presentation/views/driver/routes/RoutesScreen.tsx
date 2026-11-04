@@ -1,7 +1,7 @@
 // src/Presentation/views/driver/routes/RoutesScreen.tsx
-// Recorridos de reparto y Turbo del chofer para una fecha (hoy por defecto),
-// con los Turbo y los recorridos que le ofrecieron. Se entra desde Envíos; las
-// colectas tienen su pantalla (CollectionsScreen).
+// Recorridos de reparto y Turbo del chofer para una fecha (hoy por defecto).
+// Las ofertas se contestan en su bandeja (TurboOffersScreen): acá solo el
+// acceso con el contador. Las colectas tienen su pantalla (CollectionsScreen).
 
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
@@ -11,18 +11,14 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
-import StatusChip from "../../../components/StatusChip";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
-import {
-  acceptRouteOffer, declineRouteOffer, fetchMyRoutes, fetchRouteOffers, RouteOffer, RouteSummary, STATUS_LABEL,
-  todayIso, TYPE_LABEL,
-} from "./routesApi";
-import { errorMessage } from "../errorMessage";
-import { fetchMyGroups, fetchMyOffers, TurboGroup, TurboLoad } from "../turbo/turboApi";
-import { groupTitle, loadText, loadTotal, routesWithGroups } from "../turbo/turboGroup";
-import { routeStatusKey } from "./routeStatus";
+import { fetchMyRoutes, RouteSummary, todayIso } from "./routesApi";
+import { fetchMyGroups, TurboGroup, TurboLoad } from "../turbo/turboApi";
+import { loadText, loadTotal, routesWithGroups } from "../turbo/turboGroup";
 import { capitalize } from "./collectionLabels";
+import WorkItemCard from "../../../components/driver/WorkItemCard";
+import { refreshOfferCount, useOfferCount } from "../offers/offerStore";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -40,37 +36,24 @@ export default function RoutesScreen({ navigation }: Props) {
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [respondiendo, setRespondiendo] = useState<number | null>(null);
-  // Turbos ofrecidos y todavía sin respuesta: el push puede perderse, el banner no.
-  const [ofertas, setOfertas] = useState(0);
-  // Recorridos que ofreció el coordinador (no Turbo): se aceptan o rechazan acá.
-  const [ofrecidos, setOfrecidos] = useState<RouteOffer[]>([]);
+  // Ofertas sin contestar: el push puede perderse, el acceso no.
+  const ofertas = useOfferCount();
   // Grupos Turbo del día: varios Turbos de una tienda se ven como uno.
   const [grupos, setGrupos] = useState<{ groups: TurboGroup[]; load: TurboLoad | null }>({ groups: [], load: null });
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [mine, turbos, offered, groups] = await Promise.all([
+      void refreshOfferCount();
+      const [mine, groups] = await Promise.all([
         fetchMyRoutes(date),
-        fetchMyOffers().catch(() => []),
-        fetchRouteOffers().catch(() => [] as RouteOffer[]),
         // Un servidor anterior no tiene grupos: la lista de siempre.
         fetchMyGroups(date).catch(() => ({ groups: [] as TurboGroup[], load: null })),
       ]);
       setRoutes(mine.filter((r) => r.type !== "PICKUP"));
-      setOfertas(turbos.length);
-      setOfrecidos(offered);
       setGrupos(groups);
     } catch (e: any) { setError(e?.message ?? "No se pudieron cargar los recorridos"); } finally { setLoading(false); }
   }, [date]);
-
-  const responderOferta = async (o: RouteOffer, accept: boolean) => {
-    setRespondiendo(o.route_id);
-    try { await (accept ? acceptRouteOffer : declineRouteOffer)(o.route_id); await load(); }
-    catch (e: any) { setError(errorMessage(e, "No se pudo enviar la respuesta")); await load(); }
-    finally { setRespondiendo(null); }
-  };
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => navigation.addListener("focus", load), [navigation, load]);
@@ -111,30 +94,12 @@ export default function RoutesScreen({ navigation }: Props) {
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Ionicons name="flash" size={22} color={theme.text.accent} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.confirmTitle}>Tenés {ofertas === 1 ? "un turbo ofrecido" : `${ofertas} turbos ofrecidos`}</Text>
-                  <Text style={styles.cardMeta}>Contestá antes de que venza: el primero que acepta se lo queda.</Text>
+                  <Text style={styles.confirmTitle}>Tenés {ofertas === 1 ? "una oferta" : `${ofertas} ofertas`} sin contestar</Text>
+                  <Text style={styles.cardMeta}>Turbos y recorridos ofrecidos: contestá antes de que venzan.</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
               </View>
             </Pressable>
-          ) : null}
-
-          {ofrecidos.length ? (
-            <View style={[theme.card, styles.confirmBox]}>
-              <Text style={styles.confirmTitle}>Te {ofrecidos.length === 1 ? "ofrecieron un recorrido" : `ofrecieron ${ofrecidos.length} recorridos`}</Text>
-              {ofrecidos.map((o) => (
-                <View key={o.route_id} style={styles.confirmRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.confirmName}>Recorrido #{o.route_id} · {o.deliveries} {o.deliveries === 1 ? "envío" : "envíos"}</Text>
-                    <Text style={styles.cardMeta} numberOfLines={2}>
-                      {[o.first_addresses?.filter(Boolean).join(" · "), `vence ${new Date(o.expires_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`].filter(Boolean).join(" — ")}
-                    </Text>
-                  </View>
-                  <Pressable style={[styles.confirmBtn, styles.confirmYes]} disabled={respondiendo === o.route_id} onPress={() => responderOferta(o, true)}><Text style={styles.confirmBtnText}>Aceptar</Text></Pressable>
-                  <Pressable style={[styles.confirmBtn, styles.confirmNo]} disabled={respondiendo === o.route_id} onPress={() => responderOferta(o, false)}><Text style={styles.confirmBtnText}>No</Text></Pressable>
-                </View>
-              ))}
-            </View>
           ) : null}
 
           {loadTotal(grupos?.load) ? <Text style={[styles.cardMeta, { marginBottom: 8 }]}>Turbos que llevás: {loadText(grupos?.load)}</Text> : null}
@@ -146,35 +111,12 @@ export default function RoutesScreen({ navigation }: Props) {
             ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
               <View style={styles.empty}><Ionicons name="map-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No tenés recorridos de reparto ni Turbo para este día.</Text></View>
             )}
-            renderItem={({ item: it }) => {
-              if (it.kind === "group") {
-                const g = it.group;
-                const estado = g.status === "IN_PROGRESS" ? "IN_PROGRESS" : g.status === "DONE" ? "COMPLETED" : "ASSIGNED";
-                return (
-                  <Pressable style={[theme.listItem, styles.card]} onPress={() => navigation.navigate("TurboGroupScreen", { groupId: g.id })}>
-                    <View style={styles.cardTop}>
-                      <Text style={styles.cardType}>Turbo · grupo #{g.id}</Text>
-                      <StatusChip status={routeStatusKey(estado)} label={STATUS_LABEL[estado]} />
-                    </View>
-                    <Text style={styles.cardMeta}>{groupTitle(g)} · un solo retiro por tienda</Text>
-                  </Pressable>
-                );
-              }
-              const item = it.route;
-              return (
-              <Pressable style={[theme.listItem, styles.card]} onPress={() => navigation.navigate("RouteDetailScreen", { routeId: item.id })}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardType}>{TYPE_LABEL[item.type]} #{item.id}</Text>
-                  <StatusChip status={routeStatusKey(item.status)} label={STATUS_LABEL[item.status]} />
-                </View>
-                <Text style={styles.cardMeta}>
-                  {item.stops_count} {item.stops_count === 1 ? "parada" : "paradas"} · {item.deliveries_count} {item.deliveries_count === 1 ? "envío" : "envíos"}
-                  {item.type === "DELIVERY" && item.load_expected_count !== null ? ` · carga ${item.load_confirmed_count ?? "–"}/${item.load_expected_count}` : ""}
-                </Text>
-                {item.type === "DELIVERY" && item.status === "ASSIGNED" ? <Text style={styles.cardHint}>Escaneá el QR del recorrido y confirmá la cantidad para salir.</Text> : null}
-              </Pressable>
-              );
-            }}
+            renderItem={({ item: it }) => (
+              <WorkItemCard
+                item={it}
+                onPress={() => (it.kind === "group" ? navigation.navigate("TurboGroupScreen", { groupId: it.group.id }) : navigation.navigate("RouteDetailScreen", { routeId: it.route.id }))}
+              />
+            )}
             contentContainerStyle={{ paddingBottom: 24 }}
           />
         </View>
@@ -199,23 +141,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // Solo la primera letra en mayúscula («Lunes 27 de octubre»).
   title: { color: t.text.primary, fontSize: 18, fontWeight: "700", flex: 1, textAlign: "center" },
   link: { color: t.text.accent, textAlign: "center", marginTop: 4 },
-  card: { padding: t.spacing.md, marginBottom: t.list.gap, gap: 6 },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardType: { color: t.text.primary, fontSize: 16, fontWeight: "700" },
   cardMeta: { color: t.text.secondary, fontSize: 13 },
-  cardHint: { color: t.text.accent, fontSize: 12 },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
   emptyText: { color: t.text.secondary, textAlign: "center" },
   // Ofertas: siempre con contorno, también en Minimal (piden respuesta).
   confirmBox: { borderWidth: 1, borderColor: t.colors.primary, padding: t.spacing.md, marginBottom: t.spacing.md, gap: 8 },
   confirmTitle: { color: t.text.primary, fontSize: 15, fontWeight: "700" },
   turboBox: { borderColor: t.text.accent },
-  confirmRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 6, borderTopWidth: t.separator.width, borderTopColor: t.separator.color },
-  confirmName: { color: t.text.primary, fontSize: 14, fontWeight: "600" },
-  confirmBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
-  confirmYes: { borderColor: t.status.confirmed.border, backgroundColor: t.status.confirmed.background },
-  confirmNo: { borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background },
-  confirmBtnText: { color: t.text.primary, fontWeight: "700" },
   errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
   errorText: { color: t.status.rejected.text },
 });

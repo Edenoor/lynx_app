@@ -278,7 +278,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
     if (routeId) (navigation as any).navigate("RouteDetailScreen", { routeId, name: liveName || undefined });
     else (navigation as any).navigate(fallback);
   };
-  const openList = (screen: "CollectionsScreen" | "RoutesScreen") => {
+  const openList = (screen: "CollectionsScreen" | "RoutesScreen" | "TurboOffersScreen") => {
     if (selected) markRead(selected.id);
     setSelected(null);
     (navigation as any).navigate(screen);
@@ -548,7 +548,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
                 </Pressable>
               )}
               {selected?.kind === "ROUTE_OFFER" && (
-                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openList("RoutesScreen")}>
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openList("TurboOffersScreen")}>
                   <Text style={styles.btnTxtPrimary}>Ver ofertas</Text>
                 </Pressable>
               )}

@@ -95,8 +95,12 @@ function draw(node: any, at: string): any {
 const tick = () => new Promise((r) => setImmediate(r));
 let rootEl: any;
 // Remontar desmonta lo anterior: corren los cleanups (intervalos, suscripciones).
+// Las cachés compartidas entre pantallas (trabajo del chofer, ofertas) se
+// vacían en cada montaje, como al entrar con otra sesión.
+let resetCaches = () => {};
 async function mount(el: any) {
   for (const slots of instances.values()) for (const s of slots) if (typeof s.cleanup === "function") s.cleanup();
+  resetCaches();
   instances.clear();
   pending = [];
   rootEl = el;
@@ -156,8 +160,9 @@ const RN = {
   },
   Easing: { inOut: () => ({}), ease: {} },
   Modal: ({ visible, children }: any) => (visible ? RealReact.createElement("Modal", null, children) : null),
-  FlatList: ({ data, renderItem, ListEmptyComponent, keyExtractor }: any) =>
-    RealReact.createElement("FlatList", null, data.length
+  // Como en React Native: el encabezado arriba y, sin datos, el vacío.
+  FlatList: ({ data, renderItem, ListEmptyComponent, ListHeaderComponent, keyExtractor }: any) =>
+    RealReact.createElement("FlatList", null, ListHeaderComponent ?? null, data.length
       ? data.map((item: any, index: number) => RealReact.createElement("Item", { key: keyExtractor ? keyExtractor(item, index) : index }, renderItem({ item, index })))
       : ListEmptyComponent),
   Alert: { alert: (...a: any[]) => alerts.push(a) },
@@ -190,9 +195,10 @@ const MOCKS: Record<string, any> = {
   "expo-file-system/legacy": {},
   "expo-location": { requestForegroundPermissionsAsync: async () => ({ status: "denied", canAskAgain: true }), Accuracy: { High: 4 } },
   "expo-camera": { CameraView: "CameraView", useCameraPermissions: () => [camera.permission, camera.request] },
-  "react-native-safe-area-context": { SafeAreaView: "SafeAreaView" },
+  "react-native-safe-area-context": { SafeAreaView: "SafeAreaView", useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
   "expo-splash-screen": { preventAutoHideAsync: () => Promise.resolve(), hideAsync: () => Promise.resolve() },
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker" },
+  "react-native-svg": { __esModule: true, default: "Svg", Circle: "Circle" },
   "expo-constants": { __esModule: true, default: { expoConfig: { version: "1.0.0" } } },
 };
 const stackScreens = new Set<string>();
@@ -212,6 +218,7 @@ const UserContext = RealReact.createContext({ user: null, isAuthLoading: false }
 // Preferencia guardada en el dispositivo (AsyncStorage) y lo que se escribe.
 const storage = { stored: { version: 1, colorMode: "system", style: "marble", radius: "rounded" } as any, saved: [] as any[] };
 const gpsPolicy = { refreshes: 0 };
+const push: { handlers: any } = { handlers: null };
 const RELATIVE_MOCKS: [string, any][] = [
   ["config/Api", {
     getJson: (p: string) => reply("GET", p), postJson: (p: string) => reply("POST", p), putJson: (p: string) => reply("PUT", p),
@@ -219,10 +226,15 @@ const RELATIVE_MOCKS: [string, any][] = [
   }],
   ["Envios/ViewModel", { __esModule: true, default: () => envios }],
   ["client/Landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, username: "vendedor", rol: "SELLER" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
-  ["config/Push", { setupPushAndRegisterDevice: async () => null, attachNotificationListeners: () => () => {} }],
+  // Los manejadores de push que registra Inicio, para simular una oferta que llega.
+  ["config/Push", { setupPushAndRegisterDevice: async () => null, attachNotificationListeners: (h: any) => { push.handlers = h; return () => {}; } }],
   // Cuántas veces una pantalla pidió la política del GPS (franja horaria).
-  ["config/DriverLocation", { refreshTrackingPolicy: () => { gpsPolicy.refreshes++; return Promise.resolve(); } }],
-  ["landing/ViewModel", { __esModule: true, default: () => ({ user: { first_name: "Ana María", email: "ana@lynx.test", username: "ana" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
+  ["config/DriverLocation", {
+    refreshTrackingPolicy: () => { gpsPolicy.refreshes++; return Promise.resolve(); },
+    startDriverTracking: async () => ({ ok: true, mode: "background" }), flushDriverPositions: async () => {},
+    readCurrentPosition: async () => null, onTrackingChange: () => () => {},
+  }],
+  ["landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, first_name: "Ana María", email: "ana@lynx.test", username: "ana" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
   ["remote/api/ApiDelivery", { ApiDelivery: { post: () => { throw new Error("sin red en la prueba"); } } }],
   ["components/LynxPulseLoader", { LynxPulseLoader: host("LynxPulseLoader") }],
   ["context/NotificationContext", { useNotifications: () => notis }],
@@ -355,13 +367,14 @@ const check = (name: string, ok: boolean, detail = "") => {
 
 // ---------- Datos de prueba ----------
 const TODAY = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+const UPDATED = new Date().toISOString();
 const DELIVERIES = [
-  { id: 1, numero_tracking: "T1", direccion: "Av. Corrientes 1234", nombre_fantasia: "Tienda Uno", estado: "En camino", precio_chofer: "1000", porcentaje_chofer: "10", metodo_envio: "flex" },
-  { id: 2, numero_tracking: "T2", direccion: "Mitre 55", nombre_fantasia: "Tienda Dos", estado: "Pendiente", precio_chofer: "800", porcentaje_chofer: "0", metodo_envio: "turbo" },
-  { id: 3, numero_tracking: "T3", direccion: "Belgrano 900", nombre_fantasia: "Tienda Tres", estado: "Entregado", precio_chofer: "1200", porcentaje_chofer: "0" },
-  { id: 4, numero_tracking: "T4", direccion: "San Martín 10", nombre_fantasia: "Tienda Cuatro", estado: "Reprogramado", precio_chofer: "500", porcentaje_chofer: "0" },
+  { id: 1, numero_tracking: "T1", direccion: "Av. Corrientes 1234", nombre_fantasia: "Tienda Uno", estado: "En camino", precio_chofer: "1000", porcentaje_chofer: "10", metodo_envio: "flex", updated_at: UPDATED },
+  { id: 2, numero_tracking: "T2", direccion: "Mitre 55", nombre_fantasia: "Tienda Dos", estado: "Pendiente", precio_chofer: "800", porcentaje_chofer: "0", metodo_envio: "turbo", updated_at: UPDATED },
+  { id: 3, numero_tracking: "T3", direccion: "Belgrano 900", nombre_fantasia: "Tienda Tres", estado: "Entregado", precio_chofer: "1200", porcentaje_chofer: "0", updated_at: UPDATED },
+  { id: 4, numero_tracking: "T4", direccion: "San Martín 10", nombre_fantasia: "Tienda Cuatro", estado: "Reprogramado", precio_chofer: "500", porcentaje_chofer: "0", updated_at: UPDATED },
   // Forma real de /v2/drivers/:id/deliveries (caso Dancona): id es el de delivery_status.
-  { id: 1384, delivery_id: 24385, numero_tracking: "T5", direccion: "Lavalle 300", nombre_fantasia: "Tienda Cinco", status: "Entregado", status_ml: "delivered", ops_status: "DELIVERED", precio_chofer: "0", porcentaje_chofer: "0" },
+  { id: 1384, delivery_id: 24385, numero_tracking: "T5", direccion: "Lavalle 300", nombre_fantasia: "Tienda Cinco", status: "Entregado", status_ml: "delivered", ops_status: "DELIVERED", precio_chofer: "0", porcentaje_chofer: "0", updated_at: UPDATED },
 ];
 const ROUTES = [
   { id: 11, type: "DELIVERY", status: "ASSIGNED", scheduled_date: TODAY, stops_count: 3, deliveries_count: 7, load_expected_count: 7, load_confirmed_count: null },
@@ -369,6 +382,31 @@ const ROUTES = [
   { id: 13, type: "PICKUP", status: "ASSIGNED", scheduled_date: TODAY, stops_count: 2, deliveries_count: 0, load_expected_count: null, load_confirmed_count: null },
   { id: 14, type: "DELIVERY", status: "COMPLETED", scheduled_date: TODAY, stops_count: 4, deliveries_count: 9, load_expected_count: 9, load_confirmed_count: 9 },
 ];
+const shiftIso = (iso: string, days: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+const YESTERDAY = shiftIso(TODAY, -1);
+const TOMORROW = shiftIso(TODAY, 1);
+// Un reparto que quedó abierto de ayer (en la calle) y su detalle.
+const OLD_ROUTE = { id: 8, type: "DELIVERY", status: "IN_PROGRESS", scheduled_date: YESTERDAY, stops_count: 3, deliveries_count: 3, load_expected_count: 3, load_confirmed_count: 3 };
+const ROUTE_OFFER = { id: 5, route_id: 77, kind: "ROUTE", scheduled_date: TODAY, expires_at: new Date(Date.now() + 300_000).toISOString(), seconds_left: 300, deliveries: 4, first_addresses: ["Calle 1"] };
+const stopOf = (id: number, sequence: number, type: string, status: string, extra: any = {}) => ({ id, route_id: 8, sequence, type, status, arrived_at: null, completed_at: null, notes: null, deliveries: [], ...extra });
+// Envíos: los recorridos de hoy, uno abierto de ayer, el detalle de los que están en la calle y las ofertas.
+const setEnviosApi = (over: Record<string, any> = {}) => {
+  api.calls = [];
+  api.replies = {
+    ...over,
+    [`GET /v2/routes/mine?date=${TODAY}`]: over[`GET /v2/routes/mine?date=${TODAY}`] ?? { ok: true, routes: ROUTES },
+    [`GET /v2/routes/mine?date=${YESTERDAY}`]: over[`GET /v2/routes/mine?date=${YESTERDAY}`] ?? { ok: true, routes: [OLD_ROUTE] },
+    "GET /v2/routes/mine": over["GET /v2/routes/mine"] ?? { ok: true, routes: [] },
+    "GET /v2/routes/8": { ok: true, route: { ...OLD_ROUTE, qr_token: "q", notes: null, started_at: null, completed_at: null,
+      stops: [stopOf(1, 1, "DELIVERY", "DONE", { address: "Mitre 10" }), stopOf(2, 2, "DELIVERY", "PENDING", { address: "Paso 5" }), stopOf(3, 3, "DELIVERY", "PENDING", { address: "Olazábal 7" })] } },
+    "GET /v2/routes/12": { ok: true, route: { ...ROUTES[1], qr_token: "q", notes: null, started_at: null, completed_at: null,
+      stops: [stopOf(4, 1, "PICKUP", "DONE", { store_name: "Tienda Turbo" }), stopOf(5, 2, "DELIVERY", "PENDING", { address: "Sarmiento 20" })] } },
+    "GET /v2/turbo/groups/mine": over["GET /v2/turbo/groups/mine"] ?? { ok: true, groups: [], load: null },
+    "POST /driver/availability/get": over["POST /driver/availability/get"] ?? { ok: true, turbo_enabled: true, turbo_active: false },
+    "GET /v2/turbo/offers/mine": { ok: true, offers: turbos() },
+    "GET /v2/offers/mine": { ok: true, offers: [ROUTE_OFFER] },
+  };
+};
 const setRoutesApi = () => {
   api.calls = [];
   api.replies = {
@@ -402,6 +440,7 @@ const setDriverApi = () => {
     "POST /v2/turbo/offers/90/accept": { ok: true, route: { id: 90 } },
     "POST /v2/turbo/offers/90/decline": { ok: true },
     "GET /v2/routes/31": { ok: true, route: { id: 31, type: "PICKUP", status: "ASSIGNED", scheduled_date: TODAY, stops: [], driver_confirmation: "PENDING" } },
+    "GET /v2/offers/mine": { ok: true, offers: [] },
   };
   notis.items = NOTIS;
   notis.calls = [];
@@ -419,11 +458,16 @@ const setDriverApi = () => {
   const Turbo = L("src/Presentation/views/driver/turbo/TurboOffersScreen.tsx").default;
   const ScanOptions = L("src/Presentation/views/driver/scan/DriverScanOptionsScreen.tsx").default;
   const Scan = L("src/Presentation/views/driver/scan/DriverScanScreen.tsx").default;
+  const { DriverScreen: HomeScreen } = L("src/Presentation/views/driver/landing/Driver.tsx");
+  const OfferBanner = L("src/Presentation/components/driver/OfferNoticeBanner.tsx").default;
+  const { resetDriverWork } = L("src/Presentation/views/driver/work/workSource.ts");
+  const { resetOfferStore } = L("src/Presentation/views/driver/offers/offerStore.ts");
+  resetCaches = () => { resetDriverWork(); resetOfferStore(); };
 
   const useTheme = (t: any) => contextOverride.set(ThemeContext, { theme: t, preferences: {}, setAppearance: () => {}, resetAppearance: () => {} });
   const screens: [string, () => any, () => void][] = [
     ["Mi cuenta", () => RealReact.createElement(Account), () => { api.replies = { "GET /v2/driver-home/me": { ok: true, home: { address: "Lavalle 300" } } }; }],
-    ["Envíos", () => RealReact.createElement(EnviosScreen, { navigation: nav }), () => { envios.currentDeliveries = DELIVERIES; }],
+    ["Envíos", () => RealReact.createElement(EnviosScreen, { navigation: nav }), () => { envios.currentDeliveries = DELIVERIES; envios.list = []; setEnviosApi(); }],
     ["Recorridos", () => RealReact.createElement(Routes, { navigation: nav, route: { params: undefined } }), setRoutesApi],
     ["Alertas", () => RealReact.createElement(Alerts), setDriverApi],
     ["Mi domicilio", () => RealReact.createElement(Home), setDriverApi],
@@ -465,8 +509,8 @@ const setDriverApi = () => {
   for (const style of VISUAL_STYLES) {
     const t = createTheme({ scheme: "light", style, radius: "balanced" });
     useTheme(t);
-    envios.currentDeliveries = DELIVERIES;
-    const env = await mount(screens[1][1]());
+    screens[1][2]();
+    const env = await press(await mount(screens[1][1]()), "Flex");
     const card = flat(pressable(env, "Av. Corrientes 1234").props.style);
     setRoutesApi();
     const rt = await mount(screens[2][1]());
@@ -487,14 +531,14 @@ const setDriverApi = () => {
     const marble = createTheme({ scheme: "dark", style: "marble", radius: "rounded" });
     const light = createTheme({ scheme: "light", style: "minimal", radius: "square" });
     useTheme(dark);
-    envios.currentDeliveries = DELIVERIES;
-    let tree = await mount(screens[1][1]());
+    screens[1][2]();
+    let tree = await press(await mount(screens[1][1]()), "Flex");
     tree = await press(tree, "Finalizados");
     check("Envíos: «Finalizados» muestra los cerrados", textOf(tree).includes("Belgrano 900") && !textOf(tree).includes("Av. Corrientes 1234"));
     useTheme(marble);
     tree = await settle();
     check("en vivo: Marble + Redondeado se aplica sin remontar", flat(tree.props.style).backgroundColor === marble.surfaces.screen && flat(pressable(tree, "Belgrano 900").props.style).borderRadius === marble.radius.lg);
-    check("en vivo: la pestaña elegida se conserva", textOf(tree).includes("Historial de envíos cerrados") && !textOf(tree).includes("Av. Corrientes 1234"));
+    check("en vivo: la modalidad y la pestaña elegidas se conservan", textOf(tree).includes("Recorridos finalizados") && !textOf(tree).includes("Av. Corrientes 1234"));
     useTheme(light);
     tree = await settle();
     check("en vivo: Claro + Minimal + Recto", flat(tree.props.style).backgroundColor === light.surfaces.screen && flat(pressable(tree, "Belgrano 900").props.style).backgroundColor === "transparent");
@@ -524,31 +568,190 @@ const setDriverApi = () => {
     check("Mi cuenta: confirmar cierra la sesión sin navegar a mano (sin RESET a HomeScreen)", session.removed === 1 && nav.calls.length === 0, JSON.stringify(nav.calls));
     check("Mi cuenta: filas con el separador del tema", all(tree, (x) => x.type === "Pressable" && textOf(x).includes("Vehículo")).every((x) => flat(x.props.style).borderBottomWidth === 0.5));
   }
+  // 4b) Envíos por modalidad: Turbo, Flex, Baúl y Tradicionales, con la
+  // bandeja de ofertas arriba y «Continuar» si hay un recorrido en la calle.
   {
-    nav.calls = [];
-    envios.currentDeliveries = DELIVERIES;
-    let tree = await mount(screens[1][1]());
-    check("Envíos: «En curso» muestra los no finalizados", ["Av. Corrientes 1234", "Mitre 55", "San Martín 10"].every((s) => textOf(tree).includes(s)) && !textOf(tree).includes("Belgrano 900"));
-    check("Envíos: un entregado con status_ml «delivered» (caso Dancona) no queda «En curso»", !textOf(tree).includes("Lavalle 300"));
-    const chips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
-    check("Envíos: estados con chip; el no entregado queda abierto y explícito", JSON.stringify(chips) === JSON.stringify(["Estado: En camino", "Estado: A retirar", "Estado: No entregado"]), chips.join(", "));
+    const js = (x: any) => JSON.stringify(x);
     const dark = createTheme({ scheme: "dark" });
+    useTheme(dark);
+    nav.calls = [];
+    screens[1][2]();
+    let tree = await mount(screens[1][1]());
+    const modalities = all(tree, (x) => x.props?.accessibilityRole === "tab").map(textOf);
+    check("Envíos: cuatro modalidades; Turbo porque el chofer está habilitado", js(modalities) === js(["Turbo", "Flex", "Baúl", "Tradicionales"]), modalities.join(", "));
+    const prev = Array.from({ length: 7 }, (_, i) => `GET /v2/routes/mine?date=${shiftIso(TODAY, -(i + 1))}`);
+    check("Envíos: hoy (pidiendo también los abiertos), los 7 días anteriores, grupos, habilitación, el detalle de lo que está en la calle y las ofertas",
+      [`GET /v2/routes/mine?date=${TODAY}&open=1`, ...prev, `GET /v2/turbo/groups/mine?date=${TODAY}`, "POST /driver/availability/get", "GET /v2/routes/8", "GET /v2/routes/12", "GET /v2/turbo/offers/mine", "GET /v2/offers/mine"].every((c) => api.calls.includes(c)), api.calls.join(", "));
+    check("Envíos: ni rutas administrativas ni el Baúl de admin", !api.calls.some((c) => /\/v2\/baul|\/v2\/routes\?|\/v2\/drivers\/\d+\/legacy/.test(c)), api.calls.join(", "));
+    check("Envíos: un solo pedido por día (sin duplicados)", new Set(api.calls).size === api.calls.length, api.calls.join(", "));
+
+    // Turbo en curso: el Turbo en la calle; ni repartos ni colectas.
+    check("Turbo › En curso: el Turbo en la calle, sin repartos ni colectas", textOf(tree).includes("Turbo #12") && !textOf(tree).includes("Reparto #11") && !textOf(tree).includes("Colecta #13"));
+    tree = await press(tree, "Turbo #12");
+    check("Turbo › En curso: abre el recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 12 }]));
+
+    // Continuar: el recorrido más viejo en la calle, y los demás en Inicio.
+    const [cont] = byLabel(tree, "Continuar ");
+    check("Envíos: «Continuar» lleva al reparto que quedó abierto de ayer", !!cont && textOf(cont).includes("Reparto #8") && textOf(cont).includes("Entregá en Paso 5"), cont ? textOf(cont) : "sin barra");
+    cont.props.onPress();
+    check("Envíos: «Continuar» abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 8 }]));
+    tree = await press(tree, "+1");
+    check("Envíos: con dos en la calle, «+1» los muestra en Inicio", js(lastNav()) === js(["navigate", "DriverScreen"]));
+
+    // Ofertas: acceso directo con el contador (2 Turbos sueltos + 1 recorrido).
+    const [offers] = byLabel(tree, "Ofertas");
+    check("Envíos: «Ofertas» con el contador de pendientes", offers?.props.accessibilityLabel === "Ofertas: 3 sin contestar" && textOf(offers).includes("3"), offers?.props.accessibilityLabel);
+    offers.props.onPress();
+    check("Envíos: «Ofertas» abre la bandeja", js(lastNav()) === js(["navigate", "TurboOffersScreen"]));
+
+    // Flex en curso: repartos abiertos (también de ayer) y sus envíos.
+    tree = await press(tree, "Flex");
+    const txt = textOf(tree);
+    check("Flex › En curso: el reparto de ayer (lo dice) y el de hoy; sin Turbos", txt.includes("Reparto #8") && txt.includes("Abierto desde ayer") && txt.includes("Reparto #11") && !txt.includes("Turbo #12"), txt.slice(0, 300));
+    check("Flex › En curso: envíos abiertos, sin el Turbo ni los cerrados", ["Av. Corrientes 1234", "San Martín 10"].every((x) => txt.includes(x)) && !txt.includes("Mitre 55") && !txt.includes("Belgrano 900") && !txt.includes("Lavalle 300"));
+    const chips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
+    check("Flex › En curso: estados de los recorridos y de los envíos; el no entregado sigue abierto", js(chips) === js(["Estado: En curso", "Estado: Asignado", "Estado: En camino", "Estado: No entregado"]), chips.join(", "));
     const chipBg = (label: string) => flat(byLabel(tree, `Estado: ${label}`)[0].props.style).backgroundColor;
-    check("Envíos: «En camino» con el color en camino, «A retirar» con el de pendiente", chipBg("En camino") === dark.status.inTransit.background && chipBg("A retirar") === dark.status.pending.background);
-    check("Envíos: «No entregado» con el color de incidencia (no verde)", chipBg("No entregado") === dark.status.incident.background);
-    tree = await press(tree, "Finalizados");
-    const finChips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
-    check("Envíos: finalizados con «Entregado», incluido el de status_ml «delivered»", JSON.stringify(finChips) === JSON.stringify(["Estado: Entregado", "Estado: Entregado"]) && textOf(tree).includes("Lavalle 300") && chipBg("Entregado") === dark.status.delivered.background, finChips.join(", "));
-    check("Envíos: el no entregado no pasa a finalizados", !textOf(tree).includes("San Martín 10"));
-    tree = await press(tree, "En curso");
-    tree = await press(tree, "Recorridos de reparto, Turbo y ofertas");
-    check("Envíos: abre Recorridos", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "RoutesScreen"]));
-    tree = await press(tree, "Mitre 55");
-    check("Envíos: tocar un envío abre su detalle", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("DETALLE") && textOf(m).includes("T2")));
+    check("Flex: «No entregado» con el color de incidencia (no verde)", chipBg("No entregado") === dark.status.incident.background);
+    check("Flex: dice desde qué día revisó los abiertos", txt.includes(`Revisamos recorridos abiertos desde ${L("src/Presentation/views/driver/work/driverWork.ts").dayLabel(shiftIso(TODAY, -7), TODAY)}`));
+    api.calls = [];
+    tree = await press(tree, "Buscar más atrás");
+    check("Flex: «Buscar más atrás» revisa otra semana", Array.from({ length: 14 }, (_, i) => `GET /v2/routes/mine?date=${shiftIso(TODAY, -(i + 1))}`).every((c) => api.calls.includes(c)), api.calls.join(", "));
+    tree = await press(tree, "Reparto #11");
+    check("Flex: tocar un reparto abre su detalle", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 11 }]));
+    tree = await press(tree, "Av. Corrientes 1234");
+    check("Flex: tocar un envío abre su detalle", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("DETALLE") && textOf(m).includes("T1")));
     tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cerrar");
-    check("Envíos: el detalle se cierra", !all(tree, (x) => x.type === "Modal").length);
     tree = await press(tree, "Neto");
-    check("Envíos: el neto abre los totales visibles", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Totales visibles") && textOf(m).includes("$2.200")));
+    check("Flex: el neto suma solo los envíos Flex visibles", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Totales visibles") && textOf(m).includes("$1.400")));
+    tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cerrar");
+
+    // Flex finalizados: hoy por defecto, ayer y rango.
+    api.calls = [];
+    tree = await press(tree, "Finalizados");
+    let fin = textOf(tree);
+    check("Flex › Finalizados: el reparto completado de hoy y los envíos entregados (también el de status_ml «delivered»)",
+      fin.includes("Reparto #14") && fin.includes("Belgrano 900") && fin.includes("Lavalle 300") && !fin.includes("San Martín 10") && !fin.includes("Reparto #11"), fin.slice(0, 300));
+    check("Flex › Finalizados: pide los recorridos del día", api.calls.includes(`GET /v2/routes/mine?date=${TODAY}`), api.calls.join(", "));
+    api.calls = [];
+    tree = await press(tree, "Ayer");
+    fin = textOf(tree);
+    check("Flex › Finalizados › Ayer: otro día, sin los de hoy", api.calls.includes(`GET /v2/routes/mine?date=${YESTERDAY}`) && !fin.includes("Belgrano 900") && fin.includes("No hay recorridos finalizados en este período"), api.calls.join(", "));
+    tree = await press(tree, "Rango");
+    check("Flex › Finalizados: «Rango» abre el selector de fechas", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Seleccionar rango")));
+    tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cancelar");
+
+    // Historial legacy (/v1): se conserva, con la descarga del Excel.
+    envios.list = [{ id: 1, numero_tracking: "L1", direccion: "Viejo 1", nombre_fantasia: "Legacy", estado: "Entregado", precio_chofer: "0", porcentaje_chofer: "0" }];
+    tree = await settle();
+    tree = await press(tree, "Historial");
+    check("Flex › Historial: la información legacy sigue a mano, con el Excel", textOf(tree).includes("Viejo 1") && byLabel(tree, "Descargar Excel semanal").length === 1);
+    envios.list = [];
+
+    // Baúl: sin contrato para el chofer, no se pide nada ni se clasifica.
+    api.calls = [];
+    tree = await press(tree, "Baúl");
+    check("Baúl: estado de función pendiente, sin datos inventados", textOf(tree).includes("Función pendiente") && textOf(tree).includes("Pronto vas a ver acá") && !textOf(tree).includes("San Martín 10"));
+    check("Baúl: no pide nada al servidor", !api.calls.length, api.calls.join(", "));
+    tree = await press(tree, "Tradicionales");
+    check("Tradicionales: «Próximamente»", textOf(tree).includes("Próximamente") && textOf(tree).includes("Envíos tradicionales"));
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      tree = await settle();
+      check(`Tradicionales ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+      tree = await press(tree, "Baúl");
+      check(`Baúl ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+      tree = await press(tree, "Tradicionales");
+    }
+    useTheme(dark);
+
+    // Turbo › Mañana: separado de lo de hoy; servidor sin grupos (404 en HTML) ≠ error.
+    setEnviosApi({
+      [`GET /v2/routes/mine?date=${TOMORROW}`]: { ok: true, routes: [{ id: 20, type: "TURBO", status: "ASSIGNED", scheduled_date: TOMORROW, stops_count: 2, deliveries_count: 1, load_expected_count: null, load_confirmed_count: null }] },
+      [`GET /v2/turbo/groups/mine?date=${TOMORROW}`]: { ok: false, status: 404, invalidResponse: true, error: "Respuesta inesperada del servidor (404)", message: "Respuesta inesperada del servidor (404)" },
+    });
+    tree = await mount(screens[1][1]());
+    check("Turbo › En curso: lo de mañana no se mezcla con hoy", !textOf(tree).includes("Turbo #20"));
+    tree = await press(tree, "Mañana");
+    check("Turbo › Mañana: mis Turbos programados", textOf(tree).includes("Programados para mañana") && textOf(tree).includes("Turbo #20"));
+    check("Turbo › Mañana: un servidor sin grupos se informa como no soportado, no como error", textOf(tree).includes("todavía no agrupa los Turbos") && !textOf(tree).includes("Respuesta inesperada"));
+    tree = await press(tree, "Tomar Turbos de mañana disponibles");
+    check("Turbo › Mañana: acceso a los Turbos de mañana para tomar", js(lastNav()) === js(["navigate", "TurboTomorrowScreen"]));
+
+    // Errores reales: se muestran como error, no como «no tenés nada».
+    setEnviosApi({
+      [`GET /v2/routes/mine?date=${TODAY}`]: { ok: false, status: 500, error: "Error interno del servidor" },
+      "GET /v2/turbo/groups/mine": { ok: false, status: 500, error: "Falla en grupos" },
+    });
+    tree = await mount(screens[1][1]());
+    let e = textOf(tree);
+    check("Error: sin los recorridos de hoy, el error con «Reintentar» (no «sin recorridos»)", e.includes("Error interno del servidor") && e.includes("Reintentar") && !e.includes("No tenés Turbos en curso"), e.slice(0, 300));
+    tree = await press(tree, "Flex");
+    e = textOf(tree);
+    check("Error: en Flex tampoco dice que no hay repartos", e.includes("Error interno del servidor") && !e.includes("No tenés recorridos de reparto abiertos"));
+    setEnviosApi({ "GET /v2/turbo/groups/mine": { ok: false, status: 500, error: "Falla en grupos" } });
+    tree = await mount(screens[1][1]());
+    check("Error: un 5xx de grupos es un error a la vista, no «no soportado»", textOf(tree).includes("Falla en grupos") && !textOf(tree).includes("todavía no agrupa"));
+    setEnviosApi({ [`GET /v2/routes/mine?date=${shiftIso(TODAY, -3)}`]: new Error("sin red") });
+    tree = await press(await mount(screens[1][1]()), "Flex");
+    check("Error: un día anterior que no se pudo leer se avisa", textOf(tree).includes("No pudimos revisar un día"));
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: false, status: 500, error: "Error interno del servidor" } });
+      tree = await mount(screens[1][1]());
+      check(`Error ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+    }
+    useTheme(dark);
+
+    // Cargando: mientras no llegan los de hoy.
+    setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: new Promise(() => {}) });
+    tree = await press(await mount(screens[1][1]()), "Flex");
+    check("Cargando: «Cargando recorridos…» y sin «no tenés»", textOf(tree).includes("Cargando recorridos") && !textOf(tree).includes("No tenés recorridos de reparto abiertos"));
+
+    // Envíos en recorrido sin recorrido abierto a la vista: se avisa (no se esconde).
+    setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
+    envios.currentDeliveries = [{ id: 40, numero_tracking: "T40", direccion: "Viamonte 40", nombre_fantasia: "Tienda", ops_status: "OUT_FOR_DELIVERY", status_ml: "shipped", updated_at: UPDATED }];
+    tree = await press(await mount(screens[1][1]()), "Flex");
+    check("Flex: envíos en recorrido sin recorrido abierto en los días revisados → aviso con «Buscar más atrás»", textOf(tree).includes("en recorrido y no encontramos el recorrido abierto"));
+    check("Flex: sin nada en la calle, sin «Continuar»", !byLabel(tree, "Continuar ").length);
+    setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
+    envios.currentDeliveries = [{ id: 41, numero_tracking: "T41", direccion: "Viamonte 41", nombre_fantasia: "Tienda", ops_status: "ASSIGNED_TO_ROUTE", is_turbo: true, updated_at: UPDATED }];
+    tree = await mount(screens[1][1]());
+    check("Turbo: un Turbo en recorrido sin el recorrido a la vista también se avisa", textOf(tree).includes("en recorrido y no encontramos el recorrido abierto") && !textOf(tree).includes("No tenés Turbos en curso."));
+
+    // Sin Turbo habilitado ni Turbos: no aparece la modalidad.
+    setEnviosApi({ "POST /driver/availability/get": { ok: true, turbo_enabled: false }, [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [ROUTES[0]] } });
+    envios.currentDeliveries = DELIVERIES.filter((d: any) => d.metodo_envio !== "turbo");
+    tree = await mount(screens[1][1]());
+    check("Sin Turbo habilitado ni Turbos: arranca en Flex y no muestra Turbo", !all(tree, (x) => x.props?.accessibilityRole === "tab").some((x) => textOf(x) === "Turbo") && textOf(tree).includes("Reparto #11"));
+    envios.currentDeliveries = DELIVERIES;
+
+    // Cerrar sesión desmonta el stack del chofer: lo leído no queda para el próximo.
+    // (Sin el vaciado de cada montaje de la prueba: lo tiene que hacer el stack.)
+    {
+      const { DriverStackNavigator } = L("src/Presentation/navigator/DriverStackNavigator.tsx");
+      const keep = resetCaches;
+      setEnviosApi();
+      await mount(screens[1][1]());
+      resetCaches = () => {};
+      await mount(RealReact.createElement(DriverStackNavigator));
+      await mount(RealReact.createElement("View"));
+      setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: new Promise(() => {}) });
+      tree = await mount(screens[1][1]());
+      check("Sesión: al desmontar el stack del chofer no quedan recorridos del anterior (no hay «Continuar» ni Turbo #12)",
+        !byLabel(tree, "Continuar ").length && !textOf(tree).includes("Turbo #12") && api.calls.some((c) => c.startsWith(`GET /v2/routes/mine?date=${TODAY}`)));
+      check("Sesión: tampoco el contador de ofertas del anterior antes de leerlo de nuevo", byLabel(tree, "Ofertas")[0]?.props.accessibilityLabel !== "Ofertas: 3 sin contestar" || api.calls.includes("GET /v2/turbo/offers/mine"));
+      resetCaches = keep;
+    }
+
+    // Barra: Inicio, QR y Alertas.
+    nav.calls = [];
+    for (const [tab, route] of [["Inicio", "DriverScreen"], ["QR", "DriverScanOptionsScreen"], ["Alertas", "NotificationsScreen"]]) {
+      tree = await press(tree, tab);
+      check(`Envíos: barra → ${tab}`, js(lastNav()) === js(["navigate", route]));
+    }
   }
   {
     nav.calls = [];
@@ -562,14 +765,9 @@ const setDriverApi = () => {
     check("Recorridos: estado con chip y el texto de siempre", JSON.stringify(chips) === JSON.stringify(["Estado: Asignado", "Estado: En curso", "Estado: Completado"]), chips.join(", "));
     tree = await press(tree, "Turbo #12");
     check("Recorridos: tocar un recorrido abre su detalle", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "RouteDetailScreen", { routeId: 12 }]));
-    tree = await press(tree, "un turbo ofrecido");
-    check("Recorridos: el aviso Turbo abre las ofertas", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "TurboOffersScreen"]));
-    api.calls = [];
-    tree = await press(tree, "Aceptar");
-    check("Recorridos: aceptar la oferta hace el mismo pedido y recarga", api.calls[0] === "POST /v2/offers/77/accept" && api.calls.some((c) => c.startsWith("GET /v2/routes/mine")));
-    api.calls = [];
-    tree = await press(tree, "No");
-    check("Recorridos: rechazar la oferta hace el mismo pedido", api.calls[0] === "POST /v2/offers/77/decline");
+    check("Recorridos: las ofertas no se contestan acá (sin botones duplicados)", !all(tree, (x) => typeof x.props?.onPress === "function" && ["Aceptar", "No"].includes(textOf(x))).length);
+    tree = await press(tree, "2 ofertas sin contestar");
+    check("Recorridos: el acceso con el contador (Turbo + recorrido) abre la bandeja", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "TurboOffersScreen"]));
   }
 
   const same = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
@@ -741,6 +939,134 @@ const setDriverApi = () => {
     tree = await settle();
     check("Turbo: «Paso» de una oferta que ya no está (409) la saca", !card90());
   }
+
+  // 7b) Bandeja de ofertas: Turbos, lotes y recorridos ofrecidos en una sola
+  // lista, lo que vence primero arriba; cada uno con su contrato de siempre.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    useTheme(createTheme({ scheme: "dark" }));
+    const withRouteOffer = () => { setDriverApi(); api.replies["GET /v2/offers/mine"] = { ok: true, offers: [{ ...ROUTE_OFFER, seconds_left: 60 }] }; };
+    const routeCard = (tree: any) => all(tree, (x) => x.type === "View" && flat(x.props.style).gap === 6 && textOf(x).includes("Recorrido #77"))[0];
+    withRouteOffer(); nav.calls = [];
+    let tree = await mount(screens[5][1]());
+    const order = all(tree, (x) => x.type === "Item").map((x) => textOf(x).match(/Turbo #9[01]|Recorrido #77/)?.[0]);
+    check("Bandeja: Turbos y recorridos juntos, lo que vence primero arriba", js(order) === js(["Turbo #91", "Recorrido #77", "Turbo #90"]), order.join(", "));
+    check("Bandeja: título de ofertas (no solo Turbo)", textOf(tree).includes("Ofertas para vos"));
+    check("Bandeja: pide las dos fuentes de siempre", api.calls.includes("GET /v2/turbo/offers/mine") && api.calls.includes("GET /v2/offers/mine"), api.calls.join(", "));
+    check("Bandeja: el recorrido ofrecido muestra envíos, direcciones y plazo", textOf(routeCard(tree)).includes("4 envíos") && textOf(routeCard(tree)).includes("Calle 1") && /para responder/.test(textOf(routeCard(tree))));
+    api.calls = []; gpsPolicy.refreshes = 0;
+    api.replies["POST /v2/offers/77/accept"] = { ok: true };
+    tree = await press(routeCard(tree), "Aceptar");
+    check("Bandeja: aceptar un recorrido usa POST /v2/offers/77/accept y abre el recorrido", api.calls[0] === "POST /v2/offers/77/accept" && js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 77 }]) && gpsPolicy.refreshes === 1, api.calls.join(", "));
+    withRouteOffer();
+    tree = await mount(screens[5][1]());
+    api.calls = [];
+    tree = await press(routeCard(tree), "Rechazar");
+    check("Bandeja: rechazar usa POST /v2/offers/77/decline y saca la tarjeta", api.calls[0] === "POST /v2/offers/77/decline" && !routeCard(tree));
+    withRouteOffer();
+    api.replies["POST /v2/offers/77/accept"] = { ok: false, status: 409, error: "La oferta ya no está disponible" };
+    tree = await mount(screens[5][1]());
+    tree = await press(routeCard(tree), "Aceptar");
+    check("Bandeja: 409 saca la tarjeta con el mensaje del servidor", !routeCard(tree) && textOf(tree).includes("La oferta ya no está disponible"));
+    withRouteOffer();
+    api.replies["POST /v2/offers/77/accept"] = new Error("sin red");
+    tree = await mount(screens[5][1]());
+    api.calls = []; nav.calls = [];
+    tree = await press(routeCard(tree), "Aceptar");
+    check("Bandeja: sin respuesta al aceptar un recorrido no se reintenta solo y lo dice", api.calls.filter((c) => c === "POST /v2/offers/77/accept").length === 1 && !!routeCard(tree) && textOf(tree).includes("No pudimos confirmar el recorrido") && !nav.calls.length);
+    setDriverApi();
+    api.replies["GET /v2/offers/mine"] = { ok: false, status: 500, error: "Falla de ofertas" };
+    tree = await mount(screens[5][1]());
+    check("Bandeja: si fallan los recorridos ofrecidos, los Turbos se ven igual y el error está a la vista", textOf(tree).includes("Turbo #90") && textOf(tree).includes("No se pudieron cargar los recorridos ofrecidos") && textOf(tree).includes("Falla de ofertas"));
+    setDriverApi();
+    api.replies["GET /v2/turbo/offers/mine"] = { ok: true, offers: turbos().map((o) => ({ ...o, group_id: 7 })) };
+    tree = await mount(screens[5][1]());
+    check("Bandeja: un lote va en una sola tarjeta", textOf(tree).includes("Lote de 2 Turbos") && all(tree, (x) => x.type === "Item").length === 1);
+    setDriverApi();
+    api.replies["GET /v2/turbo/offers/mine"] = { ok: true, offers: [] };
+    tree = await mount(screens[5][1]());
+    check("Bandeja: vacía, lo dice", textOf(tree).includes("No tenés ofertas ahora"));
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      withRouteOffer();
+      tree = await mount(screens[5][1]());
+      check(`Bandeja ${scheme}: legible con Turbos y recorridos`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+    }
+  }
+
+  // 7c) Inicio: la misión activa arriba (varias a la vez), acceso a ofertas
+  // con el contador, y las ofertas que llegan con la app abierta como aviso
+  // que no bloquea.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    const dark = createTheme({ scheme: "dark" });
+    useTheme(dark);
+    const homeEl = () => RealReact.createElement(RealReact.Fragment, null,
+      RealReact.createElement(HomeScreen, { navigation: nav, route: { params: {} } }),
+      RealReact.createElement(OfferBanner));
+    setEnviosApi(); nav.calls = []; alerts.length = 0; push.handlers = null;
+    let tree = await mount(homeEl());
+    const txt = textOf(tree);
+    check("Inicio: misión activa con lo que sigue y el progreso", ["EN CURSO", "Reparto #8", "Desde ayer", "Entregá en Paso 5", "1 de 3 paradas"].every((x) => txt.includes(x)), txt.slice(0, 400));
+    check("Inicio: la misión va antes que las ofertas y la tarjeta Turbo", txt.indexOf("EN CURSO") < txt.indexOf("Ofertas") && txt.indexOf("Ofertas") < txt.indexOf("Turbo", txt.indexOf("Ofertas") + 1));
+    tree = await press(tree, "Continuar recorrido");
+    check("Inicio: «Continuar recorrido» abre el recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 8 }]));
+    const [second] = byLabel(tree, "Continuar Turbo #12");
+    check("Inicio: el segundo recorrido en la calle, en una fila", !!second);
+    second.props.onPress();
+    check("Inicio: la fila abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 12 }]));
+    const [offers] = byLabel(tree, "Ofertas");
+    check("Inicio: «Ofertas» con el contador", offers?.props.accessibilityLabel === "Ofertas: 3 sin contestar", offers?.props.accessibilityLabel);
+    offers.props.onPress();
+    check("Inicio: «Ofertas» abre la bandeja", js(lastNav()) === js(["navigate", "TurboOffersScreen"]));
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      tree = await settle();
+      const card = all(tree, (x) => x.type === "View" && textOf(x).startsWith("EN CURSO") && flat(x.props.style).backgroundColor === th.surfaces.card)[0];
+      check(`Inicio ${scheme}: tarjeta de misión legible`, !!card && legibility(card, th.surfaces.screen).bad.length === 0, card ? legibility(card, th.surfaces.screen).bad.join(" · ") : "sin tarjeta");
+      check(`Inicio ${scheme}: fila de ofertas legible`, legibility(byLabel(tree, "Ofertas")[0], th.surfaces.screen).bad.length === 0);
+    }
+    useTheme(dark);
+
+    // Ofertas que llegan con la app abierta: aviso arriba, sin diálogo.
+    check("Inicio: se registran los avisos de push", !!push.handlers?.onTurboOffer && !!push.handlers?.onRouteNotice);
+    nav.calls = []; alerts.length = 0;
+    push.handlers.onTurboOffer({ routeId: 90, source: "received", raw: { storeName: "Tienda Uno" } });
+    tree = await settle();
+    const banner = () => byLabel(tree, "Turbo disponible. Ver ofertas")[0];
+    check("Push Turbo con la app abierta: aviso que no bloquea (sin diálogo ni cambio de pantalla)", !alerts.length && !nav.calls.length && !!banner() && textOf(tree).includes("Tienda Uno. El primero que acepta se lo queda."));
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      tree = await settle();
+      const node = all(tree, (x) => x.props?.accessibilityRole === "alert")[0];
+      check(`Aviso de oferta ${scheme}: legible`, !!node && legibility(node, th.surfaces.screen).bad.length === 0, node ? legibility(node, th.surfaces.screen).bad.join(" · ") : "sin aviso");
+    }
+    useTheme(dark);
+    banner().props.onPress();
+    tree = await settle();
+    check("Aviso: tocarlo abre la bandeja y se cierra", js(lastNav()) === js(["navigate", "TurboOffersScreen"]) && !banner());
+    push.handlers.onRouteNotice({ kind: "ROUTE_OFFER", routeId: 77, source: "received", raw: {} });
+    tree = await settle();
+    check("Push recorrido ofrecido: aviso, sin diálogo", !alerts.length && byLabel(tree, "Te ofrecieron un recorrido. Ver ofertas").length === 1);
+    byLabel(tree, "Cerrar aviso")[0].props.onPress();
+    tree = await settle();
+    check("Aviso: se puede cerrar", !byLabel(tree, "Te ofrecieron un recorrido").length);
+    nav.calls = [];
+    push.handlers.onRouteNotice({ kind: "ROUTE_OFFER", routeId: 77, source: "response", raw: {} });
+    push.handlers.onTurboOffer({ routeId: 90, source: "response", raw: {} });
+    check("Push tocada (recorrido o Turbo): abre la bandeja", js(nav.calls) === js([["navigate", "TurboOffersScreen"], ["navigate", "TurboOffersScreen"]]), js(nav.calls));
+    push.handlers.onRouteNotice({ kind: "PICKUP_ASSIGNED", routeId: 31, source: "received", raw: {} });
+    check("Push colecta asignada: sigue con su confirmación de siempre", alerts.length === 1 && alerts[0][0] === "Colecta asignada");
+
+    // Sin nada en la calle: sin tarjeta de misión.
+    setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [ROUTES[0]] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
+    tree = await mount(homeEl());
+    check("Inicio: sin recorridos en la calle, sin misión (y «Ofertas» sigue)", !textOf(tree).includes("EN CURSO") && byLabel(tree, "Ofertas").length === 1);
+  }
+
 
   // 8) QR: mismas opciones y destinos; Colectar sigue derivando a LightData.
   {
@@ -1290,9 +1616,14 @@ const setDriverApi = () => {
       { id: 21, tracking: "46001", direccion: "Gurruchaga 1500", nombre_fantasia: "Kiosco Norte", status: "En camino", tipo_envio: "flex", is_turbo: true },
       { id: 22, tracking: "46002", direccion: "Thames 800", nombre_fantasia: "Kiosco Sur", status: "En camino", tipo_envio: "flex", is_turbo: false },
     ];
-    let tree = await mount(screens[1][1]());
-    const turbo = textOf(pressable(tree, "Gurruchaga 1500"));
+    setEnviosApi();
+    let tree = await press(await mount(screens[1][1]()), "Flex");
     const flex = textOf(pressable(tree, "Thames 800"));
+    check("Envíos: un Turbo no aparece en Flex", !textOf(tree).includes("Gurruchaga 1500"));
+    envios.currentDeliveries = envios.currentDeliveries.map((r: any) => ({ ...r, status: "Entregado", updated_at: UPDATED }));
+    tree = await press(await mount(screens[1][1]()), "Turbo");
+    tree = await press(tree, "Finalizados");
+    const turbo = textOf(pressable(tree, "Gurruchaga 1500"));
     check("Envíos: el Turbo dice «Turbo» en la tarjeta", turbo.includes("Turbo") && !turbo.includes("Flex"), turbo);
     check("Envíos: el resto sigue diciendo «Flex»", flex.includes("Flex") && !flex.includes("Turbo"), flex);
     tree = await press(tree, "Gurruchaga 1500");
