@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/turbo/turboGroup.ts src/Presentation/views/driver/turbo/turboGroup.test.ts
 //   node /tmp/turbo-group/turboGroup.test.js
 
-import { deliveryTime, groupActions, groupTitle, loadText, routesWithGroups, storeTitle, storeTurbos } from "./turboGroup";
+import { deliveryTime, groupActions, groupTitle, loadText, offerCards, routesWithGroups, storeTitle, storeTurbos } from "./turboGroup";
 import type { GroupTurbo, TurboGroup } from "./turboApi";
 
 let failed = 0;
@@ -60,6 +60,10 @@ eq("acciones: uno sumado con el grupo en la calle no vuelve a pedir Comenzar", g
 
 eq("tope", loadText({ morning: 3, cap_morning: 10, other: 1, cap_other: 5, morning_until: "13:00" }), "3 de 10 a la mañana · 1 de 5 después de las 13:00");
 eq("tope: sin datos", loadText(null), null);
+
+// Ofertas: las del lote en una sola tarjeta.
+const cards = offerCards([{ route_id: 1, group_id: null }, { route_id: 2, group_id: 7 }, { route_id: 3, group_id: null }, { route_id: 4, group_id: 7 }]);
+eq("ofertas: el lote junta sus Turbos en una tarjeta, en el lugar del primero", cards.map((c) => (c.kind === "lote" ? `L${c.group_id}:${c.offers.map((o) => o.route_id).join("+")}` : c.offer.route_id)), [1, "L7:2+4", 3]);
 
 if (failed) { console.log(`${failed} fallas`); process.exit(1); }
 console.log("todo ok");

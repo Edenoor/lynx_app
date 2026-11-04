@@ -18,6 +18,7 @@ import CollectionsScreen from "../views/driver/routes/CollectionsScreen";
 import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
 import TurboOffersScreen from "../views/driver/turbo/TurboOffersScreen";
 import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
+import TurboTomorrowScreen from "../views/driver/turbo/TurboTomorrowScreen";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
@@ -41,6 +42,8 @@ export type DriverStackParamList = {
   TurboOffersScreen: undefined;
   // Varios Turbos de una tienda con un solo retiro.
   TurboGroupScreen: { groupId: number };
+  // Programados sin chofer que cualquiera puede tomar antes.
+  TurboTomorrowScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -78,6 +81,7 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
           <Stack.Screen name="TurboOffersScreen" component={TurboOffersScreen} />
           <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />
+          <Stack.Screen name="TurboTomorrowScreen" component={TurboTomorrowScreen} />
         </>
       )}
     </Stack.Navigator>

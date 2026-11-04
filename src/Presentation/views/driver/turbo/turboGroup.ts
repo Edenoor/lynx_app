@@ -5,7 +5,7 @@
 // retiran juntos y se entregan en el orden del plan. Cada Turbo sigue siendo
 // su recorrido; la lista muestra un solo elemento por grupo.
 
-import type { GroupStore, GroupTurbo, TurboGroup, TurboLoad } from "./turboApi";
+import type { GroupStore, GroupTurbo, TurboGroup, TurboLoad, TurboOffer } from "./turboApi";
 
 type RouteLike = { id: number; type: string; turbo_group_id?: number | null };
 export type RouteListItem<R extends RouteLike> = { kind: "group"; group: TurboGroup } | { kind: "route"; route: R };
@@ -87,3 +87,18 @@ export function loadText(l: TurboLoad | null | undefined): string | null {
 }
 
 export const loadTotal = (l: TurboLoad | null | undefined) => (l ? l.morning + l.other : 0);
+
+// Las ofertas como tarjetas: las de un lote (mismo group_id) van en una sola,
+// en el lugar de la primera; las demás, de a una.
+export type OfferCard<O> = { kind: "single"; offer: O } | { kind: "lote"; group_id: number; offers: O[] };
+export function offerCards<O extends Pick<TurboOffer, "route_id" | "group_id">>(offers: O[]): OfferCard<O>[] {
+  const out: OfferCard<O>[] = [];
+  const lotes = new Map<number, { kind: "lote"; group_id: number; offers: O[] }>();
+  for (const o of offers) {
+    if (o.group_id == null) { out.push({ kind: "single", offer: o }); continue; }
+    let l = lotes.get(o.group_id);
+    if (!l) { l = { kind: "lote", group_id: o.group_id, offers: [] }; lotes.set(o.group_id, l); out.push(l); }
+    l.offers.push(o);
+  }
+  return out;
+}

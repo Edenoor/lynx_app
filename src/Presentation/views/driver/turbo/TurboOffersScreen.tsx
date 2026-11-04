@@ -2,7 +2,8 @@
 // Turbos ofrecidos al chofer: cada tarjeta muestra tienda, destino, distancia,
 // cuánto queda para contestar y hasta qué hora hay que entregar. Acepto lo
 // asigna (el primero que toca se lo queda); Paso lo rechaza. Se refresca sola
-// porque el push puede no llegar.
+// porque el push puede no llegar. Un lote (varios programados de una tienda)
+// va en una sola tarjeta y se acepta entero. Arriba, «Turbos de mañana».
 //
 // Si el «Acepto» no tiene respuesta (sin red, sin respuesta a tiempo) no se sabe
 // si quedó asignado: la tarjeta queda con «Confirmando el Turbo…» aunque el
@@ -21,8 +22,9 @@ import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
-import { acceptOffer, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
-import { AcceptOutcome, acceptWithConfirm, NO_RETIRAR_ANTES, plazoParaResponder, programadoLabel, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
+import { acceptLote, acceptOffer, declineLote, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
+import { AcceptOutcome, acceptWithConfirm, isDefinitive, NO_RETIRAR_ANTES, plazoParaResponder, programadoLabel, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
+import { offerCards } from "./turboGroup";
 import { todayIso } from "../routes/routesApi";
 import { errorMessage } from "../errorMessage";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
@@ -165,6 +167,31 @@ export default function TurboOffersScreen({ navigation }: Props) {
     } finally { setBusy(null); }
   };
 
+  // Un lote se acepta o se rechaza entero. `busy` lleva el lote en negativo
+  // (no se confunde con el número de un Turbo).
+  const dropLote = (groupId: number) => setOffers((prev) => prev.filter((o) => o.group_id !== groupId));
+  const onAcceptLote = async (groupId: number) => {
+    if (pendingRef.current || busy !== null) return;
+    setBusy(-groupId); setNotice(null); setError(null);
+    try {
+      const r = await acceptLote(groupId);
+      void refreshTrackingPolicy();
+      dropLote(groupId);
+      navigation.navigate("TurboGroupScreen", { groupId: r.group?.id ?? groupId });
+    } catch (e: any) {
+      if (isDefinitive(e)) { dropLote(groupId); setNotice(errorMessage(e, "Este lote ya no está disponible.")); }
+      else setError("No pudimos confirmar el lote. Si quedó a tu nombre, aparece en Recorridos.");
+    } finally { setBusy(null); }
+  };
+  const onDeclineLote = async (groupId: number) => {
+    setBusy(-groupId); setNotice(null); setError(null);
+    try { await declineLote(groupId); dropLote(groupId); }
+    catch (e: any) {
+      if (e instanceof TurboApiError && (e.status === 409 || e.status === 404)) dropLote(groupId);
+      else setError(`No se pudo avisar que pasás. ${errorMessage(e, "Probá de nuevo.")}`);
+    } finally { setBusy(null); }
+  };
+
   // La tarjeta del Acepto en curso se ve aunque el sondeo ya no la traiga
   // (si el servidor la asignó, deja de venir como oferta).
   const shown = pending && !offers.some((o) => o.route_id === pending.offer.route_id) ? [pending.offer, ...offers] : offers;
@@ -192,18 +219,54 @@ export default function TurboOffersScreen({ navigation }: Props) {
               <Text style={styles.meta}>El primero que acepta se lo queda. Si no contestás a tiempo, pasa a otro chofer.</Text>
             </View>
           </View>
+          <Pressable onPress={() => navigation.navigate("TurboTomorrowScreen")} style={[styles.btn, styles.btnNo, styles.tomorrow]} accessibilityRole="button">
+            <Text style={styles.btnGhostText}>Turbos de mañana</Text>
+          </Pressable>
 
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
           {notice ? <View style={styles.noticeBox}><Text style={styles.noticeText}>{notice}</Text></View> : null}
 
           <FlatList
-            data={shown}
-            keyExtractor={(o) => String(o.route_id)}
+            data={offerCards(shown)}
+            keyExtractor={(c) => (c.kind === "lote" ? `lote-${c.group_id}` : String(c.offer.route_id))}
             refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} tintColor={theme.text.accent} />}
             ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
               <View style={styles.empty}><Ionicons name="flash-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No hay turbos ofrecidos ahora.</Text></View>
             )}
-            renderItem={({ item }) => {
+            renderItem={({ item: card }) => {
+              if (card.kind === "lote") {
+                const first = card.offers[0];
+                const left = secondsLeft(first, now);
+                const disabled = busy !== null || pending !== null || left === 0;
+                const ultima = card.offers.reduce((a, o) => (o.deadline_at && (!a || o.deadline_at > a) ? o.deadline_at : a), null as string | null);
+                return (
+                  <View style={[theme.card, styles.card, left <= 15 && styles.cardUrgent]}>
+                    <View style={styles.cardTop}>
+                      <Text style={styles.cardType}>Lote de {card.offers.length} Turbos</Text>
+                      <View style={[styles.badge, left <= 15 && styles.badgeUrgent]}>
+                        <Ionicons name="time-outline" size={14} color={left <= 15 ? theme.status.rejected.icon : theme.text.primary} />
+                        <Text style={[styles.badgeText, left <= 15 && styles.badgeTextUrgent]}>{plazoParaResponder(left)}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.line}><Text style={styles.label}>Retiro · </Text>{first.store_name ?? "tienda"}{first.store_address ? ` · ${first.store_address}` : ""} · un solo retiro</Text>
+                    {card.offers.map((o) => (
+                      <Text key={o.route_id} style={styles.line}><Text style={styles.label}>Entrega · </Text>{o.receiver_name ?? "comprador"}{o.delivery_address ? ` · ${o.delivery_address}` : ""}{o.deadline_at ? ` · antes de las ${hhmm(o.deadline_at)}` : ""}</Text>
+                    ))}
+                    <Text style={styles.cardMeta}>
+                      {km(first.distance_km) ? `Tienda a ${km(first.distance_km)} de vos · ` : ""}Se acepta entero{ultima ? `: la última, antes de las ${hhmm(ultima)}` : ""}.
+                    </Text>
+                    <View style={styles.row}>
+                      <Pressable onPress={() => onAcceptLote(card.group_id)} disabled={disabled} style={[styles.btn, styles.btnYes, disabled && styles.btnDisabled]}>
+                        {busy === -card.group_id ? <ActivityIndicator color={theme.text.onPrimary} /> : <Text style={styles.btnText}>Acepto el lote</Text>}
+                      </Pressable>
+                      <Pressable onPress={() => onDeclineLote(card.group_id)} disabled={disabled} style={[styles.btn, styles.btnNo, disabled && styles.btnDisabled]}>
+                        <Text style={styles.btnGhostText}>Paso</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              }
+              const item = card.offer;
               const left = secondsLeft(item, now);
               const urgent = left <= 15;
               const mine = pending?.offer.route_id === item.route_id ? pending : null;
@@ -310,6 +373,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   btnText: { color: t.text.onPrimary, fontWeight: "700", fontSize: 15 },
   btnGhostText: { color: t.text.primary, fontWeight: "600", fontSize: 15 },
+  tomorrow: { flex: 0, marginBottom: t.spacing.md },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
   emptyText: { color: t.text.secondary, textAlign: "center" },
   errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },

@@ -30,6 +30,10 @@ export type TurboOffer = {
   // recorrido) y la franja empieza a esta hora. Para hoy, la fecha de hoy.
   scheduled_date?: string | null;
   window_start_at?: string | null;
+  // Lote: los programados de una tienda que se ofrecen juntos y se aceptan
+  // enteros. Cada Turbo trae su oferta con el mismo group_id.
+  group_id?: number | null;
+  source?: string | null;
 };
 
 export type TurboDispatch = {
@@ -156,3 +160,28 @@ export const collectInGroup = async (id: number, routeId: number) =>
   unwrap<{ group: TurboGroup; warnings: GroupWarning[] }>(await postJson(`/v2/turbo/groups/${id}/collect`, { route_id: routeId }));
 export const completeGroup = async (id: number) =>
   unwrap<{ group: TurboGroup; completed: number[]; pending: number[] }>(await postJson(`/v2/turbo/groups/${id}/complete`, {}));
+
+// Lotes: se aceptan o se rechazan enteros (todos sus Turbos).
+export const acceptLote = async (groupId: number) =>
+  unwrap<{ group: TurboGroup; already?: boolean }>(await postJsonWithTimeout(`/v2/turbo/offers/lote/${groupId}/accept`, {}, ACCEPT_TIMEOUT_MS));
+export const declineLote = async (groupId: number) =>
+  unwrap<{ ok: true }>(await postJsonWithTimeout(`/v2/turbo/offers/lote/${groupId}/decline`, {}, DECLINE_TIMEOUT_MS));
+
+// Turbos de mañana: los programados sin chofer que cualquiera puede tomar antes.
+export type ScheduledTurbo = {
+  route_id: number;
+  delivery_id: number;
+  scheduled_date: string;
+  window_start_at: string | null;
+  deadline_at: string | null;
+  store_name: string | null;
+  store_address: string | null;
+  delivery_address: string | null;
+  delivery_postal_code: string | null;
+  receiver_name: string | null;
+  offered_to_me: boolean;
+};
+export const fetchScheduledAvailable = async () =>
+  unwrap<{ turbos: ScheduledTurbo[] }>(await getJsonWithTimeout("/v2/turbo/scheduled/available", OFFERS_TIMEOUT_MS)).turbos;
+export const claimScheduled = async (routeId: number) =>
+  unwrap<{ route: { id: number }; group_id?: number | null; already?: boolean }>(await postJsonWithTimeout(`/v2/turbo/scheduled/${routeId}/claim`, {}, ACCEPT_TIMEOUT_MS));
