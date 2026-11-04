@@ -18,6 +18,9 @@ export type RouteSummary = {
   // contestó el chofer. driver_confirmation viene en toda colecta.
   template_id?: number | null; template_name?: string | null; departure_time?: string | null;
   driver_confirmation?: "ACCEPTED" | "DECLINED" | null; confirmation_state?: ConfirmationState | null;
+  // Turbo: el grupo en el que corre (varios Turbos de una tienda con un solo
+  // retiro). Un servidor anterior no lo manda.
+  turbo_group_id?: number | null;
 };
 export type StopDelivery = {
   delivery_id: number; tracking: string | number | null; nombre_destinatario: string | null; direccion: string | null;

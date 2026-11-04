@@ -546,7 +546,8 @@ const setDriverApi = () => {
     nav.calls = [];
     setRoutesApi();
     let tree = await mount(screens[2][1]());
-    check("Recorridos: mismos pedidos a la API", JSON.stringify([...api.calls].sort()) === JSON.stringify([`GET /v2/routes/mine?date=${TODAY}`, "GET /v2/offers/mine", "GET /v2/turbo/offers/mine"].sort()), api.calls.join(", "));
+    // Más los grupos Turbo del día (varios Turbos de una tienda se ven como uno).
+    check("Recorridos: mismos pedidos a la API", JSON.stringify([...api.calls].sort()) === JSON.stringify([`GET /v2/routes/mine?date=${TODAY}`, "GET /v2/offers/mine", "GET /v2/turbo/offers/mine", `GET /v2/turbo/groups/mine?date=${TODAY}`].sort()), api.calls.join(", "));
     const order = all(tree, (x) => x.type === "Item").map((x) => textOf(x).match(/#\d+/)?.[0]);
     check("Recorridos: sin colectas y en el orden del servidor", JSON.stringify(order) === JSON.stringify(["#11", "#12", "#14"]), order.join(", "));
     const chips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);

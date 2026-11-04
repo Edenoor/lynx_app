@@ -39,7 +39,7 @@ type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 // Los registros no se tocan. El corte (cutoff_snapshot) es una hora fija y sí.
 
 export default function RouteDetailScreen({ navigation, route: nav }: Props) {
-  const { routeId, name } = nav.params;
+  const { routeId, name, fromGroup } = nav.params;
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [route, setRoute] = useState<RouteDetail | null>(null);
@@ -59,6 +59,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     catch (e: any) { setError(errorMessage(e, "No se pudo cargar el recorrido")); }
   }, [routeId]);
   useEffect(() => { load(); }, [load]);
+  // Un Turbo que corre en un grupo se maneja desde el grupo (un solo retiro por
+  // tienda): una oferta aceptada o un aviso que abre este recorrido va al grupo.
+  useEffect(() => {
+    if (!fromGroup && route?.type === "TURBO" && route.turbo_group_id) navigation.replace("TurboGroupScreen", { groupId: route.turbo_group_id });
+  }, [fromGroup, route?.type, route?.turbo_group_id, navigation]);
   useEffect(() => {
     if (route?.type !== "TURBO") return;
     fetchDispatch(routeId)

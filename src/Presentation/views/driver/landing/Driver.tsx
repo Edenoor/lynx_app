@@ -50,6 +50,8 @@ import {
 } from "../../../components/DriverBottomNavigation";
 import DriverPerformanceCard from "../../../components/DriverPerformanceCard";
 import DriverTurboStatusCard from "../../../components/DriverTurboStatusCard";
+import { fetchMyGroups, TurboLoad } from "../turbo/turboApi";
+import { loadText, loadTotal } from "../turbo/turboGroup";
 
 interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
 
@@ -173,6 +175,8 @@ export const DriverScreen = ({ navigation }: Props) => {
   const [turboOn, setTurboOn] = useState<boolean>(false);
   // null = todavía no se sabe; false = el coordinador no lo habilitó para turbos.
   const [turboEnabled, setTurboEnabled] = useState<boolean | null>(null);
+  // Turbos que lleva hoy contra su tope (null: sin dato, un servidor anterior).
+  const [turboLoad, setTurboLoad] = useState<TurboLoad | null>(null);
   const [saving, setSaving] = useState(false);
   const [available] = useState<boolean>(true);
   // Modo en que quedó el seguimiento: si no es "background", se muestra un aviso fijo.
@@ -507,6 +511,12 @@ export const DriverScreen = ({ navigation }: Props) => {
     };
   }, [username]);
 
+  useEffect(() => {
+    const cargar = () => { fetchMyGroups(todayIso()).then((r) => setTurboLoad(r.load)).catch(() => {}); };
+    cargar();
+    return navigation.addListener("focus", cargar);
+  }, [navigation]);
+
   const toggleTurbo = async (val: boolean) => {
     if (!username) return;
 
@@ -697,7 +707,8 @@ export const DriverScreen = ({ navigation }: Props) => {
           <DriverTurboStatusCard
             active={turboOn}
             saving={saving}
-            activeTrips={0}
+            activeTrips={loadTotal(turboLoad)}
+            capText={loadText(turboLoad)}
             enabled={turboEnabled}
             onToggle={toggleTurbo}
           />

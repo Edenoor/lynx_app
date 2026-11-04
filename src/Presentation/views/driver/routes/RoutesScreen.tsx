@@ -19,7 +19,8 @@ import {
   todayIso, TYPE_LABEL,
 } from "./routesApi";
 import { errorMessage } from "../errorMessage";
-import { fetchMyOffers } from "../turbo/turboApi";
+import { fetchMyGroups, fetchMyOffers, TurboGroup, TurboLoad } from "../turbo/turboApi";
+import { groupTitle, loadText, loadTotal, routesWithGroups } from "../turbo/turboGroup";
 import { routeStatusKey } from "./routeStatus";
 import { capitalize } from "./collectionLabels";
 
@@ -44,18 +45,23 @@ export default function RoutesScreen({ navigation }: Props) {
   const [ofertas, setOfertas] = useState(0);
   // Recorridos que ofreció el coordinador (no Turbo): se aceptan o rechazan acá.
   const [ofrecidos, setOfrecidos] = useState<RouteOffer[]>([]);
+  // Grupos Turbo del día: varios Turbos de una tienda se ven como uno.
+  const [grupos, setGrupos] = useState<{ groups: TurboGroup[]; load: TurboLoad | null }>({ groups: [], load: null });
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [mine, turbos, offered] = await Promise.all([
+      const [mine, turbos, offered, groups] = await Promise.all([
         fetchMyRoutes(date),
         fetchMyOffers().catch(() => []),
         fetchRouteOffers().catch(() => [] as RouteOffer[]),
+        // Un servidor anterior no tiene grupos: la lista de siempre.
+        fetchMyGroups(date).catch(() => ({ groups: [] as TurboGroup[], load: null })),
       ]);
       setRoutes(mine.filter((r) => r.type !== "PICKUP"));
       setOfertas(turbos.length);
       setOfrecidos(offered);
+      setGrupos(groups);
     } catch (e: any) { setError(e?.message ?? "No se pudieron cargar los recorridos"); } finally { setLoading(false); }
   }, [date]);
 
@@ -131,14 +137,31 @@ export default function RoutesScreen({ navigation }: Props) {
             </View>
           ) : null}
 
+          {loadTotal(grupos?.load) ? <Text style={[styles.cardMeta, { marginBottom: 8 }]}>Turbos que llevás: {loadText(grupos?.load)}</Text> : null}
+
           <FlatList
-            data={routes}
-            keyExtractor={(r) => String(r.id)}
+            data={routesWithGroups(routes, grupos?.groups ?? [])}
+            keyExtractor={(i) => (i.kind === "group" ? `g${i.group.id}` : String(i.route.id))}
             refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.text.accent} />}
             ListEmptyComponent={loading ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 40 }} /> : (
               <View style={styles.empty}><Ionicons name="map-outline" size={36} color={theme.text.muted} /><Text style={styles.emptyText}>No tenés recorridos de reparto ni Turbo para este día.</Text></View>
             )}
-            renderItem={({ item }) => (
+            renderItem={({ item: it }) => {
+              if (it.kind === "group") {
+                const g = it.group;
+                const estado = g.status === "IN_PROGRESS" ? "IN_PROGRESS" : g.status === "DONE" ? "COMPLETED" : "ASSIGNED";
+                return (
+                  <Pressable style={[theme.listItem, styles.card]} onPress={() => navigation.navigate("TurboGroupScreen", { groupId: g.id })}>
+                    <View style={styles.cardTop}>
+                      <Text style={styles.cardType}>Turbo · grupo #{g.id}</Text>
+                      <StatusChip status={routeStatusKey(estado)} label={STATUS_LABEL[estado]} />
+                    </View>
+                    <Text style={styles.cardMeta}>{groupTitle(g)} · un solo retiro por tienda</Text>
+                  </Pressable>
+                );
+              }
+              const item = it.route;
+              return (
               <Pressable style={[theme.listItem, styles.card]} onPress={() => navigation.navigate("RouteDetailScreen", { routeId: item.id })}>
                 <View style={styles.cardTop}>
                   <Text style={styles.cardType}>{TYPE_LABEL[item.type]} #{item.id}</Text>
@@ -150,7 +173,8 @@ export default function RoutesScreen({ navigation }: Props) {
                 </Text>
                 {item.type === "DELIVERY" && item.status === "ASSIGNED" ? <Text style={styles.cardHint}>Escaneá el QR del recorrido y confirmá la cantidad para salir.</Text> : null}
               </Pressable>
-            )}
+              );
+            }}
             contentContainerStyle={{ paddingBottom: 24 }}
           />
         </View>

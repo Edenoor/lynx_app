@@ -13,6 +13,8 @@ type DriverTurboStatusCardProps = {
   nextDeliveryText?: string;
   // false = no habilitado por el coordinador: el interruptor anda, pero no le van a ofrecer turbos.
   enabled?: boolean | null;
+  // Cuántos Turbos lleva contra su tope («3 de 10 a la mañana · …»).
+  capText?: string | null;
   onToggle: (value: boolean) => void;
 };
 
@@ -22,6 +24,7 @@ export function DriverTurboStatusCard({
   activeTrips = 0,
   nextDeliveryText,
   enabled = null,
+  capText = null,
   onToggle,
 }: DriverTurboStatusCardProps) {
   const theme = useAppTheme();
@@ -68,10 +71,11 @@ export function DriverTurboStatusCard({
 
         <Text style={styles.tripText}>
           {activeTrips === 1
-            ? "1 viaje activo"
-            : `${activeTrips} viajes activos`}
+            ? "1 Turbo activo"
+            : `${activeTrips} Turbos activos`}
         </Text>
       </View>
+      {capText ? <Text style={styles.description}>Llevás {capText}.</Text> : null}
 
       <Text style={styles.description}>
         {nextDeliveryText ||

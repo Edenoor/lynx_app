@@ -93,3 +93,66 @@ export const km = (v: string | number | null | undefined) => {
 };
 export const hhmm = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : null;
+
+// Grupos: varios Turbos de una misma tienda con un solo retiro. Cada Turbo
+// sigue siendo su recorrido (route_id); el grupo los junta para la pantalla.
+export type GroupTurbo = {
+  route_id: number;
+  route_status: string;
+  delivery_id: number;
+  tracking: string | number | null;
+  nombre_destinatario: string | null;
+  store_id: number;
+  store_name: string | null;
+  deadline_at: string | null;
+  window_start_at: string | null;
+  pickup_stop_id: number | null;
+  pickup_status: "PENDING" | "ARRIVED" | "DONE" | "SKIPPED" | null;
+  collected: boolean;
+  dropoff_stop_id: number | null;
+  dropoff_status: "PENDING" | "ARRIVED" | "DONE" | "SKIPPED" | null;
+  address: string | null;
+  postal_code: string | null;
+  receiver_name: string | null;
+  ops_status: string | null;
+  // Plan del grupo: hora estimada de la entrega y holgura contra el fin de la
+  // franja menos el margen (negativa = llega tarde). null sin plan.
+  eta: string | null;
+  slack_minutes: number | null;
+};
+export type GroupStore = {
+  store_id: number;
+  store_name: string | null;
+  store_address: string | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
+  turbos: number;
+  collected: number;
+  pickup_status: "PENDING" | "ARRIVED" | "DONE";
+  eta: string | null;
+};
+export type TurboGroup = {
+  id: number;
+  scheduled_date: string;
+  kind: string;
+  status: "ASSIGNED" | "IN_PROGRESS" | "DONE";
+  plan_at: string | null;
+  estimated: boolean;
+  turbos: GroupTurbo[];
+  stores: GroupStore[];
+};
+// Cuántos Turbos abiertos lleva contra su tope, por turno.
+export type TurboLoad = { morning: number; cap_morning: number; other: number; cap_other: number; morning_until: string };
+export type GroupWarning = { delivery_id?: number; message: string };
+
+export const fetchMyGroups = async (date: string) =>
+  unwrap<{ groups: TurboGroup[]; load: TurboLoad }>(await getJsonWithTimeout(`/v2/turbo/groups/mine?date=${date}`, OFFERS_TIMEOUT_MS));
+export const fetchGroup = async (id: number) => unwrap<{ group: TurboGroup }>(await getJson(`/v2/turbo/groups/${id}`)).group;
+export const startGroup = async (id: number) =>
+  unwrap<{ group: TurboGroup; warnings: GroupWarning[] }>(await postJson(`/v2/turbo/groups/${id}/start`, {}));
+export const groupStoreAction = async (id: number, storeId: number, action: "arrive" | "done") =>
+  unwrap<{ group: TurboGroup }>(await postJson(`/v2/turbo/groups/${id}/stores/${storeId}/${action}`, {})).group;
+export const collectInGroup = async (id: number, routeId: number) =>
+  unwrap<{ group: TurboGroup; warnings: GroupWarning[] }>(await postJson(`/v2/turbo/groups/${id}/collect`, { route_id: routeId }));
+export const completeGroup = async (id: number) =>
+  unwrap<{ group: TurboGroup; completed: number[]; pending: number[] }>(await postJson(`/v2/turbo/groups/${id}/complete`, {}));

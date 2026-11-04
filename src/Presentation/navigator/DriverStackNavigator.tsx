@@ -17,6 +17,7 @@ import RoutesScreen from "../views/driver/routes/RoutesScreen";
 import CollectionsScreen from "../views/driver/routes/CollectionsScreen";
 import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
 import TurboOffersScreen from "../views/driver/turbo/TurboOffersScreen";
+import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
@@ -35,8 +36,11 @@ export type DriverStackParamList = {
   // Colectas (PICKUP): pestaña de la barra.
   CollectionsScreen: undefined;
   // name: el de la colecta, cuando se conoce (el detalle no lo trae).
-  RouteDetailScreen: { routeId: number; name?: string };
+  // fromGroup: se abrió desde su grupo Turbo (si no, un Turbo agrupado abre el grupo).
+  RouteDetailScreen: { routeId: number; name?: string; fromGroup?: boolean };
   TurboOffersScreen: undefined;
+  // Varios Turbos de una tienda con un solo retiro.
+  TurboGroupScreen: { groupId: number };
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -73,6 +77,7 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="CollectionsScreen" component={CollectionsScreen} />
           <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
           <Stack.Screen name="TurboOffersScreen" component={TurboOffersScreen} />
+          <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />
         </>
       )}
     </Stack.Navigator>
