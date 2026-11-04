@@ -12,7 +12,17 @@ import {
   Platform,
 } from "react-native";
 import { useOnboarding } from "../onboarding/OnboardingContext";
-import { VEHICLE_CATALOG } from "../onboarding/VehicleCatalog";
+import {
+  aMano,
+  BUSCADOR_DESDE,
+  filtrar,
+  limpiarTexto,
+  marcasDe,
+  MAX_MARCA,
+  MAX_MODELO,
+  modelosDe,
+  vehiculoCompleto,
+} from "../onboarding/vehicleOptions";
 import type { VehicleType } from "../onboarding/types";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { OnboardingStackParamList } from "../navigator/OnboardingStackNavigator";
@@ -45,24 +55,32 @@ export function VehicleScreen({ navigation }: Props) {
   const [plate, setPlate] = useState<string>(state.vehicle.plate ?? "");
 const [dni, setDni] = useState<string>(state.vehicle.dni ?? "");
 const [cuil, setCuil] = useState<string>(state.vehicle.cuil ?? "");
+  // «Otra marca» / «Otro modelo»: escritos a mano. Al volver con lo ya cargado,
+  // lo que no está en el catálogo se muestra así.
+  const [inicioAMano] = useState(() =>
+    aMano(state.vehicle.type ?? "", state.vehicle.brand ?? null, state.vehicle.model ?? null)
+  );
+  const [brandOtra, setBrandOtra] = useState<boolean>(inicioAMano.marca);
+  const [modelOtro, setModelOtro] = useState<boolean>(inicioAMano.modelo);
+  const [buscarMarca, setBuscarMarca] = useState<string>("");
+  const [buscarModelo, setBuscarModelo] = useState<string>("");
 
   const selectedVehicleLabel =
     VEHICLE_TYPES.find((item) => item.value === type)?.label ?? "";
 
-  const brands = useMemo(() => {
-    if (!type) return [];
-    return Object.keys(VEHICLE_CATALOG[type]);
-  }, [type]);
+  const brands = useMemo(() => marcasDe(type), [type]);
 
-  const models = useMemo(() => {
-    if (!type || !brand) return [];
-    return VEHICLE_CATALOG[type][brand] ?? [];
-  }, [type, brand]);
+  const models = useMemo(
+    () => (brandOtra ? [] : modelosDe(type, brand)),
+    [type, brand, brandOtra]
+  );
+
+  const brandsVisibles = useMemo(() => filtrar(brands, buscarMarca), [brands, buscarMarca]);
+  const modelsVisibles = useMemo(() => filtrar(models, buscarModelo), [models, buscarModelo]);
 
 const canContinue = Boolean(
   type &&
-    brand &&
-    model &&
+    vehiculoCompleto(brand, model) &&
     plate.trim().length >= 5 &&
     dni.trim().length >= 7 &&
     cuil.trim().length >= 10
@@ -70,28 +88,46 @@ const canContinue = Boolean(
 
   const onChangeType = (value: VehicleType) => {
     setType(value);
-    setBrand("");
-    setModel("");
+    resetBrand();
   };
 
   const onChangeBrand = (value: string) => {
     setBrand(value);
     setModel("");
+    setModelOtro(false);
+    setBuscarModelo("");
   };
 
   const resetType = () => {
     setType("");
-    setBrand("");
-    setModel("");
+    resetBrand();
   };
 
   const resetBrand = () => {
     setBrand("");
     setModel("");
+    setBrandOtra(false);
+    setModelOtro(false);
+    setBuscarMarca("");
+    setBuscarModelo("");
+  };
+
+  // Una marca escrita a mano no tiene modelos en la lista: el modelo también.
+  const onOtraMarca = () => {
+    resetBrand();
+    setBrandOtra(true);
+    setModelOtro(true);
   };
 
   const resetModel = () => {
     setModel("");
+    setModelOtro(brandOtra);
+    setBuscarModelo("");
+  };
+
+  const onOtroModelo = () => {
+    setModel("");
+    setModelOtro(true);
   };
 
   const onContinue = () => {
@@ -107,8 +143,8 @@ dispatch({
   type: "SET_VEHICLE",
   value: {
     type: type as VehicleType,
-    brand,
-    model,
+    brand: limpiarTexto(brand, MAX_MARCA),
+    model: limpiarTexto(model, MAX_MODELO),
     plate: plate.trim().toUpperCase(),
     dni: dni.trim(),
     cuil: cuil.trim(),
@@ -185,11 +221,37 @@ dispatch({
                   <Text style={styles.emptyText}>
                     Primero seleccioná el tipo.
                   </Text>
+                ) : brandOtra ? (
+                  <View style={styles.optionsList}>
+                    <TextInput
+                      value={brand}
+                      onChangeText={setBrand}
+                      placeholder="Escribí la marca"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      maxLength={MAX_MARCA}
+                      style={styles.input}
+                    />
+                    <Pressable onPress={resetBrand} hitSlop={10}>
+                      <Text style={styles.changeText}>Elegir de la lista</Text>
+                    </Pressable>
+                  </View>
                 ) : brand ? (
                   <SelectedValueCard value={brand} onChange={resetBrand} />
                 ) : (
                   <View style={styles.optionsList}>
-                    {brands.map((item) => (
+                    {brands.length > BUSCADOR_DESDE ? (
+                      <TextInput
+                        value={buscarMarca}
+                        onChangeText={setBuscarMarca}
+                        placeholder="Buscar marca"
+                        placeholderTextColor={theme.colors.placeholder}
+                        autoCorrect={false}
+                        style={styles.searchInput}
+                      />
+                    ) : null}
+                    {brandsVisibles.map((item) => (
                       <SelectableCard
                         key={item}
                         title={item}
@@ -197,6 +259,12 @@ dispatch({
                         onPress={() => onChangeBrand(item)}
                       />
                     ))}
+                    {brandsVisibles.length === 0 ? (
+                      <Text style={styles.emptyText}>
+                        No está en la lista: elegí «Otra marca».
+                      </Text>
+                    ) : null}
+                    <SelectableCard title="Otra marca" onPress={onOtraMarca} />
                   </View>
                 )}
               </View>
@@ -204,15 +272,43 @@ dispatch({
               <View style={styles.section}>
                 <Text style={styles.label}>Modelo</Text>
 
-                {!(type && brand) ? (
+                {!(type && (brand || brandOtra)) ? (
                   <Text style={styles.emptyText}>
                     Primero seleccioná una marca.
                   </Text>
+                ) : modelOtro ? (
+                  <View style={styles.optionsList}>
+                    <TextInput
+                      value={model}
+                      onChangeText={setModel}
+                      placeholder="Escribí el modelo"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      maxLength={MAX_MODELO}
+                      style={styles.input}
+                    />
+                    {!brandOtra ? (
+                      <Pressable onPress={resetModel} hitSlop={10}>
+                        <Text style={styles.changeText}>Elegir de la lista</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ) : model ? (
                   <SelectedValueCard value={model} onChange={resetModel} />
                 ) : (
                   <View style={styles.optionsList}>
-                    {models.map((item) => (
+                    {models.length > BUSCADOR_DESDE ? (
+                      <TextInput
+                        value={buscarModelo}
+                        onChangeText={setBuscarModelo}
+                        placeholder="Buscar modelo"
+                        placeholderTextColor={theme.colors.placeholder}
+                        autoCorrect={false}
+                        style={styles.searchInput}
+                      />
+                    ) : null}
+                    {modelsVisibles.map((item) => (
                       <SelectableCard
                         key={item}
                         title={item}
@@ -220,6 +316,12 @@ dispatch({
                         onPress={() => setModel(item)}
                       />
                     ))}
+                    {modelsVisibles.length === 0 ? (
+                      <Text style={styles.emptyText}>
+                        No está en la lista: elegí «Otro modelo».
+                      </Text>
+                    ) : null}
+                    <SelectableCard title="Otro modelo" onPress={onOtroModelo} />
                   </View>
                 )}
               </View>
@@ -416,6 +518,17 @@ title: {
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 1,
+  },
+  searchInput: {
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: t.surfaces.footer,
+    borderWidth: 1,
+    borderColor: t.borders.default,
+    paddingHorizontal: 14,
+    color: t.text.primary,
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   footer: {
