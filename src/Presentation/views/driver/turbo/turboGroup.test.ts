@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/turbo/turboGroup.ts src/Presentation/views/driver/turbo/turboGroup.test.ts
 //   node /tmp/turbo-group/turboGroup.test.js
 
-import { deliveryTime, groupActions, groupTitle, loadText, offerCards, routesWithGroups, storeTitle, storeTurbos } from "./turboGroup";
+import { canMove, deliveryTime, groupActions, groupTitle, loadText, moveTargets, offerCards, routesWithGroups, storeTitle, storeTurbos } from "./turboGroup";
 import type { GroupTurbo, TurboGroup } from "./turboApi";
 
 let failed = 0;
@@ -64,6 +64,17 @@ eq("tope: sin datos", loadText(null), null);
 // Ofertas: las del lote en una sola tarjeta.
 const cards = offerCards([{ route_id: 1, group_id: null }, { route_id: 2, group_id: 7 }, { route_id: 3, group_id: null }, { route_id: 4, group_id: 7 }]);
 eq("ofertas: el lote junta sus Turbos en una tarjeta, en el lugar del primero", cards.map((c) => (c.kind === "lote" ? `L${c.group_id}:${c.offers.map((o) => o.route_id).join("+")}` : c.offer.route_id)), [1, "L7:2+4", 3]);
+
+// Mover: a otros grupos del mismo día sin terminar; separar si no es el único.
+const gA = group(1, [turbo(61), turbo(62)]);
+const gB = group(2, [turbo(63, { store_id: 2, store_name: "LOLA PETS" })]);
+const gC = group(3, [turbo(64)], { scheduled_date: "2026-11-05" });
+const gD = group(4, [turbo(65, { route_status: "COMPLETED" })], { status: "DONE" });
+const mt = moveTargets(gA, [gA, gB, gC, gD]);
+eq("mover: solo a otros grupos del mismo día sin terminar", mt.groups.map((g) => g.id), [2]);
+eq("mover: se puede separar si hay más de uno", mt.canSplit, true);
+eq("mover: el único del grupo no se separa", moveTargets(gB, [gA, gB]).canSplit, false);
+eq("mover: uno terminado no se mueve", canMove(turbo(1, { route_status: "COMPLETED" })), false);
 
 if (failed) { console.log(`${failed} fallas`); process.exit(1); }
 console.log("todo ok");

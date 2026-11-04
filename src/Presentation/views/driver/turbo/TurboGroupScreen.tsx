@@ -19,9 +19,9 @@ import { OPS_LABEL, todayIso } from "../routes/routesApi";
 import { capitalize, directionsUrl, executionDayLabel } from "../routes/collectionLabels";
 import { errorMessage } from "../errorMessage";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
-import { collectInGroup, completeGroup, fetchGroup, groupStoreAction, hhmm, startGroup, TurboGroup } from "./turboApi";
+import { collectInGroup, completeGroup, fetchGroup, fetchMyGroups, groupStoreAction, hhmm, moveTurbo, startGroup, TurboGroup } from "./turboApi";
 import { NO_RETIRAR_ANTES } from "./turboOffer";
-import { deliveries, deliveryClosed, deliveryTime, groupActions, groupTitle, STORE_STATE_LABEL, storeTitle, storeTurbos } from "./turboGroup";
+import { canMove, deliveries, deliveryClosed, deliveryTime, groupActions, groupTitle, moveTargets, STORE_STATE_LABEL, storeTitle, storeTurbos } from "./turboGroup";
 import { turboPickupError } from "../routes/turboPickup";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboGroupScreen">;
@@ -33,6 +33,8 @@ export default function TurboGroupScreen({ navigation, route: nav }: Props) {
   const [group, setGroup] = useState<TurboGroup | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Mover un Turbo: cuál, y a qué grupos del chofer se puede.
+  const [moving, setMoving] = useState<{ routeId: number; groups: TurboGroup[] } | null>(null);
 
   const load = useCallback(async () => {
     try { setGroup(await fetchGroup(groupId)); setError(null); }
@@ -69,6 +71,20 @@ export default function TurboGroupScreen({ navigation, route: nav }: Props) {
     if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
     return r.group;
   });
+  const openMove = async (routeId: number) => {
+    setError(null);
+    try { setMoving({ routeId, groups: (await fetchMyGroups(group.scheduled_date)).groups }); }
+    catch (e: any) { setError(errorMessage(e, "No se pudieron cargar tus grupos")); }
+  };
+  const doMove = (routeId: number, toGroupId: number | null) => act(async () => {
+    const r = await moveTurbo(group.id, routeId, toGroupId);
+    setMoving(null);
+    if (r.late.length) Alert.alert("Ojo con las horas", `Con este cambio, ${r.late.length === 1 ? "una entrega llegaría" : `${r.late.length} entregas llegarían`} después de su hora límite.`);
+    // Si el grupo quedó vacío, se sigue en el otro.
+    if (!r.from.turbos.some((t) => t.route_status !== "CANCELLED")) { navigation.replace("TurboGroupScreen", { groupId: r.to.id }); return; }
+    return r.from;
+  });
+
   const onComplete = () =>
     Alert.alert("Terminar", "¿Entregaste todo lo de este grupo?", [
       { text: "No", style: "cancel" },
@@ -180,7 +196,8 @@ export default function TurboGroupScreen({ navigation, route: nav }: Props) {
 
           <Text style={styles.section}>Entregas, en orden</Text>
           {deliveries(group).map((t, i) => (
-            <Pressable key={t.route_id} onPress={() => navigation.navigate("RouteDetailScreen", { routeId: t.route_id, fromGroup: true })}>
+            <View key={t.route_id}>
+            <Pressable onPress={() => navigation.navigate("RouteDetailScreen", { routeId: t.route_id, fromGroup: true })}>
               <ThemedCard variant="row" style={[styles.card, deliveryClosed(t) && styles.cardClosed]}>
                 <View style={styles.row}>
                   <View style={styles.seq}><Text style={styles.seqText}>{i + 1}</Text></View>
@@ -196,6 +213,31 @@ export default function TurboGroupScreen({ navigation, route: nav }: Props) {
                 </View>
               </ThemedCard>
             </Pressable>
+            {canMove(t) && moving?.routeId !== t.route_id ? (
+              <Pressable onPress={() => openMove(t.route_id)} disabled={busy} style={styles.moveLink} accessibilityRole="button">
+                <Text style={styles.link}>Mover a otro grupo</Text>
+              </Pressable>
+            ) : null}
+            {moving?.routeId === t.route_id ? (() => {
+              const m = moveTargets(group, moving.groups);
+              return (
+                <View style={styles.movePanel}>
+                  {m.groups.map((g) => (
+                    <Pressable key={g.id} onPress={() => doMove(t.route_id, g.id)} disabled={busy} style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}>
+                      <Text style={styles.btnGhostText}>Al grupo #{g.id} · {groupTitle(g)}</Text>
+                    </Pressable>
+                  ))}
+                  {m.canSplit ? (
+                    <Pressable onPress={() => doMove(t.route_id, null)} disabled={busy} style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}>
+                      <Text style={styles.btnGhostText}>Separarlo en un grupo nuevo</Text>
+                    </Pressable>
+                  ) : null}
+                  {!m.groups.length && !m.canSplit ? <Text style={styles.meta}>No tenés otro grupo para este día.</Text> : null}
+                  <Pressable onPress={() => setMoving(null)} style={styles.moveLink}><Text style={styles.link}>Cancelar</Text></Pressable>
+                </View>
+              );
+            })() : null}
+            </View>
           ))}
           <Text style={styles.meta}>La entrega se cierra en Envíos Flex: Lynx se entera solo. Si no la podés entregar, abrila y marcá «No entregado».</Text>
 
@@ -242,6 +284,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   btnSmall: { backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 12, minHeight: 38, justifyContent: "center" },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: t.borders.default },
   rowBtn: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6 },
+  moveLink: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 4 },
+  movePanel: { gap: 8, paddingVertical: 6 },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: t.text.onPrimary, fontWeight: "700" },
   btnGhostText: { color: t.text.primary, fontWeight: "600" },

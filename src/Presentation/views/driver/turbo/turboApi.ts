@@ -185,3 +185,10 @@ export const fetchScheduledAvailable = async () =>
   unwrap<{ turbos: ScheduledTurbo[] }>(await getJsonWithTimeout("/v2/turbo/scheduled/available", OFFERS_TIMEOUT_MS)).turbos;
 export const claimScheduled = async (routeId: number) =>
   unwrap<{ route: { id: number }; group_id?: number | null; already?: boolean }>(await postJsonWithTimeout(`/v2/turbo/scheduled/${routeId}/claim`, {}, ACCEPT_TIMEOUT_MS));
+
+// Pasar un Turbo a otro grupo mío del mismo día, o separarlo en uno nuevo
+// (toGroupId null). `late`: las entregas que con el cambio llegarían tarde.
+export const moveTurbo = async (groupId: number, routeId: number, toGroupId: number | null) =>
+  unwrap<{ from: TurboGroup; to: TurboGroup; late: { route_id: number; slack_minutes: number }[] }>(
+    await postJson(`/v2/turbo/groups/${groupId}/move`, { route_id: routeId, to_group_id: toGroupId }),
+  );

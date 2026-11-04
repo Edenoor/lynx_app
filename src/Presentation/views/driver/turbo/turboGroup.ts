@@ -102,3 +102,13 @@ export function offerCards<O extends Pick<TurboOffer, "route_id" | "group_id">>(
   }
   return out;
 }
+
+// A qué grupos se puede pasar un Turbo de `g`: los otros grupos del chofer del
+// mismo día que no terminaron. Separarlo en uno nuevo vale si no es el único.
+export function moveTargets(g: TurboGroup, all: TurboGroup[]) {
+  return {
+    groups: all.filter((x) => x.id !== g.id && x.scheduled_date === g.scheduled_date && x.status !== "DONE"),
+    canSplit: vivos(g).length > 1,
+  };
+}
+export const canMove = (t: GroupTurbo) => !["COMPLETED", "CANCELLED"].includes(t.route_status);
