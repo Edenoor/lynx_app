@@ -14,6 +14,7 @@ const normalize = (value?: string | null) =>
 export function deliveryStatusKey(rawStatus?: string | null): StatusKey {
   const s = normalize(rawStatus);
 
+  if (s.includes("no entregado") || s.includes("revisar")) return "incident";
   if (s.includes("entregado")) return "delivered";
   if (s.includes("retirado") || s.includes("en camino") || s.includes("transit")) return "inTransit";
   if (s.includes("solicitado") || s.includes("creado") || s.includes("pendiente")) return "pending";

@@ -43,5 +43,9 @@ eq("undefined → neutral", deliveryStatusKey(undefined), "neutral");
 eq("entregado y pendiente → entregado", deliveryStatusKey("Entregado (pendiente de firma)"), "delivered");
 eq("cancelado y reprogramado → cancelado", deliveryStatusKey("Cancelado / reprogramado"), "cancelled");
 
+// «No entregado» contiene «entregado»: es incidencia, no verde.
+eq("«No entregado» → incident", deliveryStatusKey("No entregado"), "incident");
+eq("«Revisar estado» → incident", deliveryStatusKey("Revisar estado"), "incident");
+
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

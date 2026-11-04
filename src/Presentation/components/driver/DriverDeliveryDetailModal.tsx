@@ -61,8 +61,8 @@ const getRawStatus = (delivery?: DriverDeliveryCardItem | null) => {
   if (!delivery) return "";
 
   return String(
-    delivery.status_ml ||
-      delivery.estado ||
+    delivery.estado ||
+      delivery.status_ml ||
       delivery.status ||
       delivery.delivery_status ||
       delivery.estado_actual ||
@@ -75,6 +75,7 @@ const statusLabel = (delivery?: DriverDeliveryCardItem | null) => {
   const raw = getRawStatus(delivery);
   const s = normalizeStatus(raw);
 
+  if (s.includes("no entregado")) return "No entregado";
   if (s.includes("entregado")) return "Entregado";
   if (s.includes("retirado") || s.includes("en camino") || s.includes("transit"))
     return "En camino";

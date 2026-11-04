@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system/next";
 
 import useEnviosViewModel from "./ViewModel";
+import { classifyDelivery, deliveryKey } from "./deliveryState";
 import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
 import global from "../../../theme/global";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
@@ -118,52 +119,7 @@ const startOfDay = (d: Date) =>
 const endOfDay = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-const normalizeText = (value?: unknown) =>
-  String(value || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const getDisplayStatus = (item: Envio): string => {
-  return String(
-    item.status_ml ||
-      item.estado ||
-      item.status ||
-      item.delivery_status ||
-      item.estado_actual ||
-      item.assignment_response ||
-      ""
-  ).trim();
-};
-
-const getStatus = (item: Envio) => normalizeText(getDisplayStatus(item));
-
-const isFinalizado = (item: Envio) => {
-  const s = getStatus(item);
-
-  return (
-    s.includes("entregado") ||
-    s.includes("finaliz") ||
-    s.includes("cancel") ||
-    s.includes("cerrado") ||
-    s.includes("nadie") ||
-    s.includes("reprogram")
-  );
-};
-
-const isAttention = (item: Envio) => {
-  const s = getStatus(item);
-
-  return (
-    s.includes("cancel") ||
-    s.includes("pendiente") ||
-    s.includes("rechaz") ||
-    s.includes("nadie") ||
-    s.includes("reprogram")
-  );
-};
+const isFinalizado = (item: Envio) => classifyDelivery(item).finished;
 
 const getDateValue = (item: Envio): string | null => {
   return (
@@ -201,15 +157,6 @@ const normalizeCurrentDelivery = (item: any): Envio => {
     item?.shipmentId ||
     null;
 
-  const estado =
-    item?.status_ml ||
-    item?.estado ||
-    item?.status ||
-    item?.delivery_status ||
-    item?.estado_actual ||
-    item?.assignment_response ||
-    null;
-
   const nombreFantasia =
     item?.nombre_fantasia ||
     item?.store_name ||
@@ -234,7 +181,8 @@ const normalizeCurrentDelivery = (item: any): Envio => {
     nombre_fantasia: nombreFantasia,
     direccion,
     cp: item?.cp || item?.postal_code || item?.zip_code || null,
-    estado,
+    // La tarjeta y el detalle muestran `estado`: va la etiqueta ya clasificada.
+    estado: classifyDelivery(item ?? {}).label,
     cadete: item?.cadete || item?.driver_name || item?.driver || null,
     zona: item?.zona || item?.zone || item?.localidad || item?.provincia || null,
     localidad: item?.localidad || item?.provincia || item?.zona || null,
@@ -420,13 +368,11 @@ export const EnviosScreen = ({ navigation }: any) => {
 
   const visibleTotals = useMemo(() => {
     const totalEnvios = filtered.length;
+    const states = filtered.map(classifyDelivery);
 
-    const entregados = filtered.filter((it) =>
-      getStatus(it).includes("entregado")
-    ).length;
-
-    const pendientes = filtered.filter((it) => !isFinalizado(it)).length;
-    const atencion = filtered.filter(isAttention).length;
+    const entregados = states.filter((s) => s.phase === "delivered").length;
+    const pendientes = states.filter((s) => !s.finished).length;
+    const atencion = states.filter((s) => s.attention).length;
 
     const montoBruto = filtered.reduce(
       (acc, it) => acc + n(it.precio_chofer),
@@ -636,9 +582,7 @@ export const EnviosScreen = ({ navigation }: any) => {
 
       <FlatList
         data={filtered}
-        keyExtractor={(item, i) =>
-          `${item?.id ?? item?.delivery_id ?? item?.numero_tracking ?? "nt"}-${i}`
-        }
+        keyExtractor={deliveryKey}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl

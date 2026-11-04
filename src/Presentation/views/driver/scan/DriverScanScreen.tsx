@@ -1,28 +1,16 @@
 // src/Presentation/views/driver/scan/DriverScanScreen.tsx
+// Escaneo continuo del chofer (Asignarme, Colecta, Planta): cada lectura deja
+// su resultado en una tarjeta verde o roja y la cámara queda lista para la
+// siguiente, sin diálogos que cerrar. Solo frena una sesión vencida o la
+// falta de permiso de cámara. La cámara es la del Picker (QrScanner): no lee
+// otra etiqueta mientras hay un pedido en curso y no repite la misma mientras
+// siga a la vista. Las escrituras no se reintentan solas.
 
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Modal,
-  Alert,
-  Vibration,
-} from "react-native";
-import {
-  CameraView,
-  useCameraPermissions,
-  BarcodeScanningResult,
-} from "expo-camera";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, Pressable, Modal, Alert, Vibration } from "react-native";
+import { useCameraPermissions } from "expo-camera";
 import { StackScreenProps } from "@react-navigation/stack";
+import { useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
@@ -32,1447 +20,308 @@ import { useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { DEFAULT_THEME, FixedTheme } from "../../../theme/FixedTheme";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
-import {
-  DriverBottomNavigation,
-  DriverTabKey,
-} from "../../../components/DriverBottomNavigation";
-
-import {
-  API_URL,
-  getJson,
-} from "../../../config/Api";
-import {
-  playScanError,
-  playScanSuccess,
-} from "../../../config/ScanSound";
-import {
-  PendingPackage,
-  processScan,
-} from "../../picker/pickerScan";
+import { QrScanner } from "../../../components/QrScanner";
+import { DriverBottomNavigation, DriverTabKey } from "../../../components/DriverBottomNavigation";
+import { getJsonWithTimeout, postJsonWithTimeout, putJsonWithTimeout } from "../../../config/Api";
+import { playScanError, playScanSuccess } from "../../../config/ScanSound";
+import { PendingPackage, processScan } from "../../picker/pickerScan";
 import { presentOutcome } from "../../picker/pickerOutcome";
+import {
+  assignFeedback,
+  collectFeedback,
+  DriverScanMode,
+  EMPTY_SESSION,
+  NO_CONNECTION,
+  noResponseFeedback,
+  parseScanPayload,
+  payloadProblem,
+  plantaFeedback,
+  recordScan,
+  roleProblem,
+  ScanFeedback,
+  ScanPayload,
+  ScanSession,
+  ScanTone,
+  scanLabel,
+  SESSION_EXPIRED,
+  sessionSummary,
+} from "./driverScan";
 
-type Props = StackScreenProps<
-  DriverStackParamList,
-  "DriverScanScreen"
->;
+type Props = StackScreenProps<DriverStackParamList, "DriverScanScreen">;
 
-const TITLES: Record<
-  NonNullable<Props["route"]["params"]>["mode"],
-  string
-> = {
+const TITLES: Record<DriverScanMode, string> = {
   colecta: "Ingresar envío",
   planta: "Recepción en planta",
   asignarme: "Asignarme envío",
 };
 
-const HINTS: Record<
-  NonNullable<Props["route"]["params"]>["mode"],
-  string
-> = {
+const HINTS: Record<DriverScanMode, string> = {
   colecta: "Escaneá el QR del envío para ingresarlo",
   planta: "Escaneá el bulto. Si lo movés, escaneá después la estantería",
   asignarme: "Escaneá el QR del envío para asignártelo",
 };
 
-type ScanPayload = {
-  raw: string;
-  id: string;
-  senderId: string;
-  hashCode?: string | null;
-  securityDigit?: string | null;
+const PROCESSING: Record<DriverScanMode, string> = {
+  colecta: "Ingresando envío...",
+  planta: "Procesando...",
+  asignarme: "Asignando envío...",
 };
 
-type RoleResponse = {
-  ok?: boolean;
-  status?: number;
-  rol?: string;
-  message?: string;
-  data?: {
-    id?: number | string;
-    user_id?: number | string;
-    active?: boolean;
-    vehiculo?: string | null;
-    patente?: string | null;
-    [key: string]: unknown;
-  } | null;
+// Asignar e ingresar pueden traer el envío desde Mercado Libre: mismo límite
+// que la recepción en planta.
+const SCAN_TIMEOUT_MS = 20_000;
+// El verde se va solo; el rojo queda hasta la próxima lectura.
+const SUCCESS_VISIBLE_MS = 2_500;
+const ERRORS_SHOWN = 5;
+
+const VIBRATION: Record<ScanTone | "warned", number[]> = {
+  success: [0, 80, 60, 120],
+  warned: [0, 120, 80, 120],
+  warning: [0, 120, 80, 120],
+  error: [0, 250, 100, 250],
 };
 
-type SelfAssignResponse = {
-  ok?: boolean;
-  status?: number;
-  message?: string;
-  error?: string;
-  delivery?: unknown;
-  [key: string]: unknown;
+const TONE: Record<ScanTone, { text: string; border: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  success: { text: AppTheme.status.delivered.text, border: AppTheme.status.delivered.text, icon: "checkmark-circle" },
+  warning: { text: AppTheme.status.pending.text, border: AppTheme.status.pending.text, icon: "help-circle" },
+  error: { text: AppTheme.status.rejected.text, border: AppTheme.status.rejected.text, icon: "close-circle" },
 };
 
-type ScanResponse = {
-  success?: boolean;
-  ok?: boolean;
-  error?: string;
-  message?: string;
-  delivery?: number | string;
-  status?: number | string;
-  financials?: number | string;
-  skipped?: boolean;
-  reason?: string;
-  [key: string]: unknown;
-};
-
-/**
- * Un escaneo puede venir en tres formatos: el JSON de la etiqueta de Mercado
- * Libre, una query-string, o el tracking pelado (QR o código de barras del
- * depósito).
- *
- * OJO con el JSON: `JSON.parse("47741557287")` NO tira excepción, devuelve el
- * numero. Si se intenta parsear cualquier payload como JSON, el tracking
- * pelado entra por ese camino, ninguna clave existe y el escaneo muere en
- * "No pudimos identificar el shipping_id" sin llegar a la API. Por eso el
- * camino JSON se abre solo cuando el payload arranca con "{", igual que en el
- * backend (`receiveService.parseMlQr`).
- */
-const parseTextPayload = (
-  raw: string
-): ScanPayload => {
-  const shippingMatch =
-    raw.match(
-      /(?:shipping_id|shippingId|shipment_id|tracking|order_id|orderId|id)=([^&\s]+)/i
-    );
-
-  const senderMatch =
-    raw.match(
-      /(?:sender_id|senderId)=([^&\s]+)/i
-    );
-
-  const longNumberMatch =
-    raw.match(/\d{8,}/);
-
-  return {
-    raw,
-
-    id:
-      shippingMatch?.[1]?.trim() ||
-      longNumberMatch?.[0] ||
-      raw,
-
-    senderId:
-      senderMatch?.[1]?.trim() ||
-      "",
-
-    hashCode: null,
-    securityDigit: null,
-  };
-};
-
-const parseScanPayload = (
-  value: string
-): ScanPayload => {
-  const raw = String(
-    value ?? ""
-  ).trim();
-
-  if (
-    raw.startsWith("{")
-  ) {
-    try {
-      const parsed =
-        JSON.parse(raw);
-
-      if (
-        parsed &&
-        typeof parsed ===
-          "object"
-      ) {
-        return {
-          raw,
-
-          id: String(
-            parsed?.id ??
-              parsed?.shipping_id ??
-              parsed?.shippingId ??
-              parsed?.tracking ??
-              ""
-          ).trim(),
-
-          senderId: String(
-            parsed?.sender_id ??
-              parsed?.senderId ??
-              ""
-          ).trim(),
-
-          hashCode:
-            parsed?.hash_code ??
-            parsed?.hashCode ??
-            null,
-
-          securityDigit:
-            parsed?.security_digit ??
-            parsed?.securityDigit ??
-            null,
-        };
-      }
-    } catch (_e) {
-      // JSON inválido: se lee como texto, abajo.
-    }
-  }
-
-  return parseTextPayload(
-    raw
-  );
-};
-
-
-export default function DriverScanScreen({
-  navigation,
-  route,
-}: Props) {
+export default function DriverScanScreen({ navigation, route }: Props) {
   const loadingStyles = useThemedStyles(makeLoadingStyles);
-  const mode =
-    route.params.mode;
+  const mode = route.params.mode;
+  const title = TITLES[mode];
+  const hint = HINTS[mode];
 
-  const title = useMemo(
-    () => TITLES[mode],
-    [mode]
-  );
+  const { user, getUserSession } = useContext(UserContext);
+  const [permission, requestPermission] = useCameraPermissions();
+  const focused = useIsFocused();
 
-  const hint = useMemo(
-    () => HINTS[mode],
-    [mode]
-  );
+  const [open, setOpen] = useState(true);
+  const [blocked, setBlocked] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [feedback, setFeedback] = useState<ScanFeedback | null>(null);
+  const [session, setSession] = useState<ScanSession>(EMPTY_SESSION);
+  const [showErrors, setShowErrors] = useState(false);
 
-  const {
-    user,
-    getUserSession,
-  } = useContext(
-    UserContext
-  );
+  // Cada modo (y cada montaje) es una sesión de escaneo: lo que responde
+  // después de cerrar la pantalla o de cambiar de modo se descarta.
+  const generation = useRef(0);
+  const driverIdRef = useRef<string | number | null>(null);
+  // Planta: el último bulto recibido, para moverlo si se escanea una estantería.
+  const lastReceivedRef = useRef<PendingPackage | null>(null);
 
-  const [
-    permission,
-    requestPermission,
-  ] =
-    useCameraPermissions();
+  useEffect(() => {
+    generation.current += 1;
+    lastReceivedRef.current = null;
+    setProcessing(false);
+    setFeedback(null);
+    setSession(EMPTY_SESSION);
+    setShowErrors(false);
+    return () => {
+      generation.current += 1;
+    };
+  }, [mode]);
 
-  const [
-    open,
-    setOpen,
-  ] = useState(true);
+  useEffect(() => {
+    if (feedback?.tone !== "success") return;
+    const timer = setTimeout(() => setFeedback((current) => (current === feedback ? null : current)), SUCCESS_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [feedback]);
 
-  const [
-    processing,
-    setProcessing,
-  ] = useState(false);
+  const close = useCallback(() => {
+    setBlocked(true);
+    setOpen(false);
+    navigation.goBack();
+  }, [navigation]);
 
-  const scanLockedRef =
-    useRef(false);
-
-  const close =
-    useCallback(() => {
-      scanLockedRef.current =
-        true;
-
+  const handleTabPress = useCallback(
+    (tab: DriverTabKey) => {
+      if (tab === "scan") return;
+      setBlocked(true);
       setOpen(false);
+      if (tab === "home") navigation.navigate("DriverScreen");
+      else if (tab === "deliveries") navigation.navigate("EnviosScreen");
+      else if (tab === "activity") navigation.navigate("NotificationsScreen");
+    },
+    [navigation]
+  );
 
-      navigation.goBack();
-    }, [navigation]);
-
-  const resetScanner =
-    useCallback(() => {
-      scanLockedRef.current =
-        false;
-
-      setProcessing(false);
-    }, []);
-
-  const handleTabPress =
-    useCallback(
-      (
-        tab: DriverTabKey
-      ) => {
-        if (
-          tab === "scan"
-        ) {
-          return;
-        }
-
-        scanLockedRef.current =
-          true;
-
-        setOpen(false);
-
-        if (
-          tab === "home"
-        ) {
-          navigation.navigate(
-            "DriverScreen"
-          );
-
-          return;
-        }
-
-        if (
-          tab ===
-          "deliveries"
-        ) {
-          navigation.navigate(
-            "EnviosScreen"
-          );
-
-          return;
-        }
-
-        if (
-          tab === "activity"
-        ) {
-          navigation.navigate(
-            "NotificationsScreen"
-          );
-        }
-      },
-      [navigation]
-    );
-
-  const ensurePermission =
-    useCallback(
-      async () => {
-        if (
-          !permission?.granted
-        ) {
-          const res =
-            await requestPermission();
-
-          if (
-            !res.granted
-          ) {
-            Alert.alert(
-              "Permiso requerido",
-              "Necesitamos acceso a la cámara para escanear."
-            );
-
-            close();
-
-            return false;
-          }
-        }
-
-        return true;
-      },
-      [
-        permission?.granted,
-        requestPermission,
-        close,
-      ]
-    );
-
-  const getSession =
-    useCallback(async () => {
-      if (user?.token) {
-        return user;
+  const ensurePermission = useCallback(async () => {
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert("Permiso requerido", "Necesitamos acceso a la cámara para escanear.");
+        close();
+        return false;
       }
-
-      return await getUserSession();
-    }, [
-      user,
-      getUserSession,
-    ]);
-
-  /**
-   * ====================================================
-   * RESOLVER DRIVER CURRENT
-   * ====================================================
-   *
-   * user.id
-   *   ↓
-   * GET /v2/users/:userId/role
-   *   ↓
-   * driver_data.id
-   */
-
-  const inspectCurrentDriver =
-    useCallback(
-      async (
-        sessionUser: any
-      ) => {
-        const userId =
-          sessionUser?.id;
-
-        if (!userId) {
-          throw new Error(
-            "La sesión no contiene user.id."
-          );
-        }
-
-        console.log(
-          "======================================"
-        );
-
-        console.log(
-          "[QR ASSIGN] RESOLVIENDO DRIVER CURRENT"
-        );
-
-        console.log(
-          "[QR ASSIGN] API:",
-          API_URL
-        );
-
-        console.log(
-          "[QR ASSIGN] SESSION USER ID:",
-          userId
-        );
-
-        console.log(
-          "[QR ASSIGN] SESSION ROLE:",
-          sessionUser?.rol ??
-            "(sin rol)"
-        );
-
-        console.log(
-          "[QR ASSIGN] REQUEST:"
-        );
-
-        console.log(
-          `GET /v2/users/${userId}/role`
-        );
-
-        const data =
-          (await getJson(
-            `/v2/users/${userId}/role`
-          )) as RoleResponse;
-
-        console.log(
-          "[QR ASSIGN] ROLE RESPONSE:"
-        );
-
-        console.log(data);
-
-        if (
-          !data?.ok
-        ) {
-          throw new Error(
-            data?.message ||
-              "No se pudo resolver el rol del usuario."
-          );
-        }
-
-        if (
-          String(
-            data?.rol ?? ""
-          ).toUpperCase() !==
-          "DRIVER"
-        ) {
-          throw new Error(
-            `El usuario no tiene rol DRIVER. Rol recibido: ${
-              data?.rol ??
-              "(sin rol)"
-            }`
-          );
-        }
-
-        const driverId =
-          data?.data?.id;
-
-        if (!driverId) {
-          throw new Error(
-            "El backend no devolvió driver_data.id."
-          );
-        }
-
-        if (
-          data?.data
-            ?.active === false
-        ) {
-          throw new Error(
-            "El conductor está inactivo."
-          );
-        }
-
-        console.log(
-          "[QR ASSIGN] DRIVER DATA ID:",
-          driverId
-        );
-
-        console.log(
-          "======================================"
-        );
-
-        return {
-          userId,
-          driverId,
-          roleData:
-            data.data,
-          data,
-        };
-      },
-      []
-    );
-
-  /**
-   * ====================================================
-   * ASIGNARME - CURRENT
-   * ====================================================
-   *
-   * Ya probado.
-   *
-   * QR
-   * ↓
-   * resolver driver_data.id
-   * ↓
-   * PUT /v2/deliveries/self-assign
-   */
-
-  const handleAsignarme =
-    useCallback(
-      async (
-        payload: ScanPayload
-      ) => {
-        const sessionUser =
-          await getSession();
-
-        if (
-          !sessionUser
-        ) {
-          throw new Error(
-            "No hay sesión activa."
-          );
-        }
-
-        if (
-          !sessionUser.token
-        ) {
-          throw new Error(
-            "La sesión no contiene token."
-          );
-        }
-
-        const driverResult =
-          await inspectCurrentDriver(
-            sessionUser
-          );
-
-        const driverId =
-          driverResult.driverId;
-
-        console.log(
-          "======================================"
-        );
-
-        console.log(
-          "[QR ASSIGN] INICIANDO SELF-ASSIGN"
-        );
-
-        console.log(
-          "[QR ASSIGN] shippingId:",
-          payload.id
-        );
-
-        console.log(
-          "[QR ASSIGN] senderId:",
-          payload.senderId ||
-            "(vacío)"
-        );
-
-        console.log(
-          "[QR ASSIGN] driverId:",
-          driverId
-        );
-
-        console.log(
-          "[QR ASSIGN] REQUEST:"
-        );
-
-        console.log(
-          "PUT /v2/deliveries/self-assign"
-        );
-
-        const requestBody = {
-          driverId,
-          shippingId:
-            payload.id,
-          senderId:
-            payload.senderId ||
-            null,
-        };
-
-        console.log(
-          "[QR ASSIGN] BODY:",
-          requestBody
-        );
-
-        const response =
-          await fetch(
-            `${API_URL}/v2/deliveries/self-assign`,
-            {
-              method:
-                "PUT",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-
-                Authorization:
-                  `Bearer ${sessionUser.token}`,
-              },
-
-              body:
-                JSON.stringify(
-                  requestBody
-                ),
-            }
-          );
-
-        const responseData =
-          (await response
-            .json()
-            .catch(
-              () => ({})
-            )) as SelfAssignResponse;
-
-        console.log(
-          "[QR ASSIGN] HTTP STATUS:",
-          response.status
-        );
-
-        console.log(
-          "[QR ASSIGN] RESPONSE:"
-        );
-
-        console.log(
-          responseData
-        );
-
-        console.log(
-          "======================================"
-        );
-
-        if (
-          !response.ok
-        ) {
-          const message =
-            responseData?.error ||
-            responseData?.message ||
-            `La asignación falló con status ${response.status}.`;
-
-          throw new Error(
-            message
-          );
-        }
-
-        Vibration.vibrate([
-          0,
-          80,
-          60,
-          120,
-        ]);
-
-        playScanSuccess();
-
-        Alert.alert(
-          "Envío asignado ✅",
-          [
-            "La asignación se realizó correctamente.",
-            "",
-            `shipping_id: ${payload.id}`,
-            `driver_data.id: ${driverId}`,
-            `user.id: ${driverResult.userId}`,
-            "",
-            driverResult
-              .roleData
-              ?.vehiculo
-              ? `Vehículo: ${driverResult.roleData.vehiculo}`
-              : "",
-            driverResult
-              .roleData
-              ?.patente
-              ? `Patente: ${driverResult.roleData.patente}`
-              : "",
-            "",
-            responseData?.message
-              ? `Backend: ${responseData.message}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          [
-            {
-              text:
-                "Escanear otro",
-              onPress:
-                resetScanner,
-            },
-            {
-              text:
-                "Cerrar",
-              onPress:
-                close,
-            },
-          ]
-        );
-      },
-      [
-        getSession,
-        inspectCurrentDriver,
-        resetScanner,
-        close,
-      ]
-    );
-
-  /**
-   * ====================================================
-   * COLECTA - CURRENT
-   * ====================================================
-   *
-   * PRUEBA REAL CONTRA PRODUCCIÓN.
-   *
-   * QR
-   * ↓
-   * sender_id + shipping_id
-   * ↓
-   * POST /v2/deliveries/scan
-   * ↓
-   * saveDelivery()
-   *
-   * Si el delivery no existe debería crearlo
-   * en current.
-   *
-   * NO asigna conductor.
-   */
-
-  const handleColecta =
-    useCallback(
-      async (
-        payload: ScanPayload
-      ) => {
-        if (
-          !payload.id
-        ) {
-          throw new Error(
-            "El QR no contiene shipping_id."
-          );
-        }
-
-        if (
-          !payload.senderId
-        ) {
-          throw new Error(
-            "El QR no contiene sender_id. No podemos identificar la cuenta de MercadoLibre."
-          );
-        }
-
-        const sessionUser =
-          await getSession();
-
-        if (
-          !sessionUser
-        ) {
-          throw new Error(
-            "No hay sesión activa."
-          );
-        }
-
-        if (
-          !sessionUser.token
-        ) {
-          throw new Error(
-            "La sesión no contiene token."
-          );
-        }
-
-        const requestBody = {
-          sender_id:
-            payload.senderId,
-          shipping_id:
-            payload.id,
-        };
-
-        console.log(
-          "======================================"
-        );
-
-        console.log(
-          "[QR COLECTA] INICIANDO SCAN CURRENT"
-        );
-
-        console.log(
-          "[QR COLECTA] API:",
-          API_URL
-        );
-
-        console.log(
-          "[QR COLECTA] SESSION USER ID:",
-          sessionUser?.id
-        );
-
-        console.log(
-          "[QR COLECTA] SESSION ROLE:",
-          sessionUser?.rol ??
-            "(sin rol)"
-        );
-
-        console.log(
-          "[QR COLECTA] shippingId:",
-          payload.id
-        );
-
-        console.log(
-          "[QR COLECTA] senderId:",
-          payload.senderId
-        );
-
-        console.log(
-          "[QR COLECTA] REQUEST:"
-        );
-
-        console.log(
-          "POST /v2/deliveries/scan"
-        );
-
-        console.log(
-          "[QR COLECTA] BODY:",
-          requestBody
-        );
-
-        const response =
-          await fetch(
-            `${API_URL}/v2/deliveries/scan`,
-            {
-              method:
-                "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-
-                Authorization:
-                  `Bearer ${sessionUser.token}`,
-              },
-
-              body:
-                JSON.stringify(
-                  requestBody
-                ),
-            }
-          );
-
-        const responseData =
-          (await response
-            .json()
-            .catch(
-              () => ({})
-            )) as ScanResponse;
-
-        console.log(
-          "[QR COLECTA] HTTP STATUS:",
-          response.status
-        );
-
-        console.log(
-          "[QR COLECTA] RESPONSE:"
-        );
-
-        console.log(
-          responseData
-        );
-
-        console.log(
-          "======================================"
-        );
-
-        if (
-          !response.ok
-        ) {
-          const message =
-            responseData?.error ||
-            responseData?.message ||
-            `El ingreso falló con status ${response.status}.`;
-
-          throw new Error(
-            message
-          );
-        }
-
-        if (
-          responseData?.success ===
-          false
-        ) {
-          throw new Error(
-            responseData?.error ||
-              responseData?.message ||
-              "El backend informó que no pudo ingresar el envío."
-          );
-        }
-
-        Vibration.vibrate([
-          0,
-          80,
-          60,
-          120,
-        ]);
-
-        playScanSuccess();
-
-        Alert.alert(
-          "Colecta procesada ✅",
-          [
-            "El backend procesó correctamente el QR.",
-            "",
-            `shipping_id: ${payload.id}`,
-            `sender_id: ${payload.senderId}`,
-            "",
-            "Ahora verificá en el frontend si el envío apareció en current.",
-          ].join("\n"),
-          [
-            {
-              text:
-                "Escanear otro",
-              onPress:
-                resetScanner,
-            },
-            {
-              text:
-                "Cerrar",
-              onPress:
-                close,
-            },
-          ]
-        );
-      },
-      [
-        getSession,
-        resetScanner,
-        close,
-      ]
-    );
-
-  /**
-   * ====================================================
-   * PLANTA · recepción como punto de control (PR 3)
-   * ====================================================
-   *
-   * Un escaneo del bulto registra el ingreso (ARRIVED_WAREHOUSE → SHELVED),
-   * indica la estantería y devuelve las alertas: pendiente de
-   * geolocalización, CP no catalogado, Flex sin «En camino». Ninguna frena
-   * el bulto. Si después se escanea el QR de una estantería
-   * (LYNX:SHELF:…), el último bulto recibido se mueve ahí.
-   *
-   * La regla es la del Picker (views/picker/pickerScan.ts): el «último
-   * bulto» queda armado solo si quedó en planta, una recepción que falla lo
-   * desarma (antes la estantería movía el bulto anterior), los pedidos
-   * tienen tiempo límite nativo y, sin respuesta, se avisa que no se sabe si
-   * se movió. Acá solo se muestra el resultado (presentOutcome) en el Alert.
-   *
-   * Pide warehouse_access en el servidor: es una pantalla de depósito, no
-   * de chofer.
-   */
-
-  const lastReceivedRef =
-    useRef<PendingPackage | null>(
-      null
-    );
-
-  const handlePlanta =
-    useCallback(
-      async (
-        payload: ScanPayload
-      ) => {
-        const r =
-          await processScan(
-            payload.raw,
-            lastReceivedRef.current
-          );
-
-        lastReceivedRef.current =
-          r.pending;
-
-        const view =
-          presentOutcome(
-            r.outcome,
-            ""
-          );
-
-        const ok =
-          view.tone ===
-          "success";
-
-        // Con avisos o sin éxito vibra distinto: el operador no tiene que
-        // leer para saber que hay algo que mirar.
-        Vibration.vibrate(
-          ok &&
-            !view.warnings.length
-            ? 80
-            : [0, 120, 80, 120]
-        );
-
-        if (ok) {
-          playScanSuccess();
-        } else {
-          playScanError();
-        }
-
-        const lines: string[] =
-          [
-            ...(view.shelf
-              ? [view.title]
-              : []),
-            ...view.lines.filter(
-              Boolean
-            ),
-          ];
-
-        if (
-          view.warnings.length
-        ) {
-          lines.push(
-            "",
-            ...view.warnings.map(
-              (w) =>
-                `⚠ ${w}`
-            )
-          );
-        }
-
-        if (view.raw) {
-          lines.push(
-            "",
-            `Leído: ${view.raw.slice(
-              0,
-              200
-            )}`
-          );
-        }
-
-        Alert.alert(
-          view.shelf
-            ? `→ ${view.shelf}`
-            : view.title,
-          lines.join("\n"),
-          [
-            {
-              text: ok
-                ? "Escanear otro"
-                : "Reintentar",
-              onPress:
-                resetScanner,
-            },
-            {
-              text:
-                "Cerrar",
-              onPress:
-                close,
-            },
-          ]
-        );
-      },
-      [
-        resetScanner,
-        close,
-      ]
-    );
-
-  const onBarcodeScanned =
-    useCallback(
-      async (
-        result: BarcodeScanningResult
-      ) => {
-        if (
-          scanLockedRef.current
-        ) {
-          return;
-        }
-
-        scanLockedRef.current =
-          true;
-
-        setProcessing(true);
-
-        Vibration.vibrate(
-          45
-        );
-
-        const rawData =
-          String(
-            result.data ??
-              ""
-          );
-
-        const scanPayload =
-          parseScanPayload(
-            rawData
-          );
-
-        console.log(
-          "--------------------------------------"
-        );
-
-        console.log(
-          "[QR] RAW:"
-        );
-
-        console.log(
-          rawData
-        );
-
-        console.log(
-          "[QR] PARSED:"
-        );
-
-        console.log(
-          scanPayload
-        );
-
-        console.log(
-          "--------------------------------------"
-        );
-
-        try {
-          if (
-            !scanPayload.raw
-          ) {
-            throw new Error(
-              "La cámara detectó un QR sin contenido."
-            );
-          }
-
-          if (
-            !scanPayload.id
-          ) {
-            throw new Error(
-              "No pudimos identificar el shipping_id."
-            );
-          }
-
-          if (
-            mode ===
-            "asignarme"
-          ) {
-            await handleAsignarme(
-              scanPayload
-            );
-
-            return;
-          }
-
-          if (
-            mode ===
-            "colecta"
-          ) {
-            await handleColecta(
-              scanPayload
-            );
-
-            return;
-          }
-
-          await handlePlanta(
-            scanPayload
-          );
-        } catch (
-          e: any
-        ) {
-          console.log(
-            "[QR] ERROR:"
-          );
-
-          console.log(e);
-
-          playScanError();
-
-          const errorMessage =
-            e?.message ||
-            "Error inesperado";
-
-          let alertTitle =
-            "No se pudo procesar el QR";
-
-          if (
-            mode ===
-            "asignarme"
-          ) {
-            alertTitle =
-              "No se pudo asignar el envío";
-          }
-
-          if (
-            mode ===
-            "colecta"
-          ) {
-            alertTitle =
-              "No se pudo ingresar el envío";
-          }
-
-          Alert.alert(
-            alertTitle,
-            [
-              errorMessage,
-              "",
-              `shipping_id: ${
-                scanPayload.id ||
-                "(vacío)"
-              }`,
-              `sender_id: ${
-                scanPayload.senderId ||
-                "(vacío)"
-              }`,
-              "",
-              mode ===
-              "colecta"
-                ? "Revisá la consola para ver la respuesta de /v2/deliveries/scan."
-                : mode ===
-                    "asignarme"
-                  ? "Revisá la consola para ver la respuesta del backend."
-                  : "No se realizó ninguna modificación.",
-            ].join("\n"),
-            [
-              {
-                text:
-                  "Reintentar",
-                onPress:
-                  resetScanner,
-              },
-              {
-                text:
-                  "Cerrar",
-                onPress:
-                  close,
-              },
-            ]
-          );
-        } finally {
-          setProcessing(
-            false
-          );
-        }
-      },
-      [
-        mode,
-        handleAsignarme,
-        handleColecta,
-        handlePlanta,
-        resetScanner,
-        close,
-      ]
-    );
+    }
+    return true;
+  }, [permission?.granted, requestPermission, close]);
 
   useEffect(() => {
     ensurePermission();
-  }, [
-    ensurePermission,
-  ]);
+  }, [ensurePermission]);
 
-  const isAssignMode =
-    mode === "asignarme";
+  // El chofer de la sesión (driver_data.id), una vez por pantalla: no cambia
+  // entre lecturas.
+  const resolveDriver = useCallback(async (): Promise<ScanFeedback | null> => {
+    if (driverIdRef.current) return null;
+    const sessionUser = user?.id ? user : await getUserSession();
+    if (!sessionUser?.id) return SESSION_EXPIRED;
+    let res: any;
+    try {
+      res = await getJsonWithTimeout(`/v2/users/${sessionUser.id}/role`, SCAN_TIMEOUT_MS);
+    } catch {
+      return NO_CONNECTION;
+    }
+    const problem = roleProblem(res);
+    if (!problem) driverIdRef.current = res.data.id;
+    return problem;
+  }, [user, getUserSession]);
 
-  const isCollectMode =
-    mode === "colecta";
+  const runScan = useCallback(
+    async (payload: ScanPayload, gen: number): Promise<ScanFeedback> => {
+      const problem = payloadProblem(mode, payload);
+      if (problem) return problem;
+      const label = scanLabel(payload);
 
-  const isWriteMode =
-    isAssignMode ||
-    isCollectMode;
+      if (mode === "planta") {
+        const r = await processScan(payload.raw, lastReceivedRef.current);
+        if (generation.current === gen) lastReceivedRef.current = r.pending;
+        const status = r.outcome.kind === "error" ? r.outcome.status : null;
+        return plantaFeedback(presentOutcome(r.outcome, ""), status);
+      }
 
-  const processingMessage =
-    isAssignMode
-      ? "Asignando envío..."
-      : isCollectMode
-        ? "Ingresando envío..."
-        : "Consultando...";
+      if (mode === "asignarme") {
+        const roleIssue = await resolveDriver();
+        if (roleIssue) return roleIssue;
+        const body = { driverId: driverIdRef.current, shippingId: payload.id, senderId: payload.senderId || null };
+        try {
+          return assignFeedback(await putJsonWithTimeout("/v2/deliveries/self-assign", body, SCAN_TIMEOUT_MS), label);
+        } catch {
+          return noResponseFeedback(mode);
+        }
+      }
 
-  const processingHint =
-    isAssignMode
-      ? "Asignando..."
-      : isCollectMode
-        ? "Ingresando..."
-        : "Analizando...";
+      const body = { sender_id: payload.senderId, shipping_id: payload.id };
+      try {
+        return collectFeedback(await postJsonWithTimeout("/v2/deliveries/scan", body, SCAN_TIMEOUT_MS), label);
+      } catch {
+        return noResponseFeedback(mode);
+      }
+    },
+    [mode, resolveDriver]
+  );
 
-  const environmentLabel =
-    isAssignMode
-      ? "ASIGNACIÓN CURRENT · PRODUCCIÓN"
-      : isCollectMode
-        ? "INGRESO CURRENT · PRODUCCIÓN"
-        : "SOLO LECTURA · PRODUCCIÓN";
+  const onScan = useCallback(
+    async (raw: string) => {
+      if (blocked) return;
+      const gen = generation.current;
+      const payload = parseScanPayload(raw);
+      setProcessing(true);
+      setShowErrors(false);
+      Vibration.vibrate(45);
+
+      let result: ScanFeedback;
+      try {
+        result = await runScan(payload, gen);
+      } catch {
+        result = noResponseFeedback(mode);
+      }
+      if (generation.current !== gen) return;
+
+      setProcessing(false);
+      setFeedback(result);
+      if (!result.sessionExpired) setSession((s) => recordScan(s, result, scanLabel(payload)));
+      Vibration.vibrate(VIBRATION[result.tone === "success" && result.warned ? "warned" : result.tone]);
+      if (result.tone === "success") playScanSuccess();
+      else playScanError();
+
+      if (result.sessionExpired) {
+        setBlocked(true);
+        Alert.alert(result.title, result.detail ?? "", [{ text: "Entendido", onPress: close }]);
+      }
+    },
+    [blocked, mode, runScan, close]
+  );
+
+  const summary = useMemo(() => sessionSummary(session), [session]);
+  const scanned = session.ok + session.failed > 0;
 
   return (
-    <Modal
-      visible={open}
-      animationType="slide"
-      onRequestClose={
-        close
-      }
-    >
-      <View
-        style={
-          styles.container
-        }
-      >
+    <Modal visible={open} animationType="slide" onRequestClose={close}>
+      <View style={styles.container}>
         {!permission ? (
-          <View
-            style={
-              loadingStyles.loadingBox
-            }
-          >
+          <View style={loadingStyles.loadingBox}>
             <LynxPulseLoader message="Preparando cámara..." />
           </View>
         ) : !permission.granted ? (
-          <View
-            style={
-              loadingStyles.loadingBox
-            }
-          >
+          <View style={loadingStyles.loadingBox}>
             <LynxPulseLoader message="Solicitando permiso..." />
           </View>
         ) : (
           // Visor oscuro fijo en cualquier apariencia: va sobre la imagen de la
           // cámara. El cargador y la barra de abajo se ven con el oscuro de siempre.
           <FixedTheme theme={DEFAULT_THEME}>
-            <View
-              style={
-                styles.cameraWrap
-              }
-            >
-              <CameraView
-                style={
-                  StyleSheet.absoluteFill
-                }
-                facing="back"
-                onBarcodeScanned={
-                  processing
-                    ? undefined
-                    : onBarcodeScanned
-                }
-                barcodeScannerSettings={{
-                  barcodeTypes:
-                    ["qr"],
-                }}
-              />
+            <View style={styles.cameraWrap}>
+              <QrScanner active={focused && open && !blocked} onScan={onScan} />
 
-              <View
-                pointerEvents="box-none"
-                style={
-                  styles.backLayer
-                }
-              >
-                <Pressable
-                  onPress={
-                    close
-                  }
-                  style={
-                    styles.backButton
-                  }
-                >
-                  <Ionicons
-                    name="arrow-back"
-                    size={30}
-                    color={
-                      AppTheme
-                        .colors
-                        .white
-                    }
-                  />
+              <View pointerEvents="box-none" style={styles.topLayer}>
+                <Pressable onPress={close} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
+                  <Ionicons name="arrow-back" size={30} color={AppTheme.colors.white} />
                 </Pressable>
-              </View>
 
-              <View
-                pointerEvents="none"
-                style={
-                  styles.scanLayer
-                }
-              >
-                <View
-                  style={
-                    styles.scanGuide
-                  }
-                >
-                  <View
-                    style={[
-                      styles.corner,
-                      styles.topLeft,
-                    ]}
-                  />
-
-                  <View
-                    style={[
-                      styles.corner,
-                      styles.topRight,
-                    ]}
-                  />
-
-                  <View
-                    style={[
-                      styles.corner,
-                      styles.bottomLeft,
-                    ]}
-                  />
-
-                  <View
-                    style={[
-                      styles.corner,
-                      styles.bottomRight,
-                    ]}
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.scanTextPill
-                  }
-                >
-                  <Text
-                    style={
-                      styles.scanText
-                    }
-                  >
-                    {processing
-                      ? processingHint
-                      : hint}
-                  </Text>
-                </View>
-
-                {processing && (
-                  <View
-                    style={
-                      styles.processingCard
-                    }
-                  >
-                    <LynxPulseLoader
-                      compact
-                      showLogo={
-                        false
-                      }
-                      message={
-                        processingMessage
-                      }
-                    />
+                {scanned ? (
+                  <View style={styles.summaryBox}>
+                    <Pressable
+                      onPress={() => setShowErrors((v) => !v)}
+                      disabled={!session.failed}
+                      style={styles.summaryPill}
+                      accessibilityRole="button"
+                      accessibilityLabel={session.failed ? `${summary}. Ver errores` : summary}
+                    >
+                      <Text style={styles.summaryOk}>✓ {session.ok}</Text>
+                      {session.failed ? <Text style={styles.summaryFailed}>✕ {session.failed}</Text> : null}
+                    </Pressable>
+                    {showErrors && session.errors.length ? (
+                      <View style={styles.errorList}>
+                        <Text style={styles.errorListTitle}>Errores de esta sesión</Text>
+                        {session.errors.slice(0, ERRORS_SHOWN).map((e, i) => (
+                          <Text key={`e${i}`} style={styles.errorListItem} numberOfLines={2}>
+                            {e.code} · {e.title}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
-                )}
+                ) : null}
               </View>
 
-              <View
-                pointerEvents="none"
-                style={
-                  styles.bottomInfo
-                }
-              >
-                <Text
-                  style={
-                    styles.modeText
-                  }
-                >
-                  {title}
-                </Text>
+              {!feedback && !processing ? (
+                <View pointerEvents="none" style={styles.scanLayer}>
+                  <View style={styles.scanGuide} />
+                  <View style={styles.scanTextPill}>
+                    <Text style={styles.scanText}>{hint}</Text>
+                  </View>
+                </View>
+              ) : null}
 
-                <Text
-                  style={
-                    styles.safeText
-                  }
-                >
-                  {environmentLabel}
-                </Text>
+              <View pointerEvents="none" style={styles.feedbackLayer} accessibilityLiveRegion="polite">
+                {processing ? (
+                  <View style={styles.processingCard}>
+                    <LynxPulseLoader compact showLogo={false} message={PROCESSING[mode]} />
+                  </View>
+                ) : feedback ? (
+                  <FeedbackCard feedback={feedback} />
+                ) : null}
               </View>
 
-              <DriverBottomNavigation
-                activeTab="scan"
-                onPress={
-                  handleTabPress
-                }
-              />
+              <View pointerEvents="none" style={styles.bottomInfo}>
+                <Text style={styles.modeText}>{title}</Text>
+              </View>
+
+              <DriverBottomNavigation activeTab="scan" onPress={handleTabPress} />
             </View>
           </FixedTheme>
         )}
@@ -1481,239 +330,93 @@ export default function DriverScanScreen({
   );
 }
 
-const styles =
-  StyleSheet.create({
-    container: {
-      flex: 1,
+function FeedbackCard({ feedback }: { feedback: ScanFeedback }) {
+  const tone = TONE[feedback.tone];
+  return (
+    <View
+      style={[styles.feedbackCard, { borderColor: tone.border }]}
+      accessibilityRole="alert"
+      accessibilityLabel={[feedback.shelf ? `Estantería ${feedback.shelf}` : null, feedback.title, feedback.detail].filter(Boolean).join(". ")}
+    >
+      <View style={styles.feedbackHeader}>
+        <Ionicons name={tone.icon} size={26} color={tone.text} />
+        <Text style={[styles.feedbackTitle, { color: tone.text }]}>{feedback.title}</Text>
+      </View>
+      {feedback.shelf ? <Text style={[styles.feedbackShelf, { color: tone.text }]}>→ {feedback.shelf}</Text> : null}
+      {feedback.detail ? <Text style={styles.feedbackDetail}>{feedback.detail}</Text> : null}
+    </View>
+  );
+}
 
-      backgroundColor:
-        AppTheme.colors
-          .black,
-    },
+const CARD_BACKGROUND = "rgba(5, 8, 14, 0.92)";
 
-    cameraWrap: {
-      flex: 1,
-
-      backgroundColor:
-        AppTheme.colors
-          .black,
-    },
-
-    backLayer: {
-      position:
-        "absolute",
-
-      top:
-        AppTheme.layout
-          .headerTopPadding,
-
-      left:
-        AppTheme.spacing
-          .lg,
-
-      zIndex: 20,
-    },
-
-    backButton: {
-      width: 44,
-      height: 44,
-
-      borderRadius:
-        AppTheme.radius
-          .full,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-    },
-
-    scanLayer: {
-      ...StyleSheet.absoluteFillObject,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-
-      paddingHorizontal:
-        AppTheme.spacing
-          .lg,
-    },
-
-    scanGuide: {
-      width: 270,
-      height: 270,
-
-      position:
-        "relative",
-    },
-
-    corner: {
-      position:
-        "absolute",
-
-      width: 58,
-      height: 58,
-
-      borderColor:
-        AppTheme.colors
-          .white,
-    },
-
-    topLeft: {
-      top: 0,
-      left: 0,
-
-      borderTopWidth: 5,
-      borderLeftWidth: 5,
-    },
-
-    topRight: {
-      top: 0,
-      right: 0,
-
-      borderTopWidth: 5,
-      borderRightWidth:
-        5,
-    },
-
-    bottomLeft: {
-      bottom: 0,
-      left: 0,
-
-      borderBottomWidth:
-        5,
-
-      borderLeftWidth: 5,
-    },
-
-    bottomRight: {
-      bottom: 0,
-      right: 0,
-
-      borderBottomWidth:
-        5,
-
-      borderRightWidth:
-        5,
-    },
-
-    scanTextPill: {
-      marginTop: 92,
-
-      minHeight: 48,
-
-      borderRadius:
-        AppTheme.radius
-          .full,
-
-      backgroundColor:
-        "rgba(0, 0, 0, 0.78)",
-
-      paddingHorizontal:
-        AppTheme.spacing
-          .lg,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
-    },
-
-    scanText: {
-      color:
-        AppTheme.colors
-          .white,
-
-      fontSize: 16,
-
-      fontWeight:
-        AppTheme.font
-          .weight.black,
-
-      textAlign:
-        "center",
-    },
-
-    processingCard: {
-      position:
-        "absolute",
-
-      bottom: 148,
-
-      minWidth: 190,
-
-      borderRadius:
-        AppTheme.radius
-          .xxl,
-
-      backgroundColor:
-        "rgba(5, 8, 14, 0.82)",
-
-      borderWidth: 1,
-
-      borderColor:
-        AppTheme.borders
-          .medium,
-
-      paddingVertical:
-        AppTheme.spacing
-          .md,
-
-      paddingHorizontal:
-        AppTheme.spacing
-          .md,
-    },
-
-    bottomInfo: {
-      position:
-        "absolute",
-
-      left:
-        AppTheme.spacing
-          .lg,
-
-      right:
-        AppTheme.spacing
-          .lg,
-
-      bottom: 104,
-
-      alignItems:
-        "center",
-    },
-
-    modeText: {
-      color:
-        "rgba(255,255,255,0.78)",
-
-      fontSize: 12,
-
-      fontWeight:
-        AppTheme.font
-          .weight.bold,
-    },
-
-    safeText: {
-      marginTop: 5,
-
-      color:
-        "rgba(255,255,255,0.48)",
-
-      fontSize: 9,
-
-      fontWeight:
-        AppTheme.font
-          .weight.bold,
-
-      letterSpacing:
-        0.7,
-    },
-  });
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: AppTheme.colors.black },
+  cameraWrap: { flex: 1, backgroundColor: AppTheme.colors.black },
+  topLayer: {
+    position: "absolute",
+    top: AppTheme.layout.headerTopPadding,
+    left: AppTheme.spacing.lg,
+    right: AppTheme.spacing.lg,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    zIndex: 20,
+  },
+  backButton: { width: 44, height: 44, borderRadius: AppTheme.radius.full, alignItems: "center", justifyContent: "center" },
+  summaryBox: { alignItems: "flex-end", gap: AppTheme.spacing.sm, maxWidth: "75%" },
+  summaryPill: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: AppTheme.spacing.md,
+    paddingHorizontal: AppTheme.spacing.md,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: CARD_BACKGROUND,
+  },
+  summaryOk: { color: AppTheme.status.delivered.text, fontSize: 16, fontWeight: AppTheme.font.weight.black },
+  summaryFailed: { color: AppTheme.status.rejected.text, fontSize: 16, fontWeight: AppTheme.font.weight.black },
+  errorList: { borderRadius: AppTheme.radius.lg, backgroundColor: CARD_BACKGROUND, padding: AppTheme.spacing.md, gap: 4 },
+  errorListTitle: { color: AppTheme.colors.white, fontSize: 12, fontWeight: AppTheme.font.weight.black },
+  errorListItem: { color: AppTheme.colors.white, fontSize: 12 },
+  scanLayer: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", paddingHorizontal: AppTheme.spacing.lg },
+  // Lugar del recuadro del QrScanner: la indicación queda debajo.
+  scanGuide: { width: 270, height: 270 },
+  scanTextPill: {
+    marginTop: 92,
+    minHeight: 48,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: "rgba(0, 0, 0, 0.78)",
+    paddingHorizontal: AppTheme.spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanText: { color: AppTheme.colors.white, fontSize: 16, fontWeight: AppTheme.font.weight.black, textAlign: "center" },
+  feedbackLayer: { position: "absolute", left: AppTheme.spacing.lg, right: AppTheme.spacing.lg, bottom: 148, alignItems: "center" },
+  processingCard: {
+    minWidth: 190,
+    borderRadius: AppTheme.radius.xxl,
+    backgroundColor: "rgba(5, 8, 14, 0.82)",
+    borderWidth: 1,
+    borderColor: AppTheme.borders.medium,
+    paddingVertical: AppTheme.spacing.md,
+    paddingHorizontal: AppTheme.spacing.md,
+  },
+  feedbackCard: {
+    alignSelf: "stretch",
+    borderWidth: 2,
+    borderRadius: AppTheme.radius.xl,
+    backgroundColor: CARD_BACKGROUND,
+    padding: AppTheme.spacing.md,
+    gap: 6,
+  },
+  feedbackHeader: { flexDirection: "row", alignItems: "center", gap: AppTheme.spacing.sm },
+  feedbackTitle: { flex: 1, fontSize: 18, fontWeight: AppTheme.font.weight.black },
+  feedbackShelf: { fontSize: 30, fontWeight: AppTheme.font.weight.black },
+  feedbackDetail: { color: AppTheme.colors.white, fontSize: 14, lineHeight: 19 },
+  bottomInfo: { position: "absolute", left: AppTheme.spacing.lg, right: AppTheme.spacing.lg, bottom: 104, alignItems: "center" },
+  modeText: { color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: AppTheme.font.weight.bold },
+});
 
 // Permiso y preparación de la cámara: pantalla con la apariencia elegida.
 const makeLoadingStyles = (t: Theme) =>

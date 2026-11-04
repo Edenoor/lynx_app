@@ -118,6 +118,8 @@ async function settle() {
 // ---------- Simulaciones ----------
 const nav = { calls: [] as any[], navigate: (...a: any[]) => nav.calls.push(["navigate", ...a]), goBack: () => nav.calls.push(["goBack"]), addListener: () => () => {}, getParent: () => ({ reset: (a: any) => nav.calls.push(["reset", a]) }) };
 const alerts: any[] = [];
+// Sonidos de resultado del escáner, en orden.
+const sounds: string[] = [];
 const lastNav = () => nav.calls[nav.calls.length - 1];
 const api = { calls: [] as string[], replies: {} as Record<string, any> };
 // Una respuesta armada que es un Error rechaza (sin red, sin respuesta a
@@ -225,7 +227,7 @@ const RELATIVE_MOCKS: [string, any][] = [
   ["components/LynxPulseLoader", { LynxPulseLoader: host("LynxPulseLoader") }],
   ["context/NotificationContext", { useNotifications: () => notis }],
   ["context/UserContext", { UserContext, UserProvider: ({ children }: any) => children }],
-  ["config/ScanSound", { playScanError: () => {}, playScanSuccess: () => {} }],
+  ["config/ScanSound", { playScanError: () => { sounds.push("error"); }, playScanSuccess: () => { sounds.push("success"); } }],
   ["home/ViewModel", { __esModule: true, default: () => ({ values: { username: "", password: "" }, onChange: () => {}, login: async () => ({ ok: false }), errorMessage: "", clearError: () => {} }) }],
   ["onboarding/OnboardingContext", { useOnboarding: () => onboarding, OnboardingProvider: ({ children }: any) => children }],
   ["onboarding/UploadDriverDocuments", { uploadDriverDocuments: () => new Promise(() => {}) }],
@@ -358,6 +360,8 @@ const DELIVERIES = [
   { id: 2, numero_tracking: "T2", direccion: "Mitre 55", nombre_fantasia: "Tienda Dos", estado: "Pendiente", precio_chofer: "800", porcentaje_chofer: "0", metodo_envio: "turbo" },
   { id: 3, numero_tracking: "T3", direccion: "Belgrano 900", nombre_fantasia: "Tienda Tres", estado: "Entregado", precio_chofer: "1200", porcentaje_chofer: "0" },
   { id: 4, numero_tracking: "T4", direccion: "San Martín 10", nombre_fantasia: "Tienda Cuatro", estado: "Reprogramado", precio_chofer: "500", porcentaje_chofer: "0" },
+  // Forma real de /v2/drivers/:id/deliveries (caso Dancona): id es el de delivery_status.
+  { id: 1384, delivery_id: 24385, numero_tracking: "T5", direccion: "Lavalle 300", nombre_fantasia: "Tienda Cinco", status: "Entregado", status_ml: "delivered", ops_status: "DELIVERED", precio_chofer: "0", porcentaje_chofer: "0" },
 ];
 const ROUTES = [
   { id: 11, type: "DELIVERY", status: "ASSIGNED", scheduled_date: TODAY, stops_count: 3, deliveries_count: 7, load_expected_count: 7, load_confirmed_count: null },
@@ -524,14 +528,18 @@ const setDriverApi = () => {
     nav.calls = [];
     envios.currentDeliveries = DELIVERIES;
     let tree = await mount(screens[1][1]());
-    check("Envíos: «En curso» muestra los no finalizados", ["Av. Corrientes 1234", "Mitre 55"].every((s) => textOf(tree).includes(s)) && !textOf(tree).includes("Belgrano 900"));
+    check("Envíos: «En curso» muestra los no finalizados", ["Av. Corrientes 1234", "Mitre 55", "San Martín 10"].every((s) => textOf(tree).includes(s)) && !textOf(tree).includes("Belgrano 900"));
+    check("Envíos: un entregado con status_ml «delivered» (caso Dancona) no queda «En curso»", !textOf(tree).includes("Lavalle 300"));
     const chips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
-    check("Envíos: estados con chip (texto de siempre)", JSON.stringify(chips) === JSON.stringify(["Estado: En camino", "Estado: A retirar"]), chips.join(", "));
+    check("Envíos: estados con chip; el no entregado queda abierto y explícito", JSON.stringify(chips) === JSON.stringify(["Estado: En camino", "Estado: A retirar", "Estado: No entregado"]), chips.join(", "));
     const dark = createTheme({ scheme: "dark" });
     const chipBg = (label: string) => flat(byLabel(tree, `Estado: ${label}`)[0].props.style).backgroundColor;
     check("Envíos: «En camino» con el color en camino, «A retirar» con el de pendiente", chipBg("En camino") === dark.status.inTransit.background && chipBg("A retirar") === dark.status.pending.background);
+    check("Envíos: «No entregado» con el color de incidencia (no verde)", chipBg("No entregado") === dark.status.incident.background);
     tree = await press(tree, "Finalizados");
-    check("Envíos: finalizados con «Entregado» e «Reprogramado» (incidencia)", chipBg("Entregado") === dark.status.delivered.background && chipBg("Reprogramado") === dark.status.incident.background);
+    const finChips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
+    check("Envíos: finalizados con «Entregado», incluido el de status_ml «delivered»", JSON.stringify(finChips) === JSON.stringify(["Estado: Entregado", "Estado: Entregado"]) && textOf(tree).includes("Lavalle 300") && chipBg("Entregado") === dark.status.delivered.background, finChips.join(", "));
+    check("Envíos: el no entregado no pasa a finalizados", !textOf(tree).includes("San Martín 10"));
     tree = await press(tree, "En curso");
     tree = await press(tree, "Recorridos de reparto, Turbo y ofertas");
     check("Envíos: abre Recorridos", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "RoutesScreen"]));
@@ -540,7 +548,7 @@ const setDriverApi = () => {
     tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cerrar");
     check("Envíos: el detalle se cierra", !all(tree, (x) => x.type === "Modal").length);
     tree = await press(tree, "Neto");
-    check("Envíos: el neto abre los totales visibles", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Totales visibles") && textOf(m).includes("$1.700")));
+    check("Envíos: el neto abre los totales visibles", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Totales visibles") && textOf(m).includes("$2.200")));
   }
   {
     nav.calls = [];
@@ -768,8 +776,8 @@ const setDriverApi = () => {
   }
 
   // 9b) Planta: la estantería mueve solo el bulto que quedó en planta, con la
-  // regla del Picker (pickerScan). Cada lectura termina en un Alert; tocar
-  // «Escanear otro» o «Reintentar» libera la cámara para la siguiente.
+  // regla del Picker (pickerScan). Cada lectura deja su resultado en la
+  // tarjeta, sin diálogos: la cámara sigue lista para la siguiente.
   {
     useTheme(createTheme({ scheme: "dark" }));
     const SHELF = "LYNX:SHELF:3f2c1a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f";
@@ -778,22 +786,23 @@ const setDriverApi = () => {
       shelf: { id: 3, code: "NORTE-1", name: null, unclassified: false, suggested: null },
       ops: { from: "ENTERED", to: "SHELVED", transitions: ["ARRIVED_WAREHOUSE", "SHELVED"], already_here: false }, alerts: [],
     });
+    const cards: string[] = [];
     const scanAll = async (codes: string[]) => {
-      api.calls = []; alerts.length = 0;
+      api.calls = []; alerts.length = 0; cards.length = 0;
       let tree = await mount(RealReact.createElement(Scan, { navigation: nav, route: { params: { mode: "planta" } } }));
       for (const data of codes) {
         all(tree, (x) => x.type === "CameraView")[0].props.onBarcodeScanned({ data });
         tree = await settle();
-        alerts[alerts.length - 1]?.[2]?.find((b: any) => b.text === "Escanear otro" || b.text === "Reintentar")?.onPress();
-        tree = await settle();
+        cards.push(String(all(tree, (x) => x.props?.accessibilityRole === "alert")[0]?.props.accessibilityLabel ?? ""));
       }
     };
-    const lastAlert = () => (alerts[alerts.length - 1] ?? []).slice(0, 2).join(" · ");
+    const lastCard = () => cards[cards.length - 1] ?? "";
 
     api.replies = { "POST /v2/warehouse/receive": [received(1, "T-A"), { ok: false, status: 404, error: "El envío no está en Lynx" }] };
     await scanAll(["46001", "46002", SHELF]);
     check("Planta: si la recepción del siguiente falla, la estantería no mueve el bulto anterior", !api.calls.some((c) => c.startsWith("PUT ")), api.calls.join(", "));
-    check("Planta: y pide escanear primero el paquete", lastAlert().startsWith("Escaneá primero el paquete"), lastAlert());
+    check("Planta: y pide escanear primero el paquete", lastCard().startsWith("Escaneá primero el paquete"), lastCard());
+    check("Planta: sin diálogos", alerts.length === 0, JSON.stringify(alerts));
 
     api.replies = { "POST /v2/warehouse/receive": { ...received(2, "T-C"), shelf: null, ops: { from: "DELIVERED", to: "DELIVERED", transitions: [], already_here: false }, alerts: [{ code: "CLOSED", text: "Envío entregado" }] } };
     await scanAll(["46003", SHELF]);
@@ -801,12 +810,157 @@ const setDriverApi = () => {
 
     api.replies = { "POST /v2/warehouse/receive": received(1, "T-A"), "PUT /v2/warehouse/deliveries/1/shelf": new Error("sin respuesta en 15000 ms") };
     await scanAll(["46001", SHELF]);
-    check("Planta: sin respuesta al mover, avisa que no se sabe si se movió (no «ninguna modificación»)", lastAlert().includes("No sabemos si se movió") && !lastAlert().includes("No se realizó ninguna modificación"), lastAlert());
+    check("Planta: sin respuesta al mover, avisa que no se sabe si se movió (no «ninguna modificación»)", lastCard().includes("No sabemos si se movió") && !lastCard().includes("No se realizó ninguna modificación"), lastCard());
 
     api.replies = { "POST /v2/warehouse/receive": received(1, "T-A"), "PUT /v2/warehouse/deliveries/1/shelf": { ok: true, from: "NORTE-1", shelf: { id: 4, code: "NORTE-2", name: null } } };
     await scanAll(["46001", SHELF]);
-    check("Planta: bulto y después estantería lo mueve, con el mismo pedido", api.calls.includes("PUT /v2/warehouse/deliveries/1/shelf") && lastAlert().startsWith("→ NORTE-2"), `${api.calls.join(", ")} | ${lastAlert()}`);
-    check("Planta: la recepción muestra la estantería", (alerts[0] ?? [])[0] === "→ NORTE-1", String((alerts[0] ?? [])[0]));
+    check("Planta: bulto y después estantería lo mueve, con el mismo pedido", api.calls.includes("PUT /v2/warehouse/deliveries/1/shelf") && lastCard().startsWith("Estantería NORTE-2"), `${api.calls.join(", ")} | ${lastCard()}`);
+    check("Planta: la recepción muestra la estantería", cards[0].startsWith("Estantería NORTE-1. Ingresó a planta"), cards[0]);
+    check("Planta: no muestra el contenido leído de la etiqueta", !cards.some((c) => c.includes("Leído") || c.includes(SHELF)), cards.join(" | "));
+  }
+
+  // 9c) Escaneo continuo (Asignarme y Colecta): verde o rojo sin diálogos,
+  // contador de la sesión, sin lecturas duplicadas ni reintentos solos. Solo
+  // la sesión vencida frena con un diálogo.
+  {
+    const dark = createTheme({ scheme: "dark" });
+    useTheme(dark);
+    camera.permission = { granted: true };
+    contextOverride.set(UserContext, { user: { id: 38, rol: "DRIVER" }, isAuthLoading: false, getUserSession: async () => ({ id: 38 }) });
+    const ROLE = { ok: true, rol: "DRIVER", data: { id: 49, active: true, vehiculo: "Moto", patente: "AB123CD" } };
+    const ML = (id: string) => `{"id":"${id}","sender_id":777,"hash_code":"h","security_digit":"0"}`;
+    const cardNode = (tree: any) => all(tree, (x) => x.props?.accessibilityRole === "alert")[0];
+    const card = (tree: any) => String(cardNode(tree)?.props.accessibilityLabel ?? "");
+    const summary = (tree: any) => String(all(tree, (x) => /escaneado/.test(String(x.props?.accessibilityLabel ?? "")))[0]?.props.accessibilityLabel ?? "");
+    const writes = () => api.calls.filter((c) => c.startsWith("PUT /v2/deliveries/self-assign") || c.startsWith("POST /v2/deliveries/scan")).length;
+    const open = async (mode: string) => {
+      api.calls = []; alerts.length = 0; sounds.length = 0; nav.calls = [];
+      return mount(RealReact.createElement(Scan, { navigation: nav, route: { params: { mode } } }));
+    };
+    const scan = async (tree: any, data: string) => {
+      all(tree, (x) => x.type === "CameraView")[0].props.onBarcodeScanned({ data });
+      return settle();
+    };
+
+    // Éxito: verde, sonido, sin diálogo, cámara lista, contador.
+    api.replies = { "GET /v2/users/38/role": ROLE, "PUT /v2/deliveries/self-assign": { ok: true, result: "claimed", delivery_id: 24385, route: { id: 900 } } };
+    let tree = await open("asignarme");
+    tree = await scan(tree, ML("47000000101"));
+    check("Asignarme: éxito en verde, sin diálogo", card(tree) === "Envío asignado. 47000000101" && alerts.length === 0, `${card(tree)} | ${JSON.stringify(alerts)}`);
+    check("Asignarme: color de éxito del visor oscuro", flat(cardNode(tree).props.style).borderColor === dark.status.delivered.text);
+    check("Asignarme: sonido de éxito", same(sounds, ["success"]), sounds.join(","));
+    check("Asignarme: la cámara sigue lista", all(tree, (x) => x.type === "CameraView").length === 1);
+    check("Asignarme: contador de la sesión", summary(tree) === "1 escaneado", summary(tree));
+    check("Asignarme: mismo pedido que antes (rol + self-assign)", same(api.calls, ["GET /v2/users/38/role", "PUT /v2/deliveries/self-assign"]), api.calls.join(", "));
+    check("Asignarme: sin ids internos, patente ni vehículo en pantalla", !/24385|AB123CD|Moto|driver_data|user\.id|Backend|PRODUCCIÓN/.test(textOf(tree)), textOf(tree));
+
+    // Dos códigos distintos seguidos: los dos se procesan; el rol se pide una vez.
+    tree = await scan(tree, ML("47000000102"));
+    check("Asignarme: segundo código distinto, sin tocar nada", writes() === 2 && summary(tree) === "2 escaneados", `${api.calls.join(", ")} | ${summary(tree)}`);
+    check("Asignarme: el chofer se resuelve una sola vez por pantalla", api.calls.filter((c) => c.startsWith("GET /v2/users/")).length === 1, api.calls.join(", "));
+
+    // Lectura repetida del mismo código (sigue a la vista): no se reenvía.
+    tree = await scan(tree, ML("47000000102"));
+    tree = await scan(tree, ML("47000000102"));
+    check("Asignarme: el mismo código a la vista no se vuelve a enviar", writes() === 2, api.calls.join(", "));
+
+    // Mientras hay un pedido en curso no se lee otra etiqueta.
+    let release: (v: any) => void = () => {};
+    api.replies["PUT /v2/deliveries/self-assign"] = new Promise((r) => (release = r));
+    tree = await scan(tree, ML("47400000001"));
+    check("Asignarme: «Asignando envío...» mientras espera", all(tree, (x) => x.type === "LynxPulseLoader" && x.props.message === "Asignando envío...").length === 1);
+    tree = await scan(tree, ML("47400000002"));
+    check("Asignarme: con un pedido en curso no se lee otro código", writes() === 3, api.calls.join(", "));
+    // Respuesta tardía: llega y se muestra igual, sin diálogo.
+    release({ ok: true, result: "already" });
+    tree = await settle();
+    check("Asignarme: respuesta tardía se muestra al llegar", card(tree) === "Ya lo tenías cargado. 47400000001" && alerts.length === 0, card(tree));
+
+    // Error recuperable: rojo con el texto del servidor, error en el resumen, cámara lista.
+    api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 409, error: "El envío está entregado: no sale a reparto" };
+    tree = await scan(tree, ML("47400000003"));
+    check("Asignarme: error recuperable en rojo, sin diálogo", card(tree) === "No se pudo asignar. El envío está entregado: no sale a reparto" && alerts.length === 0, card(tree));
+    check("Asignarme: color de error", flat(cardNode(tree).props.style).borderColor === dark.status.rejected.text);
+    check("Asignarme: sonido de error", sounds[sounds.length - 1] === "error", sounds.join(","));
+    check("Asignarme: el error queda en el resumen", summary(tree).startsWith("3 escaneados · 1 con error"), summary(tree));
+    tree = await press(tree, "✓ 3");
+    check("Asignarme: el resumen lista los errores con el tracking", textOf(tree).includes("Errores de esta sesión") && textOf(tree).includes("47400000003 · No se pudo asignar"), textOf(tree));
+    const before = writes();
+    tree = await scan(tree, ML("47400000004"));
+    check("Asignarme: después del error se sigue escaneando", writes() === before + 1);
+
+    // Pérdida de conexión después de enviar: ámbar, no se sabe si se aplicó, sin reintento.
+    api.replies["PUT /v2/deliveries/self-assign"] = new Error("sin red");
+    const sent = writes();
+    tree = await scan(tree, ML("47400000005"));
+    check("Asignarme: sin red después de enviar avisa que no se sabe si quedó", card(tree) === "Sin respuesta del servidor. No sabemos si quedó asignado. Revisalo antes de volver a escanearlo.", card(tree));
+    tree = await settle();
+    check("Asignarme: sin reintento automático", writes() === sent + 1, api.calls.join(", "));
+
+    // 5xx: genérico, sin el texto interno.
+    api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 500, error: "duplicate key value violates unique constraint" };
+    tree = await scan(tree, ML("47400000006"));
+    check("Asignarme: 500 sin el error interno", card(tree) === "No se pudo asignar. Error del servidor. Probá de nuevo en un momento.", card(tree));
+
+    // Sesión vencida: el único diálogo; la cámara se apaga.
+    api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 401, sessionExpired: true };
+    tree = await scan(tree, ML("47400000007"));
+    check("Asignarme: sesión vencida → diálogo bloqueante", alerts.length === 1 && alerts[0][0] === "Tu sesión expiró", JSON.stringify(alerts));
+    check("Asignarme: con la sesión vencida la cámara se apaga", all(tree, (x) => x.type === "CameraView").length === 0);
+    alerts[0][2].find((b: any) => b.text === "Entendido").onPress();
+    tree = await settle();
+    check("Asignarme: «Entendido» cierra el escáner", same(lastNav(), ["goBack"]), JSON.stringify(nav.calls));
+
+    // Colecta: mismo contrato (POST /v2/deliveries/scan con sender_id y shipping_id).
+    api.replies = { "POST /v2/deliveries/scan": { ok: true, status: 200, success: true } };
+    tree = await open("colecta");
+    tree = await scan(tree, ML("47411111111"));
+    check("Colecta: éxito en verde, sin diálogo", card(tree) === "Envío ingresado. 47411111111" && alerts.length === 0, card(tree));
+    check("Colecta: un solo pedido, sin buscar el rol", same(api.calls, ["POST /v2/deliveries/scan"]), api.calls.join(", "));
+    tree = await scan(tree, "47422222222");
+    check("Colecta: tracking sin cuenta de ML → rojo, sin pedido", card(tree).startsWith("No reconocemos esta etiqueta") && api.calls.length === 1 && alerts.length === 0, card(tree));
+    api.replies["POST /v2/deliveries/scan"] = { ok: true, status: 200, success: false, error: "No se encontró la cuenta del vendedor" };
+    tree = await scan(tree, ML("47433333333"));
+    check("Colecta: success:false en rojo con el motivo", card(tree) === "No se pudo ingresar. No se encontró la cuenta del vendedor", card(tree));
+
+    // Cambio de modo en la misma pantalla: sesión nueva; lo que llega tarde del modo anterior se descarta.
+    let late: (v: any) => void = () => {};
+    api.replies = { "POST /v2/deliveries/scan": new Promise((r) => (late = r)) };
+    tree = await scan(tree, ML("47444444444"));
+    rootEl = RealReact.createElement(Scan, { navigation: nav, route: { params: { mode: "asignarme" } } });
+    tree = await settle();
+    check("Cambio de modo: título y resumen nuevos", textOf(tree).includes("Asignarme envío") && !summary(tree) && !card(tree), `${summary(tree)} | ${card(tree)}`);
+    const soundsBefore = sounds.length;
+    late({ ok: true, status: 200, success: true });
+    tree = await settle();
+    check("Cambio de modo: la respuesta tardía del modo anterior no se muestra ni suena", !card(tree) && !summary(tree) && sounds.length === soundsBefore, `${card(tree)} | ${sounds.join(",")}`);
+
+    // Cierre con un pedido pendiente: al llegar la respuesta no hay diálogo, sonido ni error.
+    let pendingReply: (v: any) => void = () => {};
+    api.replies = { "GET /v2/users/38/role": ROLE, "PUT /v2/deliveries/self-assign": new Promise((r) => (pendingReply = r)) };
+    tree = await open("asignarme");
+    tree = await scan(tree, ML("47455555555"));
+    tree = await press(tree, "Inicio");
+    check("Cierre: la barra navega con el pedido en curso", same(lastNav(), ["navigate", "DriverScreen"]));
+    tree = await mount(RealReact.createElement("View", null));
+    let crashed = "";
+    try { pendingReply({ ok: false, status: 401, sessionExpired: true }); await settle(); } catch (e: any) { crashed = String(e?.message ?? e); }
+    check("Cierre: la respuesta tardía no abre diálogos ni suena", !crashed && alerts.length === 0 && sounds.length === 0, `${crashed} | ${JSON.stringify(alerts)} | ${sounds.join(",")}`);
+
+    // Light/Dark: el visor es oscuro fijo y legible con cualquier apariencia, también con la tarjeta y el resumen.
+    for (const scheme of ["light", "dark"]) {
+      useTheme(createTheme({ scheme, style: "marble" }));
+      api.replies = { "GET /v2/users/38/role": ROLE, "PUT /v2/deliveries/self-assign": [{ ok: true, result: "claimed" }, { ok: false, status: 409, error: "Este paquete lo tiene otro chofer" }] };
+      tree = await open("asignarme");
+      tree = await scan(tree, ML("47466666661"));
+      const okLeg = legibility(tree, "#000000");
+      tree = await scan(tree, ML("47466666662"));
+      tree = await press(tree, "✓ 1");
+      const errLeg = legibility(tree, "#000000");
+      check(`Escaneo ${scheme}: tarjeta verde, roja y resumen legibles sobre la cámara`, okLeg.bad.length === 0 && errLeg.bad.length === 0 && okLeg.texts > 2, [...okLeg.bad, ...errLeg.bad].join(" · "));
+      check(`Escaneo ${scheme}: mismos colores del visor oscuro`, flat(cardNode(tree).props.style).borderColor === dark.status.rejected.text);
+    }
+    contextOverride.delete(UserContext);
   }
 
   // 10) Cargador compartido: el logo (silueta blanca) se ve también en claro.
