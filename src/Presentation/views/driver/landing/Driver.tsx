@@ -694,6 +694,14 @@ export const DriverScreen = ({ navigation }: Props) => {
             ) : null}
           </View>
           <Pressable
+            onPress={() => navigation.navigate("DriverHelpScreen")}
+            style={styles.profileButton}
+            hitSlop={8}
+            accessibilityLabel="Ayuda"
+          >
+            <Ionicons name="help-circle-outline" size={24} color={theme.text.primary} />
+          </Pressable>
+          <Pressable
             onPress={() => navigation.navigate("DriverAccountScreen")}
             style={styles.profileButton}
             hitSlop={8}
