@@ -16,12 +16,15 @@ import DriverScanOptionsScreen from "../views/driver/scan/DriverScanOptionsScree
 import RoutesScreen from "../views/driver/routes/RoutesScreen";
 import CollectionsScreen from "../views/driver/routes/CollectionsScreen";
 import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
-import TurboOffersScreen from "../views/driver/turbo/TurboOffersScreen";
+import RouteOrganizeScreen from "../views/driver/routes/RouteOrganizeScreen";
 import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
 import TurboTomorrowScreen from "../views/driver/turbo/TurboTomorrowScreen";
 import OfferNoticeBanner from "../components/driver/OfferNoticeBanner";
+import CollectInLightDataModal from "../components/driver/CollectInLightDataModal";
+import { hideCollectInLightData } from "../views/driver/collectionMode";
 import { resetDriverWork } from "../views/driver/work/workSource";
 import { resetOfferStore } from "../views/driver/offers/offerStore";
+import { resetDriverProfile } from "../views/driver/account/driverProfileApi";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
@@ -29,7 +32,8 @@ export type DriverStackParamList = {
   Onboarding: undefined;
   DriverScreen: undefined;
   EnviosScreen: undefined;
-  NotificationsScreen: undefined;
+  // tab: la pestaña que se abre («offers»: la bandeja de ofertas).
+  NotificationsScreen: { tab?: "notifications" | "offers" } | undefined;
   DriverAccountScreen: undefined;
   DriverHomeScreen: undefined;
   AppearanceScreen: undefined;
@@ -42,8 +46,8 @@ export type DriverStackParamList = {
   // name: el de la colecta, cuando se conoce (el detalle no lo trae).
   // fromGroup: se abrió desde su grupo Turbo (si no, un Turbo agrupado abre el grupo).
   RouteDetailScreen: { routeId: number; name?: string; fromGroup?: boolean };
-  // Bandeja de ofertas: Turbos, lotes y recorridos ofrecidos.
-  TurboOffersScreen: undefined;
+  // Ruteador del chofer: inicio, fin y orden de las paradas de un reparto.
+  RouteOrganizeScreen: { routeId: number };
   // Varios Turbos de una tienda con un solo retiro.
   TurboGroupScreen: { groupId: number };
   // Programados sin chofer que cualquiera puede tomar antes.
@@ -58,9 +62,10 @@ export const DriverStackNavigator = () => {
   const onboardingCompleted = state.completedLocal === true;
 
   // El stack se desmonta al cerrar sesión: lo leído no es del próximo chofer.
-  useEffect(() => () => { resetDriverWork(); resetOfferStore(); }, []);
+  useEffect(() => () => { resetDriverWork(); resetOfferStore(); resetDriverProfile(); hideCollectInLightData(); }, []);
 
-  // El aviso de oferta va encima de cualquier pantalla y no la bloquea.
+  // El aviso de oferta va encima de cualquier pantalla y no la bloquea. El de
+  // «Registro de colecta» (LightData) se pide desde Colectas y el QR.
   return (
     <>
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -88,13 +93,14 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="RoutesScreen" component={RoutesScreen} />
           <Stack.Screen name="CollectionsScreen" component={CollectionsScreen} />
           <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
-          <Stack.Screen name="TurboOffersScreen" component={TurboOffersScreen} />
+          <Stack.Screen name="RouteOrganizeScreen" component={RouteOrganizeScreen} />
           <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />
           <Stack.Screen name="TurboTomorrowScreen" component={TurboTomorrowScreen} />
         </>
       )}
     </Stack.Navigator>
     {onboardingCompleted ? <OfferNoticeBanner /> : null}
+    {onboardingCompleted ? <CollectInLightDataModal /> : null}
     </>
   );
 };

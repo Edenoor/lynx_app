@@ -29,6 +29,9 @@ export type StopDelivery = {
   // «Cobrar $X». La manda el servidor desde feat/integracion-20261024; uno
   // anterior no la trae y el cierre funciona igual, sin el importe.
   importe_cobranza?: number | string | null;
+  // Canal comercial (mercadolibre, tiendanube, shopify, woocommerce) para el
+  // logo; null si no se sabe. Un servidor anterior no lo manda.
+  provider?: string | null;
 };
 export type Stop = {
   id: number; route_id: number; sequence: number; type: "PICKUP" | "DELIVERY"; status: StopStatus;
@@ -55,10 +58,8 @@ export const STATUS_LABEL: Record<RouteStatus, string> = {
   PLANNED: "Planificado", ASSIGNED: "Asignado", LOADED: "Cargado", IN_PROGRESS: "En curso", COMPLETED: "Completado", CANCELLED: "Cancelado",
 };
 export const STOP_STATUS_LABEL: Record<StopStatus, string> = { PENDING: "Pendiente", ARRIVED: "Llegaste", DONE: "Cerrada", SKIPPED: "Salteada" };
-export const OPS_LABEL: Record<string, string> = {
-  ENTERED: "Ingresado", COLLECTED: "Colectado", ARRIVED_WAREHOUSE: "En planta", SHELVED: "Estanteado", ASSIGNED_TO_ROUTE: "En recorrido",
-  OUT_FOR_DELIVERY: "En calle", DELIVERED: "Entregado", NOT_DELIVERED: "No entregado", CANCELLED: "Cancelado",
-};
+// Etiquetas del estado operativo del envío (viven en stopView.ts, que es puro).
+export { OPS_LABEL } from "./stopView";
 
 // Las respuestas traen ok:false con el mensaje del servidor; acá se convierten
 // en excepción. El `code` y el status viajan en el error para los casos que la
@@ -68,6 +69,8 @@ const unwrap = <T,>(res: any): T => {
     throw Object.assign(new Error(res?.error || res?.message || "Error del servidor"), {
       code: res?.code ?? null,
       status: Number(res?.status ?? 0),
+      // Paradas a las que se refiere el error (ruteador: sin camino por calle).
+      stopIds: Array.isArray(res?.stop_ids) ? (res.stop_ids as number[]) : null,
     });
   }
   return res as T;
@@ -125,6 +128,34 @@ export const declareStopCount = async (routeId: number, stopId: number, count: n
 // `declaration` (Baúl) trae solo los campos que el chofer completó.
 export const recordOutcome = async (routeId: number, stopId: number, deliveryId: number, outcome: string, notes?: string, declaration?: OutcomeDeclaration) =>
   unwrap<{ stop: Stop }>(await postJson(`/v2/routes/${routeId}/stops/${stopId}/outcomes`, { delivery_id: deliveryId, outcome, notes: notes ?? null, ...declaration })).stop;
+
+// ---------- Ruteador del chofer (solo repartos) ----------
+// El depósito y el domicilio los resuelve el servidor (con sus coordenadas);
+// la ubicación actual y una dirección elegida viajan con las suyas. Nada de
+// esto se guarda: solo el orden que el chofer confirma.
+export type PlanPointKind = "WAREHOUSE" | "HOME" | "GPS" | "CUSTOM" | "NONE";
+export type PlanPointSpec = { kind: PlanPointKind; latitude?: number; longitude?: number; label?: string };
+export type PlanPlace = { address: string | null; latitude: number | null; longitude: number | null; valid: boolean };
+export type PlanPlaces = { warehouse: (PlanPlace & { id: number; name: string }) | null; home: PlanPlace | null };
+export type PlanMetrics = { km: number; minutes: number; unreachable_legs: number };
+// Siempre por calles (Valhalla). Si no se puede calcular, el servidor responde
+// un error con `code` (ROUTING_UNAVAILABLE, UNREACHABLE_STOPS con `stop_ids`,
+// NOTHING_TO_ROUTE, TOO_MANY_STOPS) y no hay propuesta: el orden queda igual.
+export type PlanPreview = {
+  stop_ids: number[]; current_stop_ids: number[]; proposed: PlanMetrics; current: PlanMetrics;
+  vehicle: string; missing_stop_ids: number[];
+  start: { kind: PlanPointKind; label: string } | null; end: { kind: PlanPointKind; label: string } | null;
+};
+
+export const fetchPlanPlaces = async (id: number) => {
+  const res = unwrap<PlanPlaces>(await getJson(`/v2/routes/${id}/plan/places`));
+  return { warehouse: res.warehouse ?? null, home: res.home ?? null };
+};
+export const previewPlan = async (id: number, body: { start: PlanPointSpec; end: PlanPointSpec; first_stop_id?: number | null; last_stop_id?: number | null }) =>
+  unwrap<PlanPreview>(await postJson(`/v2/routes/${id}/plan/preview`, body));
+// expected: el orden que el chofer estaba viendo; si cambió, 409 ROUTE_CHANGED.
+export const saveDriverOrder = async (id: number, stopIds: number[], expected: number[]) =>
+  unwrap<{ route: RouteDetail }>(await putJson(`/v2/routes/${id}/stops/driver-order`, { stop_ids: stopIds, expected_stop_ids: expected })).route;
 
 // Recorridos que el coordinador le ofrece al chofer (GET /v2/offers/mine trae
 // también los Turbo, que tienen su propia pantalla: acá se dejan afuera).

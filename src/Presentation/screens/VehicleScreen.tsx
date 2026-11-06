@@ -151,7 +151,7 @@ dispatch({
   },
 });
 
-    navigation.navigate("Selfie");
+    navigation.navigate("Home");
   };
 
   return (

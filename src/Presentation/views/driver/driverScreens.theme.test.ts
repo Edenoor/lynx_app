@@ -125,7 +125,7 @@ const alerts: any[] = [];
 // Sonidos de resultado del escáner, en orden.
 const sounds: string[] = [];
 const lastNav = () => nav.calls[nav.calls.length - 1];
-const api = { calls: [] as string[], replies: {} as Record<string, any> };
+const api = { calls: [] as string[], replies: {} as Record<string, any>, bodies: [] as [string, any][] };
 // Una respuesta armada que es un Error rechaza (sin red, sin respuesta a
 // tiempo); una lista se consume de a una por pedido (la última se repite).
 const reply = (method: string, p: string) => {
@@ -177,6 +177,8 @@ const MOCKS: Record<string, any> = {
   "expo-status-bar": { StatusBar: "StatusBar" },
   "@react-navigation/native": {
     useNavigation: () => nav,
+    // Alertas abre la pestaña pedida en route.params.tab (fase 2: Ofertas es una pestaña).
+    useRoute: () => ({ params: alertsParams.current }),
     useFocusEffect: (cb: any) => FakeReact.useEffect(cb, [cb]),
     useIsFocused: () => true,
     DarkTheme: { dark: true, colors: {} },
@@ -201,6 +203,7 @@ const MOCKS: Record<string, any> = {
   "react-native-svg": { __esModule: true, default: "Svg", Circle: "Circle" },
   "expo-constants": { __esModule: true, default: { expoConfig: { version: "1.0.0" } } },
 };
+const alertsParams: { current: any } = { current: {} };
 const stackScreens = new Set<string>();
 // Pantallas que registró el último stack dibujado.
 const registeredScreens = new Set<string>();
@@ -221,7 +224,9 @@ const gpsPolicy = { refreshes: 0 };
 const push: { handlers: any } = { handlers: null };
 const RELATIVE_MOCKS: [string, any][] = [
   ["config/Api", {
-    getJson: (p: string) => reply("GET", p), postJson: (p: string) => reply("POST", p), putJson: (p: string) => reply("PUT", p),
+    getJson: (p: string) => reply("GET", p),
+    postJson: (p: string, b?: any) => { api.bodies.push([`POST ${p}`, b]); return reply("POST", p); },
+    putJson: (p: string, b?: any) => { api.bodies.push([`PUT ${p}`, b]); return reply("PUT", p); },
     getJsonWithTimeout: (p: string) => reply("GET", p), postJsonWithTimeout: (p: string) => reply("POST", p), putJsonWithTimeout: (p: string) => reply("PUT", p),
   }],
   ["Envios/ViewModel", { __esModule: true, default: () => envios }],
@@ -455,23 +460,25 @@ const setDriverApi = () => {
   const Routes = L("src/Presentation/views/driver/routes/RoutesScreen.tsx").default;
   const Alerts = L("src/Presentation/views/common/NotificationScreen.tsx").default;
   const Home = L("src/Presentation/views/driver/account/DriverHomeScreen.tsx").default;
-  const Turbo = L("src/Presentation/views/driver/turbo/TurboOffersScreen.tsx").default;
+  // La bandeja de ofertas es la pestaña «Ofertas» de Alertas.
+  const Turbo = () => { alertsParams.current = { tab: "offers" }; return RealReact.createElement(Alerts); };
   const ScanOptions = L("src/Presentation/views/driver/scan/DriverScanOptionsScreen.tsx").default;
   const Scan = L("src/Presentation/views/driver/scan/DriverScanScreen.tsx").default;
   const { DriverScreen: HomeScreen } = L("src/Presentation/views/driver/landing/Driver.tsx");
   const OfferBanner = L("src/Presentation/components/driver/OfferNoticeBanner.tsx").default;
   const { resetDriverWork } = L("src/Presentation/views/driver/work/workSource.ts");
   const { resetOfferStore } = L("src/Presentation/views/driver/offers/offerStore.ts");
-  resetCaches = () => { resetDriverWork(); resetOfferStore(); };
+  const { resetDriverProfile } = L("src/Presentation/views/driver/account/driverProfileApi.ts");
+  resetCaches = () => { resetDriverWork(); resetOfferStore(); resetDriverProfile(); };
 
   const useTheme = (t: any) => contextOverride.set(ThemeContext, { theme: t, preferences: {}, setAppearance: () => {}, resetAppearance: () => {} });
   const screens: [string, () => any, () => void][] = [
     ["Mi cuenta", () => RealReact.createElement(Account), () => { api.replies = { "GET /v2/driver-home/me": { ok: true, home: { address: "Lavalle 300" } } }; }],
     ["Envíos", () => RealReact.createElement(EnviosScreen, { navigation: nav }), () => { envios.currentDeliveries = DELIVERIES; envios.list = []; setEnviosApi(); }],
     ["Recorridos", () => RealReact.createElement(Routes, { navigation: nav, route: { params: undefined } }), setRoutesApi],
-    ["Alertas", () => RealReact.createElement(Alerts), setDriverApi],
+    ["Alertas", () => { alertsParams.current = {}; return RealReact.createElement(Alerts); }, setDriverApi],
     ["Mi domicilio", () => RealReact.createElement(Home), setDriverApi],
-    ["Turbo", () => RealReact.createElement(Turbo, { navigation: nav, route: { params: undefined } }), setDriverApi],
+    ["Ofertas", () => Turbo(), setDriverApi],
     ["QR", () => RealReact.createElement(ScanOptions, { navigation: nav, route: { params: undefined } }), setDriverApi],
   ];
 
@@ -577,8 +584,11 @@ const setDriverApi = () => {
     nav.calls = [];
     screens[1][2]();
     let tree = await mount(screens[1][1]());
-    const modalities = all(tree, (x) => x.props?.accessibilityRole === "tab").map(textOf);
+    const modalityRow = all(tree, (x) => x.props?.accessibilityRole === "tablist")[0];
+    const modalities = all(modalityRow, (x) => x.props?.accessibilityRole === "tab").map(textOf);
     check("Envíos: cuatro modalidades; Turbo porque el chofer está habilitado", js(modalities) === js(["Turbo", "Flex", "Baúl", "Tradicionales"]), modalities.join(", "));
+    check("Envíos: las modalidades en una fila de anchos iguales, sin scroll horizontal ni cortes", all(modalityRow, (x) => x.props?.accessibilityRole === "tab").every((x) => flat(x.props.style).flex === 1)
+      && all(modalityRow, (x) => x.type === "Text").every((x) => x.props.numberOfLines === 1 && x.props.adjustsFontSizeToFit === true) && !all(tree, (x) => x.type === "ScrollView" && x.props.horizontal && all(x, (y) => y === modalityRow).length).length);
     const prev = Array.from({ length: 7 }, (_, i) => `GET /v2/routes/mine?date=${shiftIso(TODAY, -(i + 1))}`);
     check("Envíos: hoy (pidiendo también los abiertos), los 7 días anteriores, grupos, habilitación, el detalle de lo que está en la calle y las ofertas",
       [`GET /v2/routes/mine?date=${TODAY}&open=1`, ...prev, `GET /v2/turbo/groups/mine?date=${TODAY}`, "POST /driver/availability/get", "GET /v2/routes/8", "GET /v2/routes/12", "GET /v2/turbo/offers/mine", "GET /v2/offers/mine"].every((c) => api.calls.includes(c)), api.calls.join(", "));
@@ -598,11 +608,12 @@ const setDriverApi = () => {
     tree = await press(tree, "+1");
     check("Envíos: con dos en la calle, «+1» los muestra en Inicio", js(lastNav()) === js(["navigate", "DriverScreen"]));
 
-    // Ofertas: acceso directo con el contador (2 Turbos sueltos + 1 recorrido).
-    const [offers] = byLabel(tree, "Ofertas");
-    check("Envíos: «Ofertas» con el contador de pendientes", offers?.props.accessibilityLabel === "Ofertas: 3 sin contestar" && textOf(offers).includes("3"), offers?.props.accessibilityLabel);
-    offers.props.onPress();
-    check("Envíos: «Ofertas» abre la bandeja", js(lastNav()) === js(["navigate", "TurboOffersScreen"]));
+    // Ofertas: sin botón propio; un aviso discreto (2 Turbos sueltos + 1
+    // recorrido) que lleva a Alertas › Ofertas, y el contador en la barra.
+    check("Envíos: sin botón «Ofertas» en el encabezado", !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Ofertas").length);
+    check("Envíos: el contador de ofertas está en «Alertas» de la barra", byLabel(tree, "Alertas: 3").length === 1);
+    tree = await press(tree, "Tenés 3 ofertas sin contestar: ver en Alertas");
+    check("Envíos: el aviso abre Alertas › Ofertas", js(lastNav()) === js(["navigate", "NotificationsScreen", { tab: "offers" }]));
 
     // Flex en curso: repartos abiertos (también de ayer) y sus envíos.
     tree = await press(tree, "Flex");
@@ -767,7 +778,7 @@ const setDriverApi = () => {
     check("Recorridos: tocar un recorrido abre su detalle", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "RouteDetailScreen", { routeId: 12 }]));
     check("Recorridos: las ofertas no se contestan acá (sin botones duplicados)", !all(tree, (x) => typeof x.props?.onPress === "function" && ["Aceptar", "No"].includes(textOf(x))).length);
     tree = await press(tree, "2 ofertas sin contestar");
-    check("Recorridos: el acceso con el contador (Turbo + recorrido) abre la bandeja", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "TurboOffersScreen"]));
+    check("Recorridos: el acceso con el contador (Turbo + recorrido) abre Alertas › Ofertas", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "NotificationsScreen", { tab: "offers" }]));
   }
 
   const same = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
@@ -797,8 +808,12 @@ const setDriverApi = () => {
     tree = await press(modal(), "Ver colecta");
     check("Alertas: «Ver colecta» abre el detalle del recorrido", same(lastNav(), ["navigate", "RouteDetailScreen", { routeId: 31, name: "MAÑANERO 02" }]) && !modal());
     tree = await press(tree, "Retiro a 2 km");
+    nav.calls = [];
     tree = await press(modal(), "Ver ofertas");
-    check("Alertas: Turbo → ofertas", same(lastNav(), ["navigate", "TurboOffersScreen"]));
+    check("Alertas: Turbo → la pestaña Ofertas, sin salir de Alertas", !nav.calls.length && !modal() && textOf(tree).includes("Si no contestás a tiempo")
+      && all(tree, (x) => x.props?.accessibilityRole === "tab" && x.props?.accessibilityState?.selected && textOf(x).startsWith("Ofertas")).length === 1);
+    tree = await press(tree, "Notificaciones");
+    check("Alertas: «Notificaciones» vuelve a la lista", textOf(tree).includes("TARDE 01") && !textOf(tree).includes("Si no contestás a tiempo"));
     tree = await press(tree, "TARDE 01");
     tree = await press(modal(), "Ver colectas");
     check("Alertas: colecta quitada → Colectas", same(lastNav(), ["navigate", "CollectionsScreen"]));
@@ -853,7 +868,7 @@ const setDriverApi = () => {
     useTheme(t);
     setDriverApi();
     const tree = await mount(screens[5][1]());
-    const card = (id: number) => all(tree, (x) => x.type === "View" && flat(x.props.style).gap === 6 && textOf(x).includes(`Turbo #${id}`))[0];
+    const card = (id: number) => all(tree, (x) => x.type === "View" && flat(x.props.style).borderWidth === 1 && textOf(x).includes(id === 90 ? "Tienda Turbo" : "Tienda Apurada"))[0];
     const [calm, urgent] = [flat(card(90).props.style), flat(card(91).props.style)];
     check(`Turbo ${style}: la oferta conserva el contorno`, calm.borderWidth === 1 && calm.borderColor === t.colors.primary);
     check(`Turbo ${style}: la que vence pronto se marca en rojo`, urgent.borderWidth === 1 && urgent.borderColor === t.status.rejected.text);
@@ -864,8 +879,8 @@ const setDriverApi = () => {
     useTheme(createTheme({ scheme: "dark" }));
     nav.calls = []; setDriverApi();
     let tree = await mount(screens[5][1]());
-    check("Turbo: consulta las mismas ofertas", api.calls[0] === "GET /v2/turbo/offers/mine");
-    const card90 = () => all(tree, (x) => x.type === "View" && flat(x.props.style).gap === 6 && textOf(x).includes("Turbo #90"))[0];
+    check("Turbo: consulta las mismas ofertas (y la habilitación, una vez al entrar)", api.calls.includes("GET /v2/turbo/offers/mine") && api.calls.filter((c) => c === "POST /driver/availability/get").length === 1);
+    const card90 = () => all(tree, (x) => x.type === "View" && flat(x.props.style).borderWidth === 1 && textOf(x).includes("Tienda Turbo"))[0];
     api.calls = []; gpsPolicy.refreshes = 0;
     pressable(card90(), "Acepto").props.onPress();
     tree = await settle();
@@ -876,7 +891,7 @@ const setDriverApi = () => {
     api.calls = [];
     pressable(card90(), "Paso").props.onPress();
     tree = await settle();
-    check("Turbo: pasar hace el mismo pedido y saca la oferta", api.calls[0] === "POST /v2/turbo/offers/90/decline" && !textOf(tree).includes("Turbo #90"));
+    check("Turbo: pasar hace el mismo pedido y saca la oferta", api.calls[0] === "POST /v2/turbo/offers/90/decline" && !textOf(tree).includes("Tienda Turbo"));
 
     // La cuenta regresiva la manda el servidor (seconds_left): con el reloj del
     // teléfono adelantado, expires_at ya pasó pero la oferta sigue viva.
@@ -923,7 +938,7 @@ const setDriverApi = () => {
     pressable(card90(), "Acepto").props.onPress();
     tree = await settle();
     check("Turbo: si el Turbo ya no está (409), no pregunta la política del GPS", gpsPolicy.refreshes === 0, String(gpsPolicy.refreshes));
-    check("Turbo: 409 TAKEN saca la tarjeta con el mensaje del servidor, sin reintentar", !textOf(tree).includes("Turbo #90") && textOf(tree).includes("ya lo tomó otro chofer") && api.calls.filter((c) => c.endsWith("/accept")).length === 1);
+    check("Turbo: 409 TAKEN saca la tarjeta con el mensaje del servidor, sin reintentar", !textOf(tree).includes("Tienda Turbo") && textOf(tree).includes("ya lo tomó otro chofer") && api.calls.filter((c) => c.endsWith("/accept")).length === 1);
 
     // «Paso» sin respuesta: la tarjeta sigue (si no, vuelve en el próximo sondeo).
     setDriverApi();
@@ -946,12 +961,12 @@ const setDriverApi = () => {
     const js = (x: any) => JSON.stringify(x);
     useTheme(createTheme({ scheme: "dark" }));
     const withRouteOffer = () => { setDriverApi(); api.replies["GET /v2/offers/mine"] = { ok: true, offers: [{ ...ROUTE_OFFER, seconds_left: 60 }] }; };
-    const routeCard = (tree: any) => all(tree, (x) => x.type === "View" && flat(x.props.style).gap === 6 && textOf(x).includes("Recorrido #77"))[0];
+    const routeCard = (tree: any) => all(tree, (x) => x.type === "View" && flat(x.props.style).borderWidth === 1 && textOf(x).includes("Calle 1"))[0];
     withRouteOffer(); nav.calls = [];
     let tree = await mount(screens[5][1]());
-    const order = all(tree, (x) => x.type === "Item").map((x) => textOf(x).match(/Turbo #9[01]|Recorrido #77/)?.[0]);
-    check("Bandeja: Turbos y recorridos juntos, lo que vence primero arriba", js(order) === js(["Turbo #91", "Recorrido #77", "Turbo #90"]), order.join(", "));
-    check("Bandeja: título de ofertas (no solo Turbo)", textOf(tree).includes("Ofertas para vos"));
+    const order = all(tree, (x) => x.type === "Item").map((x) => textOf(x).match(/Tienda Apurada|Calle 1|Tienda Turbo/)?.[0]);
+    check("Bandeja: Turbos y recorridos juntos, lo que vence primero arriba", js(order) === js(["Tienda Apurada", "Calle 1", "Tienda Turbo"]), order.join(", "));
+    check("Bandeja: es la pestaña Ofertas de Alertas (Turbos y recorridos)", textOf(tree).includes("Alertas") && textOf(tree).includes("Turbos y recorridos ofrecidos"));
     check("Bandeja: pide las dos fuentes de siempre", api.calls.includes("GET /v2/turbo/offers/mine") && api.calls.includes("GET /v2/offers/mine"), api.calls.join(", "));
     check("Bandeja: el recorrido ofrecido muestra envíos, direcciones y plazo", textOf(routeCard(tree)).includes("4 envíos") && textOf(routeCard(tree)).includes("Calle 1") && /para responder/.test(textOf(routeCard(tree))));
     api.calls = []; gpsPolicy.refreshes = 0;
@@ -977,7 +992,7 @@ const setDriverApi = () => {
     setDriverApi();
     api.replies["GET /v2/offers/mine"] = { ok: false, status: 500, error: "Falla de ofertas" };
     tree = await mount(screens[5][1]());
-    check("Bandeja: si fallan los recorridos ofrecidos, los Turbos se ven igual y el error está a la vista", textOf(tree).includes("Turbo #90") && textOf(tree).includes("No se pudieron cargar los recorridos ofrecidos") && textOf(tree).includes("Falla de ofertas"));
+    check("Bandeja: si fallan los recorridos ofrecidos, los Turbos se ven igual y el error está a la vista", textOf(tree).includes("Tienda Turbo") && textOf(tree).includes("No se pudieron cargar los recorridos ofrecidos") && textOf(tree).includes("Falla de ofertas"));
     setDriverApi();
     api.replies["GET /v2/turbo/offers/mine"] = { ok: true, offers: turbos().map((o) => ({ ...o, group_id: 7 })) };
     tree = await mount(screens[5][1]());
@@ -1009,24 +1024,29 @@ const setDriverApi = () => {
     let tree = await mount(homeEl());
     const txt = textOf(tree);
     check("Inicio: misión activa con lo que sigue y el progreso", ["EN CURSO", "Reparto #8", "Desde ayer", "Entregá en Paso 5", "1 de 3 paradas"].every((x) => txt.includes(x)), txt.slice(0, 400));
-    check("Inicio: la misión va antes que las ofertas y la tarjeta Turbo", txt.indexOf("EN CURSO") < txt.indexOf("Ofertas") && txt.indexOf("Ofertas") < txt.indexOf("Turbo", txt.indexOf("Ofertas") + 1));
+    // Diseño de Inicio (nov-2026): Turbo se maneja desde el rayito (panel), no con una tarjeta.
+    check("Inicio: la misión arriba y el historial abajo; Turbo en el rayito, con el panel cerrado", txt.indexOf("EN CURSO") >= 0 && txt.indexOf("EN CURSO") < txt.indexOf("Historial completo") && byLabel(tree, "Opciones Turbo").length === 1 && !txt.includes("Disponible para Turbo"), txt.slice(0, 300));
+    check("Inicio: sin tarjeta de ofertas; el contador va en «Alertas» de la barra", !byLabel(tree, "Ofertas").length && byLabel(tree, "Alertas: 3").length === 1);
+    check("Inicio: Turbo compacto, sin los contadores «Llevás…»", !txt.includes("Llevás") && !txt.includes("de 10 a la mañana"));
+    check("Inicio: el historial de rendimiento a la vista, con su período", txt.includes("Historial completo"));
     tree = await press(tree, "Continuar recorrido");
     check("Inicio: «Continuar recorrido» abre el recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 8 }]));
     const [second] = byLabel(tree, "Continuar Turbo #12");
     check("Inicio: el segundo recorrido en la calle, en una fila", !!second);
     second.props.onPress();
     check("Inicio: la fila abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 12 }]));
-    const [offers] = byLabel(tree, "Ofertas");
-    check("Inicio: «Ofertas» con el contador", offers?.props.accessibilityLabel === "Ofertas: 3 sin contestar", offers?.props.accessibilityLabel);
-    offers.props.onPress();
-    check("Inicio: «Ofertas» abre la bandeja", js(lastNav()) === js(["navigate", "TurboOffersScreen"]));
+    byLabel(tree, "Alertas: 3")[0].props.onPress();
+    check("Inicio: «Alertas» de la barra abre Alertas", js(lastNav()) === js(["navigate", "NotificationsScreen"]));
     for (const scheme of ["dark", "light"]) {
       const th = createTheme({ scheme });
       useTheme(th);
       tree = await settle();
       const card = all(tree, (x) => x.type === "View" && textOf(x).startsWith("EN CURSO") && flat(x.props.style).backgroundColor === th.surfaces.card)[0];
       check(`Inicio ${scheme}: tarjeta de misión legible`, !!card && legibility(card, th.surfaces.screen).bad.length === 0, card ? legibility(card, th.surfaces.screen).bad.join(" · ") : "sin tarjeta");
-      check(`Inicio ${scheme}: fila de ofertas legible`, legibility(byLabel(tree, "Ofertas")[0], th.surfaces.screen).bad.length === 0);
+      byLabel(tree, "Opciones Turbo")[0].props.onPress(); tree = await settle();
+      const panel = all(tree, (x) => x.type === "Modal" && textOf(x).includes("Ver ofertas"))[0];
+      check(`Inicio ${scheme}: panel Turbo del rayito legible`, !!panel && legibility(panel, th.surfaces.screen).bad.length === 0, panel ? legibility(panel, th.surfaces.screen).bad.join(" · ") : "sin panel");
+      byLabel(tree, "Cerrar opciones Turbo")[0].props.onPress(); tree = await settle();
     }
     useTheme(dark);
 
@@ -1047,7 +1067,7 @@ const setDriverApi = () => {
     useTheme(dark);
     banner().props.onPress();
     tree = await settle();
-    check("Aviso: tocarlo abre la bandeja y se cierra", js(lastNav()) === js(["navigate", "TurboOffersScreen"]) && !banner());
+    check("Aviso: tocarlo abre Alertas › Ofertas y se cierra", js(lastNav()) === js(["navigate", "NotificationsScreen", { tab: "offers" }]) && !banner());
     push.handlers.onRouteNotice({ kind: "ROUTE_OFFER", routeId: 77, source: "received", raw: {} });
     tree = await settle();
     check("Push recorrido ofrecido: aviso, sin diálogo", !alerts.length && byLabel(tree, "Te ofrecieron un recorrido. Ver ofertas").length === 1);
@@ -1057,24 +1077,38 @@ const setDriverApi = () => {
     nav.calls = [];
     push.handlers.onRouteNotice({ kind: "ROUTE_OFFER", routeId: 77, source: "response", raw: {} });
     push.handlers.onTurboOffer({ routeId: 90, source: "response", raw: {} });
-    check("Push tocada (recorrido o Turbo): abre la bandeja", js(nav.calls) === js([["navigate", "TurboOffersScreen"], ["navigate", "TurboOffersScreen"]]), js(nav.calls));
+    check("Push tocada (recorrido o Turbo): abre Alertas › Ofertas", js(nav.calls) === js([["navigate", "NotificationsScreen", { tab: "offers" }], ["navigate", "NotificationsScreen", { tab: "offers" }]]), js(nav.calls));
     push.handlers.onRouteNotice({ kind: "PICKUP_ASSIGNED", routeId: 31, source: "received", raw: {} });
     check("Push colecta asignada: sigue con su confirmación de siempre", alerts.length === 1 && alerts[0][0] === "Colecta asignada");
 
     // Sin nada en la calle: sin tarjeta de misión.
     setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [ROUTES[0]] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
     tree = await mount(homeEl());
-    check("Inicio: sin recorridos en la calle, sin misión (y «Ofertas» sigue)", !textOf(tree).includes("EN CURSO") && byLabel(tree, "Ofertas").length === 1);
+    check("Inicio: sin recorridos en la calle, sin misión (y el contador de ofertas sigue en la barra)", !textOf(tree).includes("EN CURSO") && byLabel(tree, "Alertas: 3").length === 1);
   }
 
 
-  // 8) QR: mismas opciones y destinos; Colectar sigue derivando a LightData.
+  // 8) QR: mismas opciones y destinos; Colectar sigue derivando a LightData,
+  // ahora con el modal de Lynx «Registro de colecta» (no un diálogo del sistema).
   {
+    const LightDataModal = L("src/Presentation/components/driver/CollectInLightDataModal.tsx").default;
+    const { hideCollectInLightData } = L("src/Presentation/views/driver/collectionMode.ts");
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme, style: "minimal" });
+      useTheme(th);
+      nav.calls = []; alerts.length = 0; hideCollectInLightData();
+      let tree = await mount(RealReact.createElement(RealReact.Fragment, null, screens[6][1](), RealReact.createElement(LightDataModal)));
+      const modal = () => all(tree, (x) => x.type === "Modal")[0];
+      check(`QR ${scheme}: el modal de LightData arranca cerrado`, !modal());
+      tree = await press(tree, "Colectar");
+      check(`QR ${scheme}: Colectar abre «Registro de colecta» (sin diálogo del sistema ni cámara)`, !!modal() && !alerts.length && !nav.calls.length && textOf(modal()).includes("Registro de colecta"));
+      check(`QR ${scheme}: el modal es legible`, legibility(modal(), th.surfaces.screen).bad.length === 0, legibility(modal(), th.surfaces.screen).bad.join(" · "));
+      tree = await press(modal(), "Entendido");
+      check(`QR ${scheme}: «Entendido» lo cierra`, !modal());
+    }
     useTheme(createTheme({ scheme: "dark", style: "minimal" }));
     nav.calls = []; alerts.length = 0;
     let tree = await mount(screens[6][1]());
-    tree = await press(tree, "Colectar");
-    check("QR: Colectar avisa que es por LightData (sin abrir la cámara)", alerts[0]?.[0] === "Colectar desde LightData" && !nav.calls.length);
     for (const [label, call] of [["Asignar", ["navigate", "DriverScanScreen", { mode: "asignarme" }]], ["Planta", ["navigate", "DriverScanScreen", { mode: "planta" }]], ["Pendientes", ["navigate", "EnviosScreen"]]] as const) {
       tree = await press(tree, label);
       check(`QR: ${label}`, same(lastNav(), call));
@@ -1389,7 +1423,7 @@ const setDriverApi = () => {
     useTheme(createTheme({ scheme: "dark", style: "marble", radius: "rounded" }));
     const locks: any[] = [];
     contextOverride.set(NativeSchemeContext, (s: any) => locks.push(s));
-    for (const [name, rel] of [["Intro", "IntroScreen"], ["Terms", "TermsScreen"], ["Vehicle", "VehicleScreen"], ["Review", "ReviewSubmitScreen"], ["Submit", "SubmitScreen"]]) {
+    for (const [name, rel] of [["Intro", "IntroScreen"], ["Terms", "TermsScreen"], ["Vehicle", "VehicleScreen"], ["Home", "HomeStepScreen"], ["Review", "ReviewSubmitScreen"], ["Submit", "SubmitScreen"]]) {
       stackScreens.clear(); stackScreens.add(name);
       locks.length = 0;
       const tree = await mount(RealReact.createElement(OnboardingStackNavigator));
@@ -1656,6 +1690,386 @@ const setDriverApi = () => {
       check(`Navegación: al cerrar sesión de ${area}, el login`, (await screensFor(null)) === "HomeScreen,RecuperarScreen,RegisterScreen");
     }
     contextOverride.delete(UserContext);
+  }
+
+
+  // 19) Fase 2 (nov-2026): permisos Turbo en Ofertas, Turbos de mañana con
+  // filtros, paradas con la dirección primero y sin acciones sobre envíos ya
+  // resueltos (caso #158), mapa del recorrido, Turbo compacto en Inicio y el
+  // domicilio en el alta.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    const dark = createTheme({ scheme: "dark" });
+
+    // Ofertas sin habilitación Turbo: solo los recorridos ofrecidos; sin «Turbos de mañana».
+    useTheme(dark);
+    setDriverApi();
+    api.replies["GET /v2/offers/mine"] = { ok: true, offers: [ROUTE_OFFER] };
+    api.replies["POST /driver/availability/get"] = { ok: true, turbo_enabled: false, turbo_active: false };
+    let tree = await mount(screens[5][1]());
+    const items = all(tree, (x) => x.type === "Item").map((x) => textOf(x).match(/Tienda Turbo|Tienda Apurada|Calle 1|Lote/)?.[0]);
+    check("Ofertas sin habilitación Turbo: no muestra Turbos; sí los recorridos ofrecidos", js(items) === js(["Calle 1"]), items.join(", "));
+    check("Ofertas sin habilitación Turbo: sin «Turbos de mañana» y sin hablar de Turbos", !textOf(tree).includes("Turbos de mañana") && textOf(tree).includes("Recorridos ofrecidos."));
+    check("Ofertas sin habilitación Turbo: el contador cuenta solo lo que puede contestar", byLabel(tree, "Ofertas: 1").length === 1 && byLabel(tree, "Alertas: 1").length === 1, byLabel(tree, "Ofertas").map((x) => x.props.accessibilityLabel).join(", "));
+    setDriverApi();
+    api.replies["POST /driver/availability/get"] = { ok: true, turbo_enabled: true, turbo_active: true };
+    tree = await mount(screens[5][1]());
+    check("Ofertas habilitado: Turbos y «Turbos de mañana»", textOf(tree).includes("Tienda Turbo") && textOf(tree).includes("Turbos de mañana"));
+    setDriverApi();
+    tree = await mount(screens[5][1]());
+    check("Ofertas sin saber la habilitación: no esconde nada", textOf(tree).includes("Tienda Turbo") && textOf(tree).includes("Turbos de mañana"));
+
+    // Turbos de mañana: filtros por tienda, «Mis tiendas», orden y la promesa.
+    const Tomorrow = L("src/Presentation/views/driver/turbo/TurboTomorrowScreen.tsx").default;
+    const TOMORROW = shiftIso(TODAY, 1);
+    const sched = (route_id: number, store_name: string | null, start: string | null, end: string | null, offered_to_me = false) => ({
+      route_id, delivery_id: route_id * 10, scheduled_date: TOMORROW, window_start_at: start, deadline_at: end, store_name,
+      store_address: `Retiro ${route_id}`, delivery_address: `Entrega ${route_id}`, delivery_postal_code: "1425", receiver_name: "Ana", offered_to_me,
+    });
+    const at = (h: number) => new Date(`${TOMORROW}T${String(h).padStart(2, "0")}:00:00-03:00`).toISOString();
+    const scheduledReply = { ok: true, turbos: [sched(301, "Zeta", at(15), at(18)), sched(302, "Alfa", at(9), at(12), true), sched(303, "Zeta", at(10), at(13))] };
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      api.calls = []; api.replies = { "GET /v2/turbo/scheduled/available": scheduledReply };
+      tree = await mount(RealReact.createElement(Tomorrow, { navigation: nav, route: { params: undefined } }));
+      check(`Turbos de mañana ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+    }
+    useTheme(dark);
+    const cardIds = () => all(tree, (x) => x.type === "Item").map((x) => Number(textOf(x).match(/Retiro (\d+)/)?.[1]));
+    check("Turbos de mañana: por promesa de entrega de entrada", js(cardIds()) === js([302, 303, 301]), js(cardIds()));
+    const txt = textOf(tree);
+    check("Turbos de mañana: «Promesa de entrega» y «Aceptar» (no «Para mañana» ni «Lo tomo»)", txt.includes("Promesa de entrega") && /Mañana, \S+ \d\d\/\d\d · 09:00\D* a 12:00/.test(txt) && txt.includes("Aceptar") && !txt.includes("Lo tomo") && !txt.includes("Para mañana"));
+    check("Turbos de mañana: sin «Rechazar» (el servidor no lo guarda)", !txt.includes("Rechazar"));
+    check("Turbos de mañana: la tienda primero y «Tu tienda» en las ofrecidas como chofer de la tienda", txt.indexOf("Alfa") < txt.indexOf("Promesa de entrega") && txt.includes("Tu tienda"));
+    tree = await press(tree, "Por tienda");
+    check("Turbos de mañana: por tienda (y dentro, por promesa)", js(cardIds()) === js([302, 303, 301]) && textOf(tree).indexOf("Alfa") < textOf(tree).indexOf("Zeta"));
+    tree = await press(tree, "Mis tiendas");
+    check("Turbos de mañana: «Mis tiendas»", js(cardIds()) === js([302]));
+    tree = await press(tree, "Zeta");
+    check("Turbos de mañana: una tienda", js(cardIds()) === js([303, 301]) && textOf(tree).includes("2 Turbos"));
+    tree = await press(tree, "Todas las tiendas");
+    check("Turbos de mañana: «Todas las tiendas» vuelve a todo", cardIds().length === 3 && api.calls.filter((c) => c.startsWith("GET /v2/turbo/scheduled")).length === 1);
+    alerts.length = 0;
+    tree = await press(all(tree, (x) => x.type === "Item")[0], "Aceptar");
+    check("Turbos de mañana: «Aceptar» confirma antes de tomarlo (sin pedido todavía)", alerts[0]?.[0] === "Aceptar el Turbo" && !api.calls.some((c) => c.startsWith("POST")));
+    api.replies = { "GET /v2/turbo/scheduled/available": { ok: true, turbos: [] } };
+    tree = await mount(RealReact.createElement(Tomorrow, { navigation: nav, route: { params: undefined } }));
+    check("Turbos de mañana: vacío, lo dice y sin filtros", textOf(tree).includes("No hay Turbos para otro día") && !textOf(tree).includes("Todas las tiendas"));
+    api.replies = { "GET /v2/turbo/scheduled/available": { ok: false, status: 500, error: "Falla del servidor" } };
+    tree = await mount(RealReact.createElement(Tomorrow, { navigation: nav, route: { params: undefined } }));
+    check("Turbos de mañana: error a la vista", textOf(tree).includes("Falla del servidor"));
+
+    // Recorrido #158 (caso real): envíos entregados por Mercado Libre y las paradas abiertas.
+    const Detail = L("src/Presentation/views/driver/routes/RouteDetailScreen.tsx").default;
+    const dlv = (id: number, ops: string, outcome: string | null, extra: any = {}) => ({ delivery_id: id, tracking: 4600 + id, nombre_destinatario: "Daniela Cliente", direccion: null, codigo_postal: "1425", tipo_envio: "flex", ops_status: ops, outcome, outcome_at: null, notes: null, ...extra });
+    const r158 = { id: 158, type: "DELIVERY", status: "IN_PROGRESS", scheduled_date: YESTERDAY, stops_count: 3, deliveries_count: 3, load_expected_count: 3, load_confirmed_count: 3, qr_token: "q", notes: null, started_at: null, completed_at: null,
+      stops: [
+        stopOf(1, 1, "DELIVERY", "PENDING", { route_id: 158, address: "Lavalle 300", postal_code: "1043", receiver_name: "Ana Pérez", latitude: -34.6, longitude: -58.38, deliveries: [dlv(1, "DELIVERED", "DELIVERED", { provider: "mercadolibre" })] }),
+        stopOf(2, 2, "DELIVERY", "PENDING", { route_id: 158, address: "Mitre 10", postal_code: null, receiver_name: "Luis", latitude: null, longitude: null, deliveries: [dlv(2, "OUT_FOR_DELIVERY", null, { tipo_envio: "propio" })] }),
+        stopOf(3, 3, "DELIVERY", "DONE", { route_id: 158, address: "Paso 5", receiver_name: "Eva", latitude: -34.61, longitude: -58.4, deliveries: [dlv(3, "DELIVERED", "DELIVERED")] }),
+      ] };
+    for (const scheme of ["dark", "light"]) {
+      const th = createTheme({ scheme });
+      useTheme(th);
+      api.calls = []; api.replies = { "GET /v2/routes/158": { ok: true, route: r158 } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      tree = await press(tree, "Lavalle 300");
+      check(`Parada ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+    }
+    useTheme(dark);
+    api.calls = []; api.replies = { "GET /v2/routes/158": { ok: true, route: r158 } };
+    tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+    const head = (t: any, address: string) => all(t, (x) => x.type === "Pressable" && textOf(x).includes(address) && /Pendiente|Cerrada|Resuelta/.test(textOf(x))).pop();
+    check("Parada: la dirección es el título y el destinatario va abajo", !!head(tree, "Lavalle 300") && textOf(head(tree, "Lavalle 300")).indexOf("Ana Pérez") > 0 && textOf(head(tree, "Lavalle 300")).includes("CP 1043"));
+    check("Parada: todo entregado por ML → «Resuelta» (no «Pendiente»), sin «Entregado · entregado»", textOf(head(tree, "Lavalle 300")).includes("Resuelta · 1 paquete · 1 entregado") && !/Entregado · entregado/i.test(textOf(tree)));
+    check("Parada con un envío por entregar: sigue «Pendiente»", textOf(head(tree, "Mitre 10")).includes("Pendiente · 1 paquete"));
+    check("Recorrido #158 con una entrega pendiente: «Completar» sigue frenado", !!pressable(tree, "Cerrá todas las paradas para completar").props.disabled);
+    tree = await press(tree, "Lavalle 300");
+    let body = textOf(tree);
+    check("Parada #158: todos entregados por ML → aviso de que se cierra sola al finalizar; «Cerrar parada» sigue a mano", body.includes("se cierra sola al finalizar el recorrido") && !!pressable(tree, "Cerrar parada") && !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Llegué").length);
+    check("Parada #158: el envío entregado no ofrece «Entregar» ni «No pude entregar»", !body.includes("No pude entregar") && !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Entregar").length);
+    // Envíos cerrados: plegado por defecto, con el contador; al abrirlo, «Entregado» en verde y el logo del canal.
+    check("Parada #158: «Envíos cerrados (1)» plegado, sin la fila del envío", body.includes("Envíos cerrados (1)") && !body.includes("4601"));
+    tree = await press(tree, "Envíos cerrados (1)");
+    const closedRow = all(tree, (x) => x.type === "View" && textOf(x).includes("4601") && textOf(x).includes("Entregado")).pop();
+    const deliveredText = closedRow && all(closedRow, (x) => x.type === "Text" && textOf(x) === "Entregado")[0];
+    check("Envíos cerrados: al abrirlo, el envío entregado en verde", !!deliveredText && flat(deliveredText.props.style).color === dark.status.confirmed.text);
+    check("Envíos cerrados: logo de Mercado Libre junto al tracking", all(closedRow, (x) => x.type === "Image" && x.props.accessibilityLabel === "Mercado Libre").length === 1);
+    tree = await press(tree, "Envíos cerrados (1)");
+    check("Envíos cerrados: se vuelve a plegar", !textOf(tree).includes("4601"));
+    tree = await press(tree, "Más");
+    check("Parada #158: «Más» trae la observación, pero no «Saltear» (ya se entregó)", all(tree, (x) => x.type === "TextInput" && x.props.placeholder === "Observación (opcional)").length === 1 && !textOf(tree).includes("Saltear parada"));
+    nav.calls = []; const before = api.calls.length;
+    const opened: string[] = [];
+    const linking = RN.Linking as any;
+    const prevOpen = linking.openURL; linking.openURL = (u: string) => { opened.push(u); return Promise.resolve(); };
+    tree = await press(tree, "Cómo llegar");
+    check("Parada: «Cómo llegar» abre Maps con las coordenadas, sin tocar la parada", js(opened) === js(["https://www.google.com/maps/dir/?api=1&destination=-34.6,-58.38"]) && api.calls.length === before);
+    tree = await press(tree, "Mitre 10");
+    tree = await press(tree, "Cómo llegar");
+    check("Parada sin coordenadas: «Cómo llegar» usa la dirección", opened[1] === "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent("Mitre 10"), opened[1]);
+    linking.openURL = prevOpen;
+    body = textOf(tree);
+    check("Parada con un envío por entregar: «Llegué», «Entregar» y «No pude entregar»", body.includes("Llegué") && body.includes("Entregar") && body.includes("No pude entregar") && !body.includes("ya figuran resueltos"));
+    tree = await press(tree, "Más");
+    check("Parada sin entregas: «Saltear parada» dentro de «Más»", textOf(tree).includes("Saltear parada"));
+    // Mapa del recorrido.
+    tree = await press(tree, "Ver recorrido en el mapa");
+    const mapModal = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("Recorrido completo"));
+    const pins = mapModal ? all(mapModal, (x) => x.type === "Marker").map((m) => textOf(m)) : [];
+    check("Mapa del recorrido: las paradas con ubicación, numeradas en orden", js(pins) === js(["1", "3"]), js(pins));
+    check("Mapa del recorrido: dice cuántas no tienen ubicación", !!mapModal && textOf(mapModal).includes("1 sin ubicación"));
+    check("Mapa del recorrido: no pide nada al servidor", !api.calls.some((c) => c.startsWith("PUT") || c.startsWith("POST")));
+
+    // Mercado Libre entrega lo que faltaba: la app se entera al volver de Envíos
+    // Flex (primer plano) o a la pantalla, sin sondeo, y deja finalizar sin
+    // cerrar cada parada a mano.
+    {
+      const appStateCbs: any[] = []; const focusCbs: any[] = [];
+      const prevAdd = RN.AppState.addEventListener; const prevListen = nav.addListener;
+      (RN.AppState as any).addEventListener = (_: string, cb: any) => { appStateCbs.push(cb); return { remove: () => {} }; };
+      (nav as any).addListener = (ev: string, cb: any) => { if (ev === "focus") focusCbs.push(cb); return () => {}; };
+      api.calls = []; api.replies = { "GET /v2/routes/158": { ok: true, route: r158 } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      const gets = () => api.calls.filter((c) => c === "GET /v2/routes/158").length;
+      check("Recorrido: una sola carga al entrar (el primer foco no repite)", gets() === 1 && appStateCbs.length >= 1 && focusCbs.length >= 1, js(api.calls));
+      focusCbs.at(-1)(); await settle();
+      check("Recorrido: el primer foco no vuelve a pedirlo", gets() === 1);
+      const done158 = { ...r158, stops: r158.stops.map((s: any) => s.id === 2 ? { ...s, deliveries: [dlv(2, "DELIVERED", "DELIVERED", { tipo_envio: "propio", provider: null })] } : s) };
+      api.replies = { "GET /v2/routes/158": { ok: true, route: done158 } };
+      appStateCbs.at(-1)("background"); await settle();
+      check("Recorrido: pasar a segundo plano no lo pide", gets() === 1);
+      appStateCbs.at(-1)("active"); tree = await settle();
+      check("Recorrido: al volver a la app lo relee y refleja lo que cerró ML", gets() === 2 && textOf(head(tree, "Mitre 10")).includes("Resuelta"));
+      focusCbs.at(-1)(); await settle();
+      check("Recorrido: al volver a la pantalla lo relee", gets() === 3);
+      const finish = pressable(tree, "Completar recorrido");
+      check("Recorrido con todas las paradas resueltas: «Completar recorrido» habilitado sin cerrarlas a mano", !finish.props.disabled);
+      alerts.length = 0;
+      tree = await press(tree, "Completar recorrido");
+      check("Completar: pide confirmación antes de enviarlo", alerts[0]?.[0] === "Completar recorrido" && !api.calls.some((c) => c.startsWith("PUT")));
+      api.replies["PUT /v2/routes/158/complete"] = { ok: true, route: { ...done158, status: "COMPLETED" } };
+      alerts[0][2][1].onPress(); await settle();
+      check("Completar: un solo PUT /complete, sin cerrar paradas una por una", js(api.calls.filter((c) => c.startsWith("PUT"))) === js(["PUT /v2/routes/158/complete"]), js(api.calls));
+      // Un cancelado sin resultado no lo resuelve el servidor: sigue pidiendo cerrar la parada.
+      const cancelled158 = { ...r158, stops: r158.stops.map((s: any) => s.id === 2 ? { ...s, deliveries: [dlv(2, "CANCELLED", null, { tipo_envio: "propio" })] } : s) };
+      api.replies = { "GET /v2/routes/158": { ok: true, route: cancelled158 } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      check("Cancelado sin resultado: la parada no se da por resuelta y «Completar» sigue frenado", textOf(head(tree, "Mitre 10")).includes("Pendiente") && !!pressable(tree, "Cerrá todas las paradas para completar").props.disabled);
+      (RN.AppState as any).addEventListener = prevAdd; (nav as any).addListener = prevListen;
+    }
+
+    // Ruteador: el chofer organiza su reparto (sale del depósito, termina en su
+    // domicilio, optimiza, ajusta a mano y confirma). Lo visitado no se mueve.
+    {
+      const Organize = L("src/Presentation/views/driver/routes/RouteOrganizeScreen.tsx").default;
+      const loaded158 = { ...r158, status: "LOADED" };
+      const PLACES = { ok: true, warehouse: { id: 3, name: "Barracas", address: "Iriarte 2000", latitude: -34.64, longitude: -58.38, valid: true }, home: { address: "Rivadavia 6000", latitude: -34.62, longitude: -58.44, valid: true } };
+      const PREVIEW = { ok: true, stop_ids: [2, 1, 3], current_stop_ids: [1, 2, 3], proposed: { km: 5.2, minutes: 18, unreachable_legs: 0 }, current: { km: 7.9, minutes: 26, unreachable_legs: 0 },
+        vehicle: "default", missing_stop_ids: [2], start: { kind: "WAREHOUSE", label: "Barracas" }, end: { kind: "HOME", label: "Mi domicilio" } };
+      const organizeEl = () => RealReact.createElement(Organize, { navigation: nav, route: { params: { routeId: 158 } } });
+      const addresses = (t: any) => all(t, (x) => x.type === "Text" && ["Lavalle 300", "Mitre 10", "Paso 5"].includes(textOf(x))).map(textOf);
+
+      api.calls = []; api.replies = { "GET /v2/routes/158": { ok: true, route: loaded158 } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      tree = await press(tree, "Organizar recorrido");
+      check("Ruteador: el reparto ofrece «Organizar recorrido» y lo abre", same(lastNav(), ["navigate", "RouteOrganizeScreen", { routeId: 158 }]));
+      api.replies = { "GET /v2/routes/158": { ok: true, route: { ...r158, status: "COMPLETED" } } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      check("Ruteador: un recorrido completado no se organiza", !textOf(tree).includes("Organizar recorrido"));
+
+      for (const scheme of ["dark", "light"]) {
+        const th = createTheme({ scheme });
+        useTheme(th);
+        api.replies = { "GET /v2/routes/158": { ok: true, route: loaded158 }, "GET /v2/routes/158/plan/places": PLACES, "POST /v2/routes/158/plan/preview": PREVIEW };
+        tree = await mount(organizeEl());
+        tree = await press(tree, "Optimizar");
+        check(`Ruteador ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+      }
+      useTheme(dark);
+
+      api.calls = []; api.bodies = [];
+      api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158": { ok: true, route: loaded158 }, "POST /v2/routes/158/plan/preview": PREVIEW };
+      tree = await mount(organizeEl());
+      let text = textOf(tree);
+      check("Ruteador: al entrar pide el recorrido y los lugares, nada más", js([...api.calls].sort()) === js(["GET /v2/routes/158", "GET /v2/routes/158/plan/places"]), js(api.calls));
+      check("Ruteador: por defecto sale del depósito y termina en Mi domicilio", text.includes("Depósito · Barracas") && text.includes("Terminar enMi domicilio") && text.includes("Primera paradaAutomática") && text.includes("Última paradaAutomática"));
+      check("Ruteador: sin cambios no hay nada que confirmar", !!pressable(tree, "Confirmar orden").props.disabled);
+      check("Ruteador: la parada visitada no se mueve (sin flechas)", text.includes("Cerrada · no se mueve") && !byLabel(tree, "Subir parada 3").length && byLabel(tree, "Bajar parada 1").length === 1);
+      tree = await press(tree, "Optimizar");
+      check("Ruteador: optimizar manda depósito y domicilio por tipo (las coordenadas las pone el servidor)",
+        js(api.bodies) === js([["POST /v2/routes/158/plan/preview", { start: { kind: "WAREHOUSE" }, end: { kind: "HOME" }, first_stop_id: null, last_stop_id: null }]]), js(api.bodies));
+      text = textOf(tree);
+      check("Ruteador: muestra la propuesta (km y minutos, antes y después) y la parada sin ubicación", text.includes("Ahora: 7,9 km · 26 min") && text.includes("Propuesto: 5,2 km · 18 min") && text.includes("Sin ubicación, quedan al final y no entran en el cálculo: Mitre 10") && text.includes("sin tráfico"));
+      check("Ruteador: la lista queda en el orden propuesto, lo visitado en su lugar", js(addresses(tree)) === js(["Mitre 10", "Lavalle 300", "Paso 5"]), js(addresses(tree)));
+      check("Ruteador: nada se guarda al optimizar", !api.calls.some((c) => c.startsWith("PUT")));
+      byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
+      check("Ruteador: a mano vuelve al orden original → nada que confirmar", js(addresses(tree)) === js(["Lavalle 300", "Mitre 10", "Paso 5"]) && textOf(tree).includes("Cambiaste el orden a mano") && !!pressable(tree, "Confirmar orden").props.disabled);
+      byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
+      tree = await press(tree, "Ver en el mapa");
+      const orgMap = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("Recorrido completo"));
+      check("Ruteador: el mapa muestra el orden sin confirmar", !!orgMap && textOf(orgMap).includes("sin confirmar") && js(all(orgMap, (x) => x.type === "Marker").map(textOf)) === js(["2", "3"]));
+      nav.calls = []; api.bodies = [];
+      api.replies["PUT /v2/routes/158/stops/driver-order"] = { ok: true, route: loaded158 };
+      tree = await press(tree, "Confirmar orden");
+      check("Ruteador: confirmar guarda el orden con el que estaba viendo y vuelve",
+        js(api.bodies) === js([["PUT /v2/routes/158/stops/driver-order", { stop_ids: [2, 1, 3], expected_stop_ids: [1, 2, 3] }]]) && same(lastNav(), ["goBack"]), js(api.bodies));
+
+      // Sin Valhalla no hay propuesta (nunca línea recta): se dice, el orden queda y se puede seguir a mano.
+      api.calls = []; api.bodies = [];
+      api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158": { ok: true, route: loaded158 },
+        "POST /v2/routes/158/plan/preview": { ok: false, status: 503, code: "ROUTING_UNAVAILABLE", error: "No pudimos calcular el recorrido por calles (Valhalla no responde). Tu orden no cambió: podés seguir así o reordenar a mano." },
+        "PUT /v2/routes/158/stops/driver-order": { ok: true, route: loaded158 } };
+      tree = await mount(organizeEl());
+      tree = await press(tree, "Optimizar");
+      text = textOf(tree);
+      check("Ruteador sin Valhalla: lo dice y no inventa una propuesta", text.includes("No pudimos calcular el recorrido por calles") && !text.includes("Orden propuesto") && !/línea recta|aproximad/i.test(text));
+      check("Ruteador sin Valhalla: el orden queda como estaba y no se guarda nada", js(addresses(tree)) === js(["Lavalle 300", "Mitre 10", "Paso 5"]) && !api.calls.some((c) => c.startsWith("PUT")) && !!pressable(tree, "Confirmar orden").props.disabled);
+      byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
+      nav.calls = [];
+      tree = await press(tree, "Confirmar orden");
+      check("Ruteador sin Valhalla: igual se puede ordenar a mano y confirmar", js(api.bodies.filter(([k]) => k.startsWith("PUT"))) === js([["PUT /v2/routes/158/stops/driver-order", { stop_ids: [2, 1, 3], expected_stop_ids: [1, 2, 3] }]]) && same(lastNav(), ["goBack"]));
+      // Una parada sin camino por calle: se marca cuál, para revisar su dirección.
+      api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158": { ok: true, route: loaded158 },
+        "POST /v2/routes/158/plan/preview": { ok: false, status: 422, code: "UNREACHABLE_STOPS", stop_ids: [1], error: "Una parada no tiene camino por calle desde el resto: revisá su ubicación. Tu orden no cambió." } };
+      tree = await mount(organizeEl());
+      tree = await press(tree, "Optimizar");
+      const flagged = all(tree, (x) => x.type === "Text" && textOf(x).includes("sin camino por calle: revisá la dirección"));
+      check("Ruteador: la parada sin camino por calle se identifica en la lista", flagged.length === 1 && textOf(tree).includes("revisá su ubicación") && js(addresses(tree)) === js(["Lavalle 300", "Mitre 10", "Paso 5"]));
+
+      // Alguien cambió el recorrido mientras tanto: se avisa, se recarga y no se sale.
+      api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158": { ok: true, route: loaded158 },
+        "POST /v2/routes/158/plan/preview": PREVIEW, "PUT /v2/routes/158/stops/driver-order": { ok: false, status: 409, code: "ROUTE_CHANGED", error: "El recorrido cambió mientras lo organizabas: revisá el orden nuevo y volvé a confirmar" } };
+      tree = await mount(organizeEl());
+      tree = await press(tree, "Optimizar");
+      nav.calls = []; api.calls = [];
+      tree = await press(tree, "Confirmar orden");
+      check("Ruteador: si el recorrido cambió (409), lo dice, lo recarga y no vuelve", textOf(tree).includes("El recorrido cambió mientras lo organizabas") && api.calls.includes("GET /v2/routes/158") && !nav.calls.length);
+
+      // Sin domicilio: termina sin destino fijo, lo explica y no ofrece «Mi domicilio».
+      api.replies = { "GET /v2/routes/158/plan/places": { ...PLACES, home: null }, "GET /v2/routes/158": { ok: true, route: loaded158 } };
+      tree = await mount(organizeEl());
+      check("Ruteador sin domicilio: «Sin destino fijo» y el aviso para cargarlo", textOf(tree).includes("Terminar enSin destino fijo") && textOf(tree).includes("No tenés domicilio cargado"));
+      tree = await press(tree, "Terminar en");
+      const homeChoice = all(tree, (x) => typeof x.props?.onPress === "function" && textOf(x).startsWith("Mi domicilio")).pop();
+      check("Ruteador sin domicilio: «Mi domicilio» deshabilitado con el motivo", !!homeChoice?.props.disabled && textOf(homeChoice).includes("No tenés domicilio cargado"));
+
+      // Otra dirección: se busca con el buscador de Mi domicilio y no se guarda como domicilio.
+      api.calls = []; api.bodies = [];
+      api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158": { ok: true, route: loaded158 }, "POST /v2/routes/158/plan/preview": PREVIEW,
+        "GET /v2/driver-home/geo/search": { ok: true, candidates: [{ latitude: -34.6, longitude: -58.37, displayName: "Lavalle 300, CABA, Argentina", address: "Lavalle 300", locality: "CABA" }] } };
+      tree = await mount(organizeEl());
+      tree = await press(tree, "Terminar en");
+      tree = await press(tree, "Otra dirección");
+      check("Ruteador: otra dirección vale solo para este recorrido", textOf(tree).includes("no cambia tu domicilio"));
+      all(tree, (x) => x.type === "TextInput" && x.props.placeholder === "Calle 123, Localidad")[0].props.onChangeText("Lavalle 300, CABA");
+      tree = await settle();
+      tree = await press(tree, "Buscar");
+      tree = await press(tree, "Lavalle 300, CABA");
+      check("Ruteador: la dirección elegida queda como fin", textOf(tree).includes("Terminar enOtra dirección · Lavalle 300, CABA"));
+      tree = await press(tree, "Optimizar");
+      const sent = api.bodies.find(([k]) => k === "POST /v2/routes/158/plan/preview")?.[1];
+      check("Ruteador: manda la dirección elegida con sus coordenadas, sin tocar Mi domicilio",
+        js(sent?.end) === js({ kind: "CUSTOM", latitude: -34.6, longitude: -58.37, label: "Lavalle 300, CABA" }) && !api.calls.some((c) => c.startsWith("PUT /v2/driver-home")), js(sent));
+
+      // Sin depósito con ubicación: sale de la ubicación actual; sin GPS, lo dice y no pide nada.
+      api.calls = []; api.bodies = [];
+      api.replies = { "GET /v2/routes/158/plan/places": { ...PLACES, warehouse: null }, "GET /v2/routes/158": { ok: true, route: loaded158 } };
+      tree = await mount(organizeEl());
+      check("Ruteador sin depósito: sale de «Mi ubicación actual»", textOf(tree).includes("Salir desdeMi ubicación actual"));
+      tree = await press(tree, "Optimizar");
+      check("Ruteador sin GPS: lo explica y no pide la propuesta", textOf(tree).includes("No pudimos leer tu ubicación") && !api.calls.some((c) => c.startsWith("POST")));
+    }
+
+    // Perfil del alta: la selfie como avatar (Inicio y Mi cuenta) y los datos y documentos cargados.
+    {
+      const FB = "https://firebasestorage.googleapis.com/v0/b/lynx-mobile-7d96b.firebasestorage.app/o/drivers%2F7%2F";
+      const ROLE = { ok: true, rol: "DRIVER", data: { id: 49, vehiculo: "moto · Honda · Wave", patente: "AB123CD", dni: "30111222", cuil: "20301112223", cbu: "0000003100000000000001", alias: "ana.mp" } };
+      const EXTRA = { ok: true, extra: { driver_id: 49, selfie: `${FB}selfie.jpg?alt=media&token=t`, dni_frente: `${FB}dni.jpg?alt=media&token=t`, dni_dorso: `${FB}dni2.jpg`, registro_frente: null, registro_dorso: null, cedula_frente: null, cedula_dorso: null } };
+      const avatars = (t: any) => all(t, (x) => x.type === "Image" && x.props.accessibilityLabel === "Tu foto");
+      api.calls = [];
+      api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": EXTRA, "GET /v2/driver-home/me": { ok: true, home: { address: "Lavalle 300" } } };
+      tree = await mount(RealReact.createElement(Account));
+      const av = avatars(tree);
+      check("Mi cuenta: la selfie del alta como avatar circular", av.length === 1 && av[0].props.source.uri === EXTRA.extra.selfie && flat(av[0].props.style).borderRadius === 25);
+      check("Mi cuenta: lee la ficha y los documentos del chofer con los pedidos de siempre", api.calls.includes("GET /v2/users/7/role") && api.calls.includes("GET /v2/drivers/49/extra"), js(api.calls));
+      let acc = textOf(tree);
+      check("Mi cuenta: vehículo y documentos enviados", acc.includes("moto · Honda · Wave · Patente AB123CD") && acc.includes("2 de 6 enviados"));
+      check("Mi cuenta: los datos de pago no se muestran", !acc.includes("ana.mp") && !acc.includes("0000003100000000000001"));
+      tree = await press(tree, "Datos personales");
+      acc = textOf(tree);
+      check("Mi cuenta: datos personales (nombre, correo, DNI, CUIL)", acc.includes("ana@lynx.test") && acc.includes("30111222") && acc.includes("20301112223") && acc.includes("Ana María"));
+      tree = await press(tree, "Documentación");
+      acc = textOf(tree);
+      check("Mi cuenta: cada documento dice si se envió (sin inventar una validación)", acc.includes("DNI · frenteEnviado · ver") && acc.includes("Registro · frenteFalta") && !/aprobad|validad|rechazad/i.test(acc));
+      tree = await press(tree, "DNI · frente");
+      const viewer = all(tree, (x) => x.type === "Modal").pop();
+      check("Mi cuenta: el documento se ve dentro de la app", !!viewer && all(viewer, (x) => x.type === "Image" && x.props.source?.uri === EXTRA.extra.dni_frente).length === 1);
+      for (const scheme of ["dark", "light"]) {
+        const th = createTheme({ scheme });
+        useTheme(th);
+        api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": EXTRA, "GET /v2/driver-home/me": { ok: true, home: { address: "Lavalle 300" } } };
+        tree = await mount(RealReact.createElement(Account));
+        tree = await press(tree, "Documentación");
+        check(`Mi cuenta ${scheme}: documentos legibles`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+      }
+      useTheme(dark);
+      // Una selfie de otro servidor no se pide: queda el avatar genérico.
+      api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": { ok: true, extra: { selfie: "https://otro.example/yo.jpg" } }, "GET /v2/driver-home/me": { ok: true, home: null } };
+      tree = await mount(RealReact.createElement(Account));
+      check("Mi cuenta: sin selfie segura, el avatar genérico de siempre", !avatars(tree).length && all(tree, (x) => x.type === "Image" && x.props.source?.asset).length === 1 && textOf(tree).includes("Sin documentos enviados"));
+      // Sin red: el avatar genérico y la cuenta igual se ve.
+      api.replies = { "GET /v2/users/7/role": new Error("Network request failed"), "GET /v2/driver-home/me": { ok: true, home: null } };
+      tree = await mount(RealReact.createElement(Account));
+      check("Mi cuenta sin red: avatar genérico, sin error ni bloqueo", !avatars(tree).length && textOf(tree).includes("Datos personales"));
+      // Inicio: la selfie en el botón de perfil, junto al rayito Turbo.
+      api.calls = [];
+      api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": EXTRA };
+      tree = await mount(RealReact.createElement(HomeScreen, { navigation: nav, route: { params: {} } }));
+      const profileBtn = byLabel(tree, "Perfil")[0];
+      check("Inicio: la selfie en el botón de perfil (círculo)", !!profileBtn && avatars(profileBtn).length === 1 && flat(avatars(profileBtn)[0].props.style).borderRadius === 21);
+      check("Inicio: el rayito Turbo sigue igual", byLabel(tree, "Opciones Turbo").length === 1);
+      check("Inicio: la selfie se pide una vez", api.calls.filter((c) => c === "GET /v2/drivers/49/extra").length === 1);
+      api.replies = { "GET /v2/users/7/role": { ok: true, rol: "DRIVER", data: { id: 49 } }, "GET /v2/drivers/49/extra": { ok: true, extra: null } };
+      tree = await mount(RealReact.createElement(HomeScreen, { navigation: nav, route: { params: {} } }));
+      check("Inicio sin selfie: el ícono de siempre", !avatars(byLabel(tree, "Perfil")[0]).length);
+    }
+
+    // Inicio: Turbo compacto; sin habilitación no ofrece prenderlo; tope alcanzado.
+    const homeEl = () => RealReact.createElement(HomeScreen, { navigation: nav, route: { params: {} } });
+    setEnviosApi({ "POST /driver/availability/get": { ok: true, turbo_enabled: false, turbo_active: false }, [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [ROUTES[0]] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
+    api.replies["/driver/availability/get"] = { ok: true, turbo_enabled: false, turbo_active: false };
+    tree = await mount(homeEl());
+    byLabel(tree, "Opciones Turbo")[0].props.onPress(); tree = await settle();
+    check("Inicio sin habilitación Turbo: el panel no ofrece prenderlo y lo explica", !all(tree, (x) => typeof x.props?.onValueChange === "function").length && textOf(tree).includes("No habilitado") && textOf(tree).includes("Pedile la habilitación"));
+    setEnviosApi({ "GET /v2/turbo/groups/mine": { ok: true, groups: [], load: { morning: 10, cap_morning: 10, other: 1, cap_other: 5, morning_until: "13:00" } } });
+    tree = await mount(homeEl());
+    byLabel(tree, "Opciones Turbo")[0].props.onPress(); tree = await settle();
+    check("Inicio habilitado: el panel tiene el interruptor, los activos y el aviso de tope solo si se alcanzó", all(tree, (x) => typeof x.props?.onValueChange === "function").length === 1 && textOf(tree).includes("Disponible para Turbo") && textOf(tree).includes("Turbos activos: 11") && textOf(tree).includes("Llegaste al tope de Turbos que se entregan antes de las 13:00.") && !textOf(tree).includes("de 10 a la mañana"), (all(tree, (x) => x.type === "Modal" && textOf(x).includes("Ver ofertas"))[0] ? textOf(all(tree, (x) => x.type === "Modal" && textOf(x).includes("Ver ofertas"))[0]) : "sin panel") + " · switches=" + all(tree, (x) => typeof x.props?.onValueChange === "function").length);
+  }
+
+  // 20) Alta: «Tu domicilio» entre Vehículo y fotos; opcional y en el servidor.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    const { OnboardingStackNavigator } = L("src/Presentation/navigator/OnboardingStackNavigator.tsx");
+    useTheme(createTheme({ scheme: "dark", style: "marble" }));
+    stackScreens.clear(); stackScreens.add("Home");
+    nav.calls = []; setDriverApi();
+    api.replies["GET /v2/driver-home/me"] = { ok: true, home: { address: null, latitude: null, longitude: null } };
+    let tree = await mount(RealReact.createElement(OnboardingStackNavigator));
+    const txt = textOf(tree);
+    check("Alta: el paso «Tu domicilio» está registrado", registeredScreens.has("Home"));
+    check("Alta › Tu domicilio: título y el texto del paso, opcional", txt.includes("Tu domicilio") && txt.includes("Indicá dónde preferís terminar tus recorridos") && txt.includes("Es opcional"));
+    check("Alta › Tu domicilio: lee del servidor (no del teléfono)", api.calls.includes("GET /v2/driver-home/me"));
+    const lg = legibility(tree, PUBLIC_THEME.surfaces.screen);
+    check("Alta › Tu domicilio: claro y legible", lg.bad.length === 0, lg.bad.join(" · "));
+    tree = await press(tree, "Ahora no");
+    check("Alta › Tu domicilio: «Ahora no» sigue a las fotos sin guardar nada", js(lastNav()) === js(["navigate", "Selfie"]) && !api.calls.some((c) => c.startsWith("PUT")));
+    api.replies["GET /v2/driver-home/me"] = { ok: true, home: { address: "Lavalle 300", latitude: -34.6, longitude: -58.4 } };
+    tree = await mount(RealReact.createElement(OnboardingStackNavigator));
+    check("Alta › Tu domicilio: con domicilio cargado, «Continuar»", !!pressable(tree, "Continuar") && !textOf(tree).includes("Ahora no"));
+    stackScreens.clear();
   }
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }

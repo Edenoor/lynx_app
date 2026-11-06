@@ -3,6 +3,10 @@
 // dirección y elegir el resultado, o, estando en casa, usar la ubicación del
 // teléfono. La operación lo ve en el mapa y lo puede usar como inicio de una
 // colecta o fin de un reparto.
+//
+// También es el paso «Tu domicilio» del alta (`step`): opcional, no frena el
+// primer ingreso. Se guarda en el servidor (/v2/driver-home/me), nunca solo en
+// el teléfono, y se edita después desde Perfil.
 
 import React, { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -38,7 +42,12 @@ const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | null> => {
 };
 const servicesOff = (e: any) => e?.code === "E_LOCATION_SERVICES_DISABLED" || /location services/i.test(String(e?.message ?? ""));
 
-export default function DriverHomeScreen() {
+type Props = {
+  // Paso del alta: «Continuar» / «Ahora no» siguen al próximo paso.
+  step?: { onNext: () => void };
+};
+
+export default function DriverHomeScreen({ step }: Props = {}) {
   const navigation = useNavigation<any>();
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -141,12 +150,14 @@ export default function DriverHomeScreen() {
       <KeyboardScreen contentContainerStyle={styles.content}>
         <Pressable style={styles.back} onPress={() => navigation.goBack()} hitSlop={10}>
           <Ionicons name="chevron-back" size={20} color={theme.text.secondary} />
-          <Text style={styles.backText}>Mi cuenta</Text>
+          <Text style={styles.backText}>{step ? "Volver" : "Mi cuenta"}</Text>
         </Pressable>
 
-        <Text style={styles.title}>Mi domicilio</Text>
+        <Text style={styles.title}>{step ? "Tu domicilio" : "Mi domicilio"}</Text>
         <Text style={styles.subtitle}>
-          La operación lo ve en el mapa y lo puede usar para que una colecta arranque en tu casa o un reparto termine ahí.
+          {step
+            ? "Indicá dónde preferís terminar tus recorridos. Lynx podrá utilizar esta ubicación para proponerte un orden de entregas más conveniente. Es opcional: podés cargarlo después desde Perfil."
+            : "La operación lo ve en el mapa y lo puede usar para que una colecta arranque en tu casa o un reparto termine ahí."}
         </Text>
 
         <View style={styles.card}>
@@ -236,6 +247,18 @@ export default function DriverHomeScreen() {
             <Ionicons name="settings-outline" size={18} color={theme.text.accent} />
             <Text style={styles.buttonSecondaryText}>Abrir configuración</Text>
           </Pressable>
+        ) : null}
+
+        {step ? (
+          home?.address ? (
+            <Pressable style={styles.button} onPress={step.onNext} disabled={busy === "save"} accessibilityRole="button">
+              <Text style={styles.buttonText}>Continuar</Text>
+            </Pressable>
+          ) : (
+            <Pressable style={[styles.button, styles.buttonSecondary]} onPress={step.onNext} disabled={busy === "save"} accessibilityRole="button">
+              <Text style={styles.buttonSecondaryText}>Ahora no</Text>
+            </Pressable>
+          )
         ) : null}
       </KeyboardScreen>
     </SafeScreen>

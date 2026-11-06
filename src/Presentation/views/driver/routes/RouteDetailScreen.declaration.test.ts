@@ -69,6 +69,9 @@ const MOCKS: Record<string, any> = {
   "@expo/vector-icons": { Ionicons: "Ionicons" },
   "expo-status-bar": { StatusBar: "StatusBar" },
   "@react-navigation/native": { useIsFocused: () => true },
+  // El mapa del recorrido (RouteMapModal).
+  "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker" },
+  "react-native-safe-area-context": { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
 };
 const nav = { navigate: () => {}, goBack: () => {}, addListener: () => () => {} };
 // DriverLocation simulado: cuántas veces la pantalla pidió la política del GPS.
@@ -140,13 +143,13 @@ const route = (p: any = {}) => ({
   confirmation_state: "ACCEPTED", qr_token: "x", notes: null, started_at: null, completed_at: null, stops: [stop()], ...p,
 });
 
-// Orden de useState: detalle (route, busy, error, count, openStop, deadline) = 0-5;
-// KeyboardScreen (offset) = 6;
-// la parada abierta, que va primera (pending, notes, closing, closeError, declareError) = 7-11;
-// su formulario (editing, text, invalid) = 12-14; después las demás paradas.
-const IDX = { route: 0, error: 2, declareError: 11, editing: 12, invalid: 14 };
+// Orden de useState: detalle (route, busy, error, count, openStop, deadline, mapOpen) = 0-6;
+// KeyboardScreen (offset) = 7;
+// la parada abierta, que va primera (pending, notes, closing, closeError, declareError, more, showClosed) = 8-14;
+// su formulario (editing, text, invalid) = 15-17; después las demás paradas.
+const IDX = { route: 0, error: 2, declareError: 12, editing: 15, invalid: 17 };
 const draw = (r: any, o: { open?: number; editing?: boolean; text?: string; declareError?: string; pending?: any[] } = {}) => {
-  states = [r, false, null, "", o.open ?? r.stops[0]?.id, null, undefined, o.pending, undefined, undefined, undefined, o.declareError, o.editing, o.text];
+  states = [r, false, null, "", o.open ?? r.stops[0]?.id, null, false, undefined, o.pending, undefined, undefined, undefined, o.declareError, false, false, o.editing, o.text];
   stateIdx = 0; sets = []; calls.length = 0; alerts.length = 0;
   currentRoute = r;
   return render(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: r.id, name: "MAÑANERO 02" } } }));

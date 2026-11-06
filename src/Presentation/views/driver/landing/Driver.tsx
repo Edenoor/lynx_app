@@ -1,11 +1,11 @@
 // src/Presentation/views/driver/DriverScreen.tsx
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
   Linking,
   Modal,
+  Switch,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,13 +17,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StackScreenProps } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-
 import useViewModel from "./ViewModel";
 import useEnviosViewModel from "../Envios/ViewModel";
 import { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { postJson } from "../../../config/Api";
 import { useNotifications } from "../../../context/NotificationContext";
-
 import {
   setupPushAndRegisterDevice,
   attachNotificationListeners,
@@ -34,12 +32,10 @@ import {
   readCurrentPosition,
   onTrackingChange,
 } from "../../../config/DriverLocation";
-
 import {
   acceptDeliveryAssignment,
   rejectDeliveryAssignment,
 } from "./acceptApi";
-
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
@@ -50,15 +46,14 @@ import {
   DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
 import DriverPerformanceCard from "../../../components/DriverPerformanceCard";
-import DriverTurboStatusCard from "../../../components/DriverTurboStatusCard";
-import { loadText, loadTotal } from "../turbo/turboGroup";
+import { capNotice, loadTotal } from "../turbo/turboGroup";
 import MissionCard from "../../../components/driver/MissionCard";
+import DriverAvatar from "../../../components/driver/DriverAvatar";
+import { loadDriverProfile, useDriverProfile } from "../account/driverProfileApi";
 import { invalidateDriverWork, useDriverWork } from "../work/workSource";
 import { offerNoticeText } from "../offers/offerInbox";
-import { refreshOfferCount, showOfferNotice, useOfferCount } from "../offers/offerStore";
-
+import { openOfferInbox, refreshOfferCount, setOfferTurboEnabled, showOfferNotice, useOfferCount } from "../offers/offerStore";
 interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
-
 type PendingAssignment = {
   deliveryId: string | number;
   tracking?: string | null;
@@ -68,14 +63,12 @@ type PendingAssignment = {
   provincia?: string | null;
   zona?: string | null;
 };
-
 type FeedbackModalState = {
   visible: boolean;
   type: "success" | "error" | "info";
   title: string;
   message: string;
 };
-
 const VEHICLE_KEYS_GUESS = [
   "vehicle",
   "vehiculo",
@@ -83,12 +76,10 @@ const VEHICLE_KEYS_GUESS = [
   "tipo_vehiculo",
   "vehicle_type",
 ];
-
 const getFirstWord = (value?: string | null): string => {
   if (!value || typeof value !== "string") return "";
   return value.trim().split(/\s+/)[0] || "";
 };
-
 const getDriverDisplayName = (user: any): string => {
   const firstName =
     getFirstWord(user?.first_name) ||
@@ -96,33 +87,25 @@ const getDriverDisplayName = (user: any): string => {
     getFirstWord(user?.name) ||
     getFirstWord(user?.username) ||
     getFirstWord(user?.email);
-
   return firstName || "driver";
 };
-
 const n = (value: any) => {
   const parsed = Number(value ?? 0);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
-
 const fmtMoney = (value: any) => `$${n(value).toLocaleString("es-AR")}`;
-
 const normalizeStatus = (estado?: string | null) =>
   String(estado ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
-
 const isDelivered = (estado?: string | null) => {
   return normalizeStatus(estado).includes("entregado");
 };
-
 const isPending = (estado?: string | null) => {
   const status = normalizeStatus(estado);
-
   if (!status) return true;
-
   return !(
     status.includes("entregado") ||
     status.includes("reprogramado") ||
@@ -130,17 +113,13 @@ const isPending = (estado?: string | null) => {
     status.includes("cancel")
   );
 };
-
 const netoChofer = (item?: any | null) => {
   if (!item) return 0;
-
   const precio = n(item.precio_chofer);
   const pRaw = n(item.porcentaje_chofer);
   const factor = pRaw > 1 ? 1 - pRaw / 100 : 1 - pRaw;
-
   return Math.round(precio * factor * 100) / 100;
 };
-
 const DetailLine = ({
   label,
   value,
@@ -152,7 +131,6 @@ const DetailLine = ({
 }) => {
   const styles = useThemedStyles(makeStyles);
   if (!force && !value) return null;
-
   return (
     <View style={styles.assignmentDetailRow}>
       <Text style={styles.assignmentDetailLabel}>{label}</Text>
@@ -162,32 +140,33 @@ const DetailLine = ({
     </View>
   );
 };
-
 export const DriverScreen = ({ navigation }: Props) => {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const { user } = useViewModel();
-
+  // La selfie del alta en el botón de perfil (una lectura por sesión).
+  const driverProfile = useDriverProfile();
+  useEffect(() => { loadDriverProfile((user as any)?.id); }, [(user as any)?.id]);
   const {
     list,
     loading: loadingLegacy,
     performanceAnalytics,
   } = useEnviosViewModel();
-
   const { add } = useNotifications();
-
-  // Recorridos en la calle (misión activa) y ofertas sin contestar: los mismos
-  // datos que Envíos, leídos una vez.
+  // Recorridos en la calle (misión activa): los mismos datos que Envíos,
+  // leídos una vez. Las ofertas se ven en Alertas (contador en la barra).
   const { work } = useDriverWork();
   const missions = work?.missions ?? [];
   // Turbos que lleva hoy contra su tope (null: sin dato, un servidor anterior).
   const turboLoad = work?.turboLoad ?? null;
-  const offerCount = useOfferCount();
-
   const [turboOn, setTurboOn] = useState<boolean>(false);
   // null = todavía no se sabe; false = el coordinador no lo habilitó para turbos.
   const [turboEnabled, setTurboEnabled] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  const [turboPanelVisible, setTurboPanelVisible] = useState(false);
+  const offerCount = useOfferCount();
+  const mapRef = useRef<MapView>(null);
+  const mapCentered = useRef(false);
   const [available] = useState<boolean>(true);
   // Modo en que quedó el seguimiento: si no es "background", se muestra un aviso fijo.
   // "forbidden": el servidor lo apagó con un 403 (sin ficha de chofer activa).
@@ -199,52 +178,44 @@ export const DriverScreen = ({ navigation }: Props) => {
     { latitude: number; longitude: number } | null | undefined
   >(undefined);
   const insets = useSafeAreaInsets();
-
   const [pendingAssignment, setPendingAssignment] =
     useState<PendingAssignment | null>(null);
-
   const [assignmentActionLoading, setAssignmentActionLoading] = useState<
     "accept" | "reject" | null
   >(null);
-
   const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState>({
     visible: false,
     type: "info",
     title: "",
     message: "",
   });
-
+  useEffect(() => {
+    if (!myPosition || mapCentered.current) return;
+    mapCentered.current = true;
+    mapRef.current?.animateToRegion({ ...myPosition, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 450);
+  }, [myPosition]);
   const userId = (user as any)?.id;
   const username = (user as any)?.username || user?.email || user?.name || "";
-
   const driverDisplayName = useMemo(() => {
     return getDriverDisplayName(user);
   }, [user]);
-
   const legacyRows = useMemo(() => {
     return (list || []).filter(Boolean);
   }, [list]);
-
   const driverMetrics = useMemo(() => {
     const total = legacyRows.length;
-
     const delivered = legacyRows.filter((item) =>
       isDelivered(item?.estado)
     ).length;
-
     const closedOk =
       (performanceAnalytics?.eliteDeliveries ?? 0) +
       (performanceAnalytics?.post21Delivered ?? 0) +
       (performanceAnalytics?.post21Nobody ?? 0) +
       (performanceAnalytics?.post21Rescheduled ?? 0);
-
     const pending = legacyRows.filter((item) => isPending(item?.estado)).length;
-
     const neto = legacyRows.reduce((acc, item) => acc + netoChofer(item), 0);
-
     const effectiveness = total > 0 ? Math.round((closedOk / total) * 100) : 0;
     const score = total > 0 ? Math.round((effectiveness / 10) * 10) / 10 : 0;
-
     return {
       total,
       delivered,
@@ -255,32 +226,25 @@ export const DriverScreen = ({ navigation }: Props) => {
       score,
     };
   }, [legacyRows, performanceAnalytics]);
-
   const defaultVehicleType = useMemo(() => {
     const raw =
       VEHICLE_KEYS_GUESS.map((k) =>
         user && (user as any)[k] ? String((user as any)[k]) : ""
       ).find(Boolean) || "";
-
     const s = raw.toLowerCase();
-
     if (s.includes("moto") || s.includes("bike") || s.includes("moped")) {
       return "moto";
     }
-
     if (s.includes("auto") || s.includes("car")) {
       return "auto";
     }
-
     return "camioneta";
   }, [user]);
-
   const assignmentLocalidad =
     pendingAssignment?.localidad ||
     pendingAssignment?.provincia ||
     pendingAssignment?.zona ||
     null;
-
   const showFeedback = (
     type: FeedbackModalState["type"],
     title: string,
@@ -293,21 +257,16 @@ export const DriverScreen = ({ navigation }: Props) => {
       message,
     });
   };
-
   const closeFeedback = () => {
     setFeedbackModal((prev) => ({
       ...prev,
       visible: false,
     }));
   };
-
   const detachNotiRef = useRef<null | (() => void)>(null);
-
   useEffect(() => {
     if (!username || !userId) return;
-
     let cancelled = false;
-
     (async () => {
       try {
         await setupPushAndRegisterDevice({
@@ -316,17 +275,13 @@ export const DriverScreen = ({ navigation }: Props) => {
           rol: "driver",
           vehicleType: defaultVehicleType,
         });
-
         if (cancelled) return;
-
         if (detachNotiRef.current) {
           detachNotiRef.current();
           detachNotiRef.current = null;
         }
-
         detachNotiRef.current = attachNotificationListeners({
           currentUser: { username, rol: "driver" },
-
           onAssignment: ({
             deliveryId,
             tracking,
@@ -346,21 +301,17 @@ export const DriverScreen = ({ navigation }: Props) => {
               zona,
             });
           },
-
           onNewTrad: (tracking) => {
             if (!tracking) return;
-
             showFeedback(
               "info",
               "Nuevo envío cercano",
               `Tracking: ${tracking}`
             );
           },
-
           onAny: ({ kind, title, body, data }) => {
             add({ title, body, kind, data });
           },
-
           // Avisos de recorridos: al tocar la notificación se abre lo que
           // corresponde; con la app abierta solo se avisa, sin cambiarle la
           // pantalla en medio de un escaneo o una entrega.
@@ -369,12 +320,12 @@ export const DriverScreen = ({ navigation }: Props) => {
             const isCollection = kind === "PICKUP_ASSIGNED" || kind === "PICKUP_REASSIGNED" || kind === "ROUTE_CONFIRMATION";
             // Sin routeId, o una colecta quitada (el detalle ya no es suyo:
             // 403), se abre la lista. Un recorrido ofrecido se contesta en
-            // Recorridos de reparto. El detalle consulta el estado vigente.
+            // Alertas › Ofertas. El detalle consulta el estado vigente.
             const openList = () => nav.navigate(isCollection ? "CollectionsScreen" : "RoutesScreen");
             // Lo que muestran Inicio y Envíos cambió (colecta asignada, recorrido actualizado).
             invalidateDriverWork();
             if (kind === "ROUTE_OFFER") {
-              const openOffers = () => nav.navigate("TurboOffersScreen");
+              const openOffers = () => openOfferInbox(nav);
               if (source === "response") openOffers();
               else showOfferNotice({ ...offerNoticeText("ROUTE_OFFER"), open: openOffers });
               return;
@@ -403,11 +354,10 @@ export const DriverScreen = ({ navigation }: Props) => {
               );
             }
           },
-
-          // Turbo ofrecido: si el chofer tocó la notificación se abre la
-          // bandeja; con la app abierta, un aviso arriba que no lo frena.
+          // Turbo ofrecido: si el chofer tocó la notificación se abre
+          // Alertas › Ofertas; con la app abierta, un aviso arriba que no lo frena.
           onTurboOffer: ({ source, raw }) => {
-            const openOffers = () => navigation.navigate("TurboOffersScreen" as never);
+            const openOffers = () => openOfferInbox(navigation);
             if (source === "response") {
               openOffers();
               return;
@@ -415,7 +365,6 @@ export const DriverScreen = ({ navigation }: Props) => {
             showOfferNotice({ ...offerNoticeText("TURBO_OFFER", raw), open: openOffers });
           },
         });
-
       } catch (_e) {
         showFeedback(
           "error",
@@ -423,7 +372,6 @@ export const DriverScreen = ({ navigation }: Props) => {
           "No se pudo registrar el dispositivo para recibir alertas."
         );
       }
-
       // Seguimiento operativo: sigue en segundo plano y con la pantalla
       // bloqueada; se apaga al cerrar sesión, no al salir de esta pantalla.
       const tracking = await startDriverTracking({ available });
@@ -433,7 +381,6 @@ export const DriverScreen = ({ navigation }: Props) => {
       const position = tracking.ok ? await readCurrentPosition() : null;
       if (cancelled) return;
       setMyPosition(position);
-
       if (!tracking.ok) {
         showFeedback(
           "info",
@@ -448,7 +395,6 @@ export const DriverScreen = ({ navigation }: Props) => {
         );
       }
     })();
-
     // Al volver a primer plano se sube lo acumulado sin esperar al próximo fix.
     // También se renueva el push, como mucho cada 12 h: el servidor deja de
     // mandarle a un teléfono que no renovó el token en 7 días
@@ -472,19 +418,15 @@ export const DriverScreen = ({ navigation }: Props) => {
         }
       }
     });
-
     return () => {
       cancelled = true;
-
       sub.remove();
-
       if (detachNotiRef.current) {
         detachNotiRef.current();
         detachNotiRef.current = null;
       }
     };
   }, [userId, username, available, defaultVehicleType, add]);
-
   // Lo que cambia el seguimiento después del arranque (también en segundo
   // plano) se avisa acá, con el aviso fijo de arriba: un 403 lo apaga, y la
   // franja horaria lo pone en pausa y lo vuelve a prender.
@@ -498,43 +440,40 @@ export const DriverScreen = ({ navigation }: Props) => {
     }),
     []
   );
-
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       if (!username) return;
-
       try {
         const r = await postJson("/driver/availability/get", { username });
-
         if (mounted && r?.ok !== false) {
           setTurboOn(Boolean(r?.turbo_active ?? false));
-          if (typeof r?.turbo_enabled === "boolean") setTurboEnabled(r.turbo_enabled);
+          if (typeof r?.turbo_enabled === "boolean") {
+            setTurboEnabled(r.turbo_enabled);
+            setOfferTurboEnabled(r.turbo_enabled);
+          }
         }
       } catch (_e) {}
     })();
-
     return () => {
       mounted = false;
     };
   }, [username]);
-
   useFocusEffect(useCallback(() => { void refreshOfferCount(); }, []));
-
   const toggleTurbo = async (val: boolean) => {
     if (!username) return;
-
     setTurboOn(val);
     setSaving(true);
-
     try {
       const r = await postJson("/driver/availability/set", {
         username,
         turbo_active: val,
       });
       if (r?.ok === false) throw new Error(r?.error || "rechazado");
-      if (typeof r?.turbo_enabled === "boolean") setTurboEnabled(r.turbo_enabled);
+      if (typeof r?.turbo_enabled === "boolean") {
+        setTurboEnabled(r.turbo_enabled);
+        setOfferTurboEnabled(r.turbo_enabled);
+      }
     } catch (_e) {
       setTurboOn(!val);
       showFeedback(
@@ -546,25 +485,18 @@ export const DriverScreen = ({ navigation }: Props) => {
       setSaving(false);
     }
   };
-
   const handleAcceptAssignment = async () => {
     if (!pendingAssignment) return;
-
     try {
       setAssignmentActionLoading("accept");
-
       console.log("[Lynx Driver] Aceptando asignación:", {
         deliveryId: pendingAssignment.deliveryId,
       });
-
       await acceptDeliveryAssignment(pendingAssignment.deliveryId);
-
       setPendingAssignment(null);
-
       showFeedback("success", "Listo", "Aceptaste el envío asignado.");
     } catch (e: any) {
       console.log("[Lynx Driver] Error al aceptar:", e);
-
       showFeedback(
         "error",
         "No se pudo aceptar",
@@ -574,21 +506,15 @@ export const DriverScreen = ({ navigation }: Props) => {
       setAssignmentActionLoading(null);
     }
   };
-
   const handleRejectAssignment = async () => {
     if (!pendingAssignment) return;
-
     try {
       setAssignmentActionLoading("reject");
-
       console.log("[Lynx Driver] Rechazando asignación:", {
         deliveryId: pendingAssignment.deliveryId,
       });
-
       await rejectDeliveryAssignment(pendingAssignment.deliveryId);
-
       setPendingAssignment(null);
-
       showFeedback(
         "info",
         "Asignación rechazada",
@@ -596,7 +522,6 @@ export const DriverScreen = ({ navigation }: Props) => {
       );
     } catch (e: any) {
       console.log("[Lynx Driver] Error al rechazar:", e);
-
       showFeedback(
         "error",
         "No se pudo rechazar",
@@ -606,60 +531,53 @@ export const DriverScreen = ({ navigation }: Props) => {
       setAssignmentActionLoading(null);
     }
   };
-
   const handleTabPress = (tab: DriverTabKey) => {
     if (tab === "home") {
       navigation.navigate("DriverScreen");
       return;
     }
-
     if (tab === "deliveries") {
       navigation.navigate("EnviosScreen");
       return;
     }
-
     if (tab === "scan") {
       navigation.navigate("DriverScanOptionsScreen");
       return;
     }
-
     if (tab === "activity") {
       navigation.navigate("NotificationsScreen");
     }
   };
-
   const feedbackTone =
     feedbackModal.type === "success"
       ? theme.status.confirmed
       : feedbackModal.type === "error"
       ? theme.status.rejected
       : theme.status.inTransit;
-
   const feedbackColor = feedbackTone.solid;
   const feedbackOverlay = feedbackTone.background;
   const feedbackBorder = feedbackTone.border;
-
   const feedbackIcon =
     feedbackModal.type === "success"
       ? "checkmark"
       : feedbackModal.type === "error"
       ? "close"
       : "information";
-
   return (
     <View style={styles.container}>
       <ThemedStatusBar />
-      {myPosition ? (
-        <MapView
-          style={styles.map}
-          region={{ ...myPosition, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
-        >
-          <Marker coordinate={myPosition} />
-        </MapView>
-      ) : null}
-
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={{ latitude: -34.6037, longitude: -58.3816, latitudeDelta: 0.3, longitudeDelta: 0.3 }}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+      >
+        {myPosition ? <Marker coordinate={myPosition} /> : null}
+      </MapView>
       <View style={styles.mapOverlay} />
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={[styles.contentInner, { paddingTop: insets.top + theme.spacing.md }]}
@@ -685,9 +603,6 @@ export const DriverScreen = ({ navigation }: Props) => {
           <View style={styles.hero}>
             <Text style={styles.kicker}>LYNX DRIVER</Text>
             <Text style={styles.title}>Hola {driverDisplayName}</Text>
-            <Text style={styles.subtitle}>
-              Todo listo para operar tus envíos.
-            </Text>
             {/* Sin permiso ya lo explica el aviso de ubicación de arriba. */}
             {!myPosition && trackingMode !== "off" ? (
               <View style={styles.locationStatus}>
@@ -698,56 +613,41 @@ export const DriverScreen = ({ navigation }: Props) => {
               </View>
             ) : null}
           </View>
+          <View style={styles.headerActions}>
+            <Pressable onPress={() => setTurboPanelVisible(true)} style={styles.profileButton} accessibilityLabel="Opciones Turbo" accessibilityRole="button">
+              <Ionicons name={turboEnabled === false ? "flash-outline" : "flash"} size={22} color={turboEnabled !== false && turboOn ? "#D59A19" : theme.text.muted} />
+              {offerCount != null && offerCount > 0 && turboEnabled !== false ? <View style={styles.offerDot} /> : null}
+            </Pressable>
           <Pressable
             onPress={() => navigation.navigate("DriverAccountScreen")}
             style={styles.profileButton}
             hitSlop={8}
             accessibilityLabel="Perfil"
           >
-            <Ionicons name="person-outline" size={22} color={theme.text.primary} />
+            <DriverAvatar uri={driverProfile?.selfie} size={42} fallback={<Ionicons name="person-outline" size={22} color={theme.text.primary} />} />
           </Pressable>
+          </View>
         </View>
-
+        <View style={styles.homeSpacer} />
+        <View style={styles.homeBottom}>
         {missions.length ? (
           <View style={styles.missions}>
             <MissionCard mission={missions[0]} onPress={() => (navigation as any).navigate(missions[0].target.screen, missions[0].target.params)} />
-            {missions.slice(1).map((m) => (
+            {/* Las demás en una fila cada una; si son muchas, el resto está en Envíos. */}
+            {missions.slice(1, 1 + MORE_MISSIONS).map((m) => (
               <MissionCard key={m.key} mission={m} compact onPress={() => (navigation as any).navigate(m.target.screen, m.target.params)} />
             ))}
+            {missions.length > 1 + MORE_MISSIONS ? (
+              <Pressable onPress={() => navigation.navigate("EnviosScreen")} style={styles.moreMissions} accessibilityRole="button" hitSlop={6}>
+                <Text style={styles.moreMissionsText}>
+                  {missions.length - 1 - MORE_MISSIONS === 1 ? "Un recorrido más en curso" : `${missions.length - 1 - MORE_MISSIONS} recorridos más en curso`}: ver en Envíos
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.text.accent} />
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
-
-        <Pressable
-          style={[theme.listItem, styles.offersRow, offerCount ? styles.offersRowActive : null]}
-          onPress={() => navigation.navigate("TurboOffersScreen")}
-          accessibilityRole="button"
-          accessibilityLabel={`Ofertas${offerCount ? `: ${offerCount} sin contestar` : ""}`}
-        >
-          <Ionicons name="pricetags-outline" size={20} color={offerCount ? theme.text.accent : theme.text.muted} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.offersTitle}>Ofertas</Text>
-            <Text style={styles.offersMeta}>
-              {offerCount ? `${offerCount === 1 ? "Una oferta" : `${offerCount} ofertas`} sin contestar` : "Turbos y recorridos ofrecidos"}
-            </Text>
-          </View>
-          {offerCount ? (
-            <View style={styles.offersBadge}>
-              <Text style={styles.offersBadgeText}>{offerCount > 99 ? "99+" : offerCount}</Text>
-            </View>
-          ) : null}
-          <Ionicons name="chevron-forward" size={18} color={theme.text.muted} />
-        </Pressable>
-
         <View style={styles.bottomCards}>
-          <DriverTurboStatusCard
-            active={turboOn}
-            saving={saving}
-            activeTrips={loadTotal(turboLoad)}
-            capText={loadText(turboLoad)}
-            enabled={turboEnabled}
-            onToggle={toggleTurbo}
-          />
-
           <DriverPerformanceCard
             loading={loadingLegacy}
             // /v1/data/driver/me no filtra por fecha: son todos los envíos
@@ -772,10 +672,39 @@ export const DriverScreen = ({ navigation }: Props) => {
             delayedTotal={performanceAnalytics?.delayedTotal}
           />
         </View>
+        </View>
       </ScrollView>
-
       <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
-
+      <Modal transparent visible={turboPanelVisible} animationType="fade" onRequestClose={() => setTurboPanelVisible(false)}>
+        <Pressable style={styles.feedbackOverlay} onPress={() => setTurboPanelVisible(false)}>
+          <Pressable style={styles.turboSheet} onPress={() => {}}>
+            <View style={styles.turboPanelHeader}>
+              <Ionicons name="flash" size={24} color={turboEnabled !== false && turboOn ? "#D59A19" : theme.text.muted} />
+              <Text style={styles.turboPanelTitle}>Turbo</Text>
+              <Pressable onPress={() => setTurboPanelVisible(false)} accessibilityLabel="Cerrar opciones Turbo"><Ionicons name="close" size={23} color={theme.text.secondary} /></Pressable>
+            </View>
+            <Text style={styles.turboPanelDescription}>{turboEnabled === false ? "No habilitado. Pedile la habilitación a tu coordinador." : turboEnabled === null ? "Consultando habilitación de Turbo…" : turboOn ? "En línea para recibir Turbo" : "Fuera de línea para Turbo"}</Text>
+            {turboEnabled === true ? (
+              <View style={styles.turboToggleRow}>
+                <Text style={styles.turboToggleText}>Disponible para Turbo</Text>
+                <View style={styles.turboSwitchArea}>
+                  <Switch
+                    style={styles.turboSwitch}
+                    value={turboOn}
+                    onValueChange={toggleTurbo}
+                    disabled={saving}
+                    thumbColor={theme.text.primary}
+                    trackColor={{ false: theme.borders.medium, true: theme.overlays.primary }}
+                  />
+                </View>
+              </View>
+            ) : null}
+            {loadTotal(turboLoad) > 0 ? <Text style={styles.turboPanelDescription}>Turbos activos: {loadTotal(turboLoad)}</Text> : null}
+            {capNotice(turboLoad) ? <Text style={styles.turboPanelDescription}>{capNotice(turboLoad)}</Text> : null}
+            <Pressable style={styles.turboOffersButton} onPress={() => { setTurboPanelVisible(false); openOfferInbox(navigation); }} accessibilityRole="button"><Text style={styles.turboOffersText}>{offerCount != null && offerCount > 0 ? `Ver ofertas (${offerCount})` : "Ver ofertas"}</Text><Ionicons name="arrow-forward" size={18} color={theme.text.onPrimary} /></Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <Modal
         transparent
         visible={!!pendingAssignment}
@@ -795,7 +724,6 @@ export const DriverScreen = ({ navigation }: Props) => {
                   color={theme.colors.primary}
                 />
               </View>
-
               <View style={styles.assignmentHeaderText}>
                 <Text style={styles.assignmentKicker}>NUEVA ASIGNACIÓN</Text>
                 <Text style={styles.assignmentTitle}>
@@ -803,12 +731,10 @@ export const DriverScreen = ({ navigation }: Props) => {
                 </Text>
               </View>
             </View>
-
             <Text style={styles.assignmentBody}>
               Tenés un nuevo envío para revisar. Podés aceptarlo ahora,
               rechazarlo o verlo más tarde desde Alertas.
             </Text>
-
             <View style={styles.assignmentDetailsBox}>
               <DetailLine
                 label="Tracking"
@@ -831,7 +757,6 @@ export const DriverScreen = ({ navigation }: Props) => {
                 force
               />
             </View>
-
             <View style={styles.assignmentFooter}>
               <Pressable
                 style={[styles.assignmentBtn, styles.assignmentBtnGhost]}
@@ -840,7 +765,6 @@ export const DriverScreen = ({ navigation }: Props) => {
               >
                 <Text style={styles.assignmentBtnGhostText}>Más tarde</Text>
               </Pressable>
-
               <Pressable
                 style={[styles.assignmentBtn, styles.assignmentBtnReject]}
                 onPress={handleRejectAssignment}
@@ -852,7 +776,6 @@ export const DriverScreen = ({ navigation }: Props) => {
                     : "Rechazar"}
                 </Text>
               </Pressable>
-
               <Pressable
                 style={[styles.assignmentBtn, styles.assignmentBtnAccept]}
                 onPress={handleAcceptAssignment}
@@ -868,7 +791,6 @@ export const DriverScreen = ({ navigation }: Props) => {
           </Pressable>
         </Pressable>
       </Modal>
-
       <Modal
         transparent
         visible={feedbackModal.visible}
@@ -878,7 +800,6 @@ export const DriverScreen = ({ navigation }: Props) => {
         <Pressable style={styles.feedbackOverlay} onPress={closeFeedback}>
           <Pressable style={styles.feedbackSheet} onPress={() => {}}>
             <View style={styles.feedbackHandle} />
-
             <View
               style={[
                 styles.feedbackIconOuter,
@@ -901,10 +822,8 @@ export const DriverScreen = ({ navigation }: Props) => {
                 />
               </View>
             </View>
-
             <Text style={styles.feedbackTitle}>{feedbackModal.title}</Text>
             <Text style={styles.feedbackMessage}>{feedbackModal.message}</Text>
-
             <Pressable style={styles.feedbackButton} onPress={closeFeedback}>
               <Text style={styles.feedbackButtonText}>OK</Text>
             </Pressable>
@@ -914,100 +833,95 @@ export const DriverScreen = ({ navigation }: Props) => {
     </View>
   );
 };
-
+// Recorridos en curso además del principal que se listan en Inicio.
+const MORE_MISSIONS = 2;
 const makeStyles = (t: Theme) => StyleSheet.create({
+  homeSpacer: { flexGrow: 1, minHeight: 90 },
+  homeBottom: { paddingBottom: 10 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  offerDot: { position: "absolute", top: 5, right: 5, width: 9, height: 9, borderRadius: 5, backgroundColor: "#D59A19" },
+  turboSheet: { backgroundColor: t.surfaces.screenAlt, borderTopLeftRadius: t.radius.xxl, borderTopRightRadius: t.radius.xxl, padding: t.spacing.lg, paddingBottom: t.spacing.xl, gap: t.spacing.md },
+  turboPanelHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  turboPanelTitle: { flex: 1, color: t.text.primary, fontSize: 20, fontWeight: "700" },
+  turboPanelDescription: { color: t.text.secondary, fontSize: 14, lineHeight: 20 },
+  turboToggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 64, marginBottom: 10 },
+  turboSwitchArea: { minWidth: 76, minHeight: 58, alignItems: "center", justifyContent: "center", marginLeft: 12 },
+  turboSwitch: { transform: [{ scaleX: 1.14 }, { scaleY: 1.14 }] },
+  turboToggleText: { color: t.text.primary, fontSize: 15, fontWeight: "600" },
+  turboOffersButton: { backgroundColor: t.colors.primary, minHeight: 48, borderRadius: t.radius.lg, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  turboOffersText: { color: t.text.onPrimary, fontWeight: "700", fontSize: 15 },
   missions: {
     marginTop: t.spacing.md,
   },
-
-  offersRow: {
+  moreMissions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: t.spacing.md,
-    marginTop: t.spacing.md,
+    gap: 4,
+    marginTop: t.spacing.sm,
+    minHeight: 32,
   },
-
-  offersRowActive: {
-    borderWidth: 1,
-    borderColor: t.text.accent,
-  },
-
-  offersTitle: {
-    color: t.text.primary,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-
-  offersMeta: {
-    color: t.text.secondary,
+  moreMissionsText: {
+    color: t.text.accent,
     fontSize: 13,
+    fontWeight: "700",
   },
-
-  offersBadge: {
-    minWidth: 24,
-    height: 24,
-    paddingHorizontal: 7,
-    borderRadius: 999,
-    backgroundColor: t.status.rejected.solid,
+  performanceToggle: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: t.spacing.md,
+    minHeight: 44,
   },
-
-  offersBadgeText: {
-    color: t.status.rejected.onSolid,
-    fontSize: 12,
-    fontWeight: "800",
+  performanceToggleText: {
+    flex: 1,
+    color: t.text.secondary,
+    fontSize: 14,
+    fontWeight: "700",
   },
-
+  performanceToggleMeta: {
+    color: t.text.muted,
+    fontSize: 13,
+    fontWeight: "700",
+  },
   container: {
     flex: 1,
     backgroundColor: t.surfaces.screen,
   },
-
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-
   mapOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: t.overlays.map,
   },
-
   content: {
     flex: 1,
     zIndex: 10,
   },
-
   contentInner: {
     flexGrow: 1,
     paddingHorizontal: t.layout.screenPadding,
     paddingBottom: 108,
   },
-
   heroRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: t.spacing.sm,
   },
-
   hero: {
     flex: 1,
-    gap: t.spacing.sm,
+    gap: t.spacing.xs,
   },
-
   locationStatus: {
     flexDirection: "row",
     alignItems: "center",
     gap: t.spacing.xs,
   },
-
   locationStatusText: {
     ...t.typography.body,
     color: t.text.muted,
     fontSize: 13,
   },
-
   profileButton: {
     width: 44,
     height: 44,
@@ -1018,32 +932,25 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     borderWidth: 1,
     borderColor: t.borders.default,
   },
-
   kicker: {
     ...t.typography.kicker,
   },
-
   title: {
     ...t.typography.titleLg,
   },
-
   subtitle: {
     ...t.typography.body,
   },
-
   bottomCards: {
-    marginTop: "auto",
     gap: t.spacing.sm,
-    paddingTop: t.spacing.xl,
+    paddingTop: t.spacing.md,
   },
-
   assignmentOverlay: {
     flex: 1,
     backgroundColor: t.overlays.camera,
     justifyContent: "center",
     paddingHorizontal: t.spacing.lg,
   },
-
   assignmentCard: {
     borderRadius: t.radius.xxl,
     backgroundColor: t.surfaces.screenAlt,
@@ -1053,13 +960,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     gap: t.spacing.md,
     ...t.shadows.card,
   },
-
   assignmentTopRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: t.spacing.md,
   },
-
   assignmentIcon: {
     width: 54,
     height: 54,
@@ -1070,15 +975,12 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     borderWidth: 1,
     borderColor: t.borders.primary,
   },
-
   assignmentHeaderText: {
     flex: 1,
   },
-
   assignmentKicker: {
     ...t.typography.kicker,
   },
-
   assignmentTitle: {
     color: t.text.primary,
     fontSize: 24,
@@ -1087,14 +989,12 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     letterSpacing: -0.7,
     marginTop: t.spacing.xs,
   },
-
   assignmentBody: {
     color: t.text.secondary,
     fontSize: t.font.size.sm,
     lineHeight: t.font.lineHeight.md,
     fontWeight: t.font.weight.medium,
   },
-
   assignmentDetailsBox: {
     borderRadius: t.radius.xl,
     backgroundColor: t.surfaces.card,
@@ -1102,7 +1002,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     borderColor: t.borders.soft,
     overflow: "hidden",
   },
-
   assignmentDetailRow: {
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.sm,
@@ -1110,7 +1009,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     borderBottomColor: t.borders.soft,
     gap: 3,
   },
-
   assignmentDetailLabel: {
     color: t.text.muted,
     fontSize: t.font.size.xxs,
@@ -1118,21 +1016,18 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-
   assignmentDetailValue: {
     color: t.text.primary,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: t.font.weight.bold,
   },
-
   assignmentFooter: {
     flexDirection: "row",
     gap: t.spacing.sm,
     justifyContent: "flex-end",
     flexWrap: "wrap",
   },
-
   assignmentBtn: {
     minHeight: 44,
     paddingHorizontal: t.spacing.md,
@@ -1140,47 +1035,39 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   assignmentBtnGhost: {
     backgroundColor: t.surfaces.card,
     borderWidth: 1,
     borderColor: t.borders.soft,
   },
-
   assignmentBtnReject: {
     backgroundColor: t.status.rejected.background,
     borderWidth: 1,
     borderColor: t.status.rejected.border,
   },
-
   assignmentBtnAccept: {
     backgroundColor: t.status.confirmed.solid,
   },
-
   assignmentBtnGhostText: {
     color: t.text.secondary,
     fontSize: t.font.size.sm,
     fontWeight: t.font.weight.black,
   },
-
   assignmentBtnRejectText: {
     color: t.status.rejected.text,
     fontSize: t.font.size.sm,
     fontWeight: t.font.weight.black,
   },
-
   assignmentBtnAcceptText: {
     color: t.status.confirmed.onSolid,
     fontSize: t.font.size.sm,
     fontWeight: t.font.weight.black,
   },
-
   feedbackOverlay: {
     flex: 1,
     backgroundColor: t.overlays.camera,
     justifyContent: "flex-end",
   },
-
   feedbackSheet: {
     borderTopLeftRadius: t.radius.xxl,
     borderTopRightRadius: t.radius.xxl,
@@ -1193,7 +1080,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: "center",
     ...t.shadows.card,
   },
-
   feedbackHandle: {
     width: 46,
     height: 5,
@@ -1201,7 +1087,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     backgroundColor: t.borders.strong,
     marginBottom: t.spacing.lg,
   },
-
   feedbackIconOuter: {
     width: 86,
     height: 86,
@@ -1211,7 +1096,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     borderWidth: 1,
     marginBottom: t.spacing.lg,
   },
-
   feedbackIconInner: {
     width: 58,
     height: 58,
@@ -1219,7 +1103,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   feedbackTitle: {
     color: t.text.primary,
     fontSize: 28,
@@ -1227,7 +1110,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     fontWeight: t.font.weight.black,
     textAlign: "center",
   },
-
   feedbackMessage: {
     color: t.text.secondary,
     fontSize: t.font.size.md,
@@ -1236,7 +1118,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     textAlign: "center",
     marginTop: t.spacing.sm,
   },
-
   feedbackButton: {
     width: "100%",
     minHeight: 54,
@@ -1246,7 +1127,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     justifyContent: "center",
     marginTop: t.spacing.xl,
   },
-
   feedbackButtonText: {
     color: t.text.onPrimary,
     fontSize: t.font.size.md,
@@ -1269,5 +1149,4 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     lineHeight: 18,
   },
 });
-
 export default DriverScreen;

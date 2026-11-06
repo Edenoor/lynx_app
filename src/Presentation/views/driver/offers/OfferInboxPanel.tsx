@@ -1,8 +1,13 @@
-// src/Presentation/views/driver/turbo/TurboOffersScreen.tsx
+// src/Presentation/views/driver/offers/OfferInboxPanel.tsx
 // Bandeja de ofertas del chofer: Turbos, lotes de Turbos y recorridos que
-// ofrece el coordinador, en una sola lista (lo que vence primero, arriba). Se
-// llega desde Inicio, Envíos y las notificaciones. Cada oferta se contesta con
-// su contrato de siempre.
+// ofrece el coordinador, en una sola lista (lo que vence primero, arriba). Es
+// la pestaña «Ofertas» de Alertas (NotificationScreen); se llega también desde
+// el aviso de oferta y las notificaciones. Cada oferta se contesta con su
+// contrato de siempre.
+//
+// Sin habilitación Turbo (turbo_enabled false) no se muestran ofertas Turbo ni
+// el acceso a «Turbos de mañana»: no las puede aceptar. Lo que ya tiene
+// asignado sigue en Envíos. La autorización la decide el servidor al aceptar.
 //
 // Turbos ofrecidos al chofer: cada tarjeta muestra tienda, destino, distancia,
 // cuánto queda para contestar y hasta qué hora hay que entregar. Acepto lo
@@ -17,35 +22,56 @@
 // vuelve a responder reintenta una vez, hasta tener una respuesta del servidor.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
-import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
-import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
-import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
-import { acceptLote, acceptOffer, declineLote, declineOffer, fetchMyOffers, hhmm, km, TurboApiError, TurboOffer } from "./turboApi";
-import { AcceptOutcome, acceptWithConfirm, isDefinitive, NO_RETIRAR_ANTES, plazoParaResponder, programadoLabel, secondsLeft, withLocalExpiry, WithLocalExpiry } from "./turboOffer";
+import { acceptLote, acceptOffer, declineLote, declineOffer, fetchMyOffers, getAvailability, hhmm, km, TurboApiError, TurboOffer } from "../turbo/turboApi";
+import { AcceptOutcome, acceptWithConfirm, isDefinitive, plazoParaResponder, secondsLeft, withLocalExpiry, WithLocalExpiry } from "../turbo/turboOffer";
 import { acceptRouteOffer, declineRouteOffer, fetchRouteOffers, RouteOffer, todayIso } from "../routes/routesApi";
-import { buildInbox, pendingOffers, routeOfferTitle } from "../offers/offerInbox";
-import { publishOfferCount } from "../offers/offerStore";
+import { buildInbox, pendingOffers, routeOfferTitle, visibleTurboOffers } from "./offerInbox";
+import { publishOfferCount, setOfferTurboEnabled } from "./offerStore";
 import { invalidateDriverWork } from "../work/workSource";
 import { errorMessage } from "../errorMessage";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 
-type Props = NativeStackScreenProps<DriverStackParamList, "TurboOffersScreen">;
+// navigation: la del stack del chofer (la de la pantalla que la contiene).
+// bottomSpace: lo que tapa la barra de abajo.
+type Props = { navigation: any; bottomSpace: number };
 type Offer = WithLocalExpiry<TurboOffer>;
 type OfferedRoute = WithLocalExpiry<RouteOffer>;
 // El «Acepto» en curso: «confirming» mientras se espera (y se reintenta);
 // «unknown» si ningún intento tuvo respuesta.
 type PendingAccept = { offer: Offer; phase: "confirming" | "unknown" };
 
+// Etiqueta compacta para la promesa comercial. No cambia el estado del envío.
+function turboPromiseLabel(o: TurboOffer, today: string): string | null {
+  const date = o.scheduled_date?.slice(0, 10);
+  const start = o.window_start_at ? hhmm(o.window_start_at) : null;
+  const end = o.deadline_at ? hhmm(o.deadline_at) : null;
+  if (!date && !end) return null;
+
+  let day = "hoy";
+  if (date) {
+    const [year, month, dayOfMonth] = date.split("-").map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, dayOfMonth, 12));
+    if (!Number.isNaN(parsed.getTime())) {
+      const weekday = new Intl.DateTimeFormat("es-AR", { weekday: "long", timeZone: "UTC" }).format(parsed);
+      day = `${weekday} ${dayOfMonth}/${month}`;
+    } else {
+      day = date;
+    }
+  }
+  const hour = (v: string) => v.replace(/^0(\d):/, "$1:").replace(/:00$/, "");
+  const window = start && end ? ` de ${hour(start)} a ${hour(end)} hs` : end ? ` antes de las ${hour(end)} hs` : "";
+  return `Promesa de entrega: ${day}${window}`;
+}
+
 const REFRESH_MS = 10_000;
 
-export default function TurboOffersScreen({ navigation }: Props) {
+export default function OfferInboxPanel({ navigation, bottomSpace }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -57,6 +83,9 @@ export default function TurboOffersScreen({ navigation }: Props) {
   const [busy, setBusy] = useState<number | null>(null);
   const [pending, setPendingState] = useState<PendingAccept | null>(null);
   const [now, setNow] = useState(Date.now());
+  // null: no se sabe (sin dato no se esconde nada).
+  const [turboEnabled, setTurboEnabled] = useState<boolean | null>(null);
+  const enabledRef = useRef<boolean | null>(null);
   const mounted = useRef(true);
   const focused = useRef(false);
   // Copia para los callbacks (el sondeo, el resultado de un intento).
@@ -123,7 +152,7 @@ export default function TurboOffersScreen({ navigation }: Props) {
         fetchMyOffers(),
         fetchRouteOffers().then((r) => ({ ok: true as const, list: r }), (e: unknown) => ({ ok: false as const, error: e })),
       ]);
-      const list = withLocalExpiry(turboList, startedAt);
+      const list = withLocalExpiry(visibleTurboOffers(turboList, enabledRef.current), startedAt);
       const offered = routeList.ok ? withLocalExpiry(routeList.list, startedAt) : null;
       if (mounted.current) {
         setOffers(list);
@@ -154,6 +183,17 @@ export default function TurboOffersScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       focused.current = true;
+      // La habilitación se consulta al entrar; el sondeo no la repite.
+      getAvailability()
+        .then((a) => {
+          const enabled = typeof a.turbo_enabled === "boolean" ? a.turbo_enabled : null;
+          enabledRef.current = enabled;
+          setOfferTurboEnabled(enabled);
+          if (!mounted.current) return;
+          setTurboEnabled(enabled);
+          if (enabled === false) setOffers((prev) => visibleTurboOffers(prev, false));
+        })
+        .catch(() => {});
       load(loadedOnce.current);
       loadedOnce.current = true;
       setNow(Date.now());
@@ -241,32 +281,16 @@ export default function TurboOffersScreen({ navigation }: Props) {
   // (si el servidor la asignó, deja de venir como oferta).
   const shown = pending && !offers.some((o) => o.route_id === pending.offer.route_id) ? [pending.offer, ...offers] : offers;
 
-  const handleTabPress = (tab: DriverTabKey) => {
-    switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
-      default: break;
-    }
-  };
-
   return (
-    <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
-      <ThemedStatusBar />
-      <SafeAreaView style={styles.safeArea}>
         <View style={styles.page}>
-          <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrow}>Ofertas</Text>
-              <Text style={styles.title}>Ofertas para vos</Text>
-              <Text style={styles.meta}>Turbos y recorridos ofrecidos. Si no contestás a tiempo, pasan a otro chofer.</Text>
-            </View>
-          </View>
-          <Pressable onPress={() => navigation.navigate("TurboTomorrowScreen")} style={[styles.btn, styles.btnNo, styles.tomorrow]} accessibilityRole="button">
-            <Text style={styles.btnGhostText}>Turbos de mañana</Text>
-          </Pressable>
+          <Text style={styles.meta}>
+            {turboEnabled === false ? "Recorridos ofrecidos" : "Turbos y recorridos ofrecidos"}. Si no contestás a tiempo, pasan a otro chofer.
+          </Text>
+          {turboEnabled === false ? null : (
+            <Pressable onPress={() => navigation.navigate("TurboTomorrowScreen")} style={[styles.btn, styles.btnNo, styles.tomorrow]} accessibilityRole="button">
+              <Text style={styles.btnGhostText}>Turbos de mañana</Text>
+            </Pressable>
+          )}
 
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
           {notice ? <View style={styles.noticeBox}><Text style={styles.noticeText}>{notice}</Text></View> : null}
@@ -345,33 +369,22 @@ export default function TurboOffersScreen({ navigation }: Props) {
               const urgent = left <= 15;
               const mine = pending?.offer.route_id === item.route_id ? pending : null;
               const disabled = busy !== null || pending !== null || left === 0;
-              // Programado (ML lo prometió para otro día): el día y la franja, y
-              // que no se retire antes.
-              const programado = programadoLabel(item, todayIso(), hhmm);
+              const promise = turboPromiseLabel(item, todayIso());
               return (
-                <View style={[theme.card, styles.card, urgent && styles.cardUrgent]}>
+                <View style={[theme.card, styles.card, styles.turboCard, urgent && styles.cardUrgent]}>
                   <View style={styles.cardTop}>
-                    <Text style={styles.cardType}>Turbo #{item.route_id}</Text>
+                    <View style={styles.turboHeading}>
+                      <Ionicons name="flash" size={19} color={theme.status.pending.text} />
+                      <Text style={styles.cardType}>Turbo</Text>
+                    </View>
                     <View style={[styles.badge, urgent && styles.badgeUrgent]}>
                       <Ionicons name="time-outline" size={14} color={urgent ? theme.status.rejected.icon : theme.text.primary} />
                       <Text style={[styles.badgeText, urgent && styles.badgeTextUrgent]}>{plazoParaResponder(left)}</Text>
                     </View>
                   </View>
-                  {programado ? (
-                    <>
-                      <Text style={styles.programado}>{programado}</Text>
-                      <View style={styles.warnBox}>
-                        <Ionicons name="alert-circle-outline" size={18} color={theme.status.pending.text} />
-                        <Text style={styles.warnText}>{NO_RETIRAR_ANTES}</Text>
-                      </View>
-                    </>
-                  ) : null}
-                  <Text style={styles.line}><Text style={styles.label}>Retiro · </Text>{item.store_name ?? "tienda"}{item.store_address ? ` · ${item.store_address}` : ""}</Text>
-                  <Text style={styles.line}><Text style={styles.label}>Entrega · </Text>{item.receiver_name ?? "comprador"}{item.delivery_address ? ` · ${item.delivery_address}` : ""}{item.delivery_postal_code ? ` · CP ${item.delivery_postal_code}` : ""}</Text>
-                  <Text style={styles.cardMeta}>
-                    {km(item.distance_km) ? `Tienda a ${km(item.distance_km)} de vos` : ""}
-                    {item.deadline_at && !programado ? ` · entregar antes de las ${hhmm(item.deadline_at)}` : ""}
-                  </Text>
+                  {promise ? <Text style={styles.turboPromise} numberOfLines={2}>{promise}</Text> : null}
+                  <Text style={styles.turboLine} numberOfLines={1}><Text style={styles.label}>Retiro · </Text>{item.store_name ?? "tienda"}{item.store_address ? ` · ${item.store_address}` : ""}</Text>
+                  <Text style={styles.turboLine} numberOfLines={1}><Text style={styles.label}>Entrega · </Text>{item.receiver_name ?? "comprador"}{item.delivery_address ? ` · ${item.delivery_address}` : ""}{item.delivery_postal_code ? ` · CP ${item.delivery_postal_code}` : ""}</Text>
                   {mine?.phase === "confirming" ? (
                     <View style={styles.confirming}>
                       <ActivityIndicator color={theme.text.accent} />
@@ -402,31 +415,23 @@ export default function TurboOffersScreen({ navigation }: Props) {
                 </View>
               );
             }}
-            contentContainerStyle={{ paddingBottom: 24 }}
+            contentContainerStyle={{ paddingBottom: bottomSpace + 24 }}
           />
         </View>
-        {/* Los Turbo son recorridos de reparto: se llega desde Envíos. */}
-        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
-      </SafeAreaView>
-    </ImageBackground>
   );
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  background: { flex: 1, backgroundColor: t.colors.background },
-  backgroundImage: { opacity: t.backdrop.imageOpacity },
-  safeArea: { flex: 1 },
-  page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 112 },
-  header: { flexDirection: "row", gap: 4, alignItems: "flex-start", marginBottom: t.spacing.lg, paddingTop: t.spacing.lg },
-  // Volver: 44 px de área táctil, como en Recorridos.
-  back: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -11, marginTop: -8 },
-  eyebrow: { ...t.typography.kicker },
-  title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
-  meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },
+  page: { flex: 1, paddingHorizontal: t.layout.screenPadding },
+  meta: { color: t.text.secondary, fontSize: 13, marginBottom: t.spacing.sm },
   // Superficie del tema; el contorno queda en los tres estilos (también en
   // Minimal): es una oferta que pide respuesta, y en rojo cuando está por vencer.
   card: { borderWidth: 1, borderColor: t.colors.primary, padding: t.spacing.md, marginBottom: t.spacing.sm, gap: 6 },
   cardUrgent: { borderColor: t.status.rejected.text },
+  turboCard: { paddingVertical: 11, paddingHorizontal: 12, gap: 4 },
+  turboHeading: { flexDirection: "row", alignItems: "center", gap: 5 },
+  turboPromise: { color: t.status.pending.text, fontSize: 13, fontWeight: "700", lineHeight: 18 },
+  turboLine: { color: t.text.primary, fontSize: 13, lineHeight: 19 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cardType: { color: t.text.primary, fontSize: 16, fontWeight: "700" },
   line: { color: t.text.primary, fontSize: 14 },
@@ -447,7 +452,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   btnText: { color: t.text.onPrimary, fontWeight: "700", fontSize: 15 },
   btnGhostText: { color: t.text.primary, fontWeight: "600", fontSize: 15 },
-  tomorrow: { flex: 0, marginBottom: t.spacing.md },
+  tomorrow: { flex: 0, minHeight: 40, marginBottom: t.spacing.md },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
   emptyText: { color: t.text.secondary, textAlign: "center" },
   errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },

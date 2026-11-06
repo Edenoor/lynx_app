@@ -1,6 +1,6 @@
 // src/Presentation/views/driver/routes/RoutesScreen.tsx
 // Recorridos de reparto y Turbo del chofer para una fecha (hoy por defecto).
-// Las ofertas se contestan en su bandeja (TurboOffersScreen): acá solo el
+// Las ofertas se contestan en Alertas › Ofertas: acá solo el
 // acceso con el contador. Las colectas tienen su pantalla (CollectionsScreen).
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -18,7 +18,7 @@ import { fetchMyGroups, TurboGroup, TurboLoad } from "../turbo/turboApi";
 import { loadText, loadTotal, routesWithGroups } from "../turbo/turboGroup";
 import { capitalize } from "./collectionLabels";
 import WorkItemCard from "../../../components/driver/WorkItemCard";
-import { refreshOfferCount, useOfferCount } from "../offers/offerStore";
+import { openOfferInbox, refreshOfferCount, useOfferCount } from "../offers/offerStore";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -90,12 +90,12 @@ export default function RoutesScreen({ navigation }: Props) {
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
           {ofertas ? (
-            <Pressable style={[theme.card, styles.confirmBox, styles.turboBox]} onPress={() => navigation.navigate("TurboOffersScreen")}>
+            <Pressable style={[theme.card, styles.confirmBox, styles.turboBox]} onPress={() => openOfferInbox(navigation)}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Ionicons name="flash" size={22} color={theme.text.accent} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.confirmTitle}>Tenés {ofertas === 1 ? "una oferta" : `${ofertas} ofertas`} sin contestar</Text>
-                  <Text style={styles.cardMeta}>Turbos y recorridos ofrecidos: contestá antes de que venzan.</Text>
+                  <Text style={styles.cardMeta}>Contestalas en Alertas antes de que venzan.</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
               </View>

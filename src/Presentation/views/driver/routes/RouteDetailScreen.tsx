@@ -2,12 +2,10 @@
 // Un recorrido del chofer: confirmar la carga (reparto), salir, llegar a
 // cada parada, registrar qué pasó con cada envío, cerrar la parada y
 // completar el recorrido. Sin mapa en esta etapa.
-
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, ImageBackground, Linking, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, ImageBackground, Linking, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
@@ -27,17 +25,21 @@ import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from ".
 import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 import DeclaredCountForm from "./DeclaredCountForm";
+import RouteMapModal from "../../../components/driver/RouteMapModal";
 import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
 import { turboPickupError, turboPickupItems } from "./turboPickup";
+import {
+  closesOnFinish, deliveryDelivered, deliveryResolved, deliveryStatusLabel, routeCanFinish, splitDeliveries, stopActions, stopAddress, stopMapsAddress, stopPackagesLabel, stopSummary,
+} from "./stopView";
+import ProviderBadge from "../../../components/driver/ProviderBadge";
+import { canOrganize } from "./routePlan";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
-
+import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
-
 // Las horas de llegada, salida, «tienda lista» y entrega (arrived_at,
 // started_at, store_ready_at, outcome_at) se guardan sin zona horaria y en una
 // prueba se vieron corridas: no se muestran hasta que el servidor lo corrija.
 // Los registros no se tocan. El corte (cutoff_snapshot) es una hora fija y sí.
-
 export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const { routeId, name, fromGroup } = nav.params;
   const theme = useAppTheme();
@@ -53,12 +55,22 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const [turboWindow, setTurboWindow] = useState<{ deadline: string | null; start: string | null } | null>(null);
   const deadline = turboWindow?.deadline ?? null;
   const windowStart = turboWindow?.start ?? null;
-
+  // El recorrido completo en el mapa (último estado: las pruebas toman los useState por orden).
+  const [mapOpen, setMapOpen] = useState(false);
   const load = useCallback(async () => {
     try { const r = await fetchRoute(routeId); setRoute(r); setError(null); }
     catch (e: any) { setError(errorMessage(e, "No se pudo cargar el recorrido")); }
   }, [routeId]);
   useEffect(() => { load(); }, [load]);
+  // Lo que Mercado Libre cierra mientras el chofer está en Envíos Flex (u otra
+  // pantalla) se ve al volver: se relee al volver a esta pantalla y al volver
+  // la app a primer plano. Sin sondeo. El primer foco es la carga de arriba.
+  const focused = useRef(false);
+  useEffect(() => navigation.addListener("focus", () => { if (focused.current) load(); focused.current = true; }), [navigation, load]);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => { if (state === "active") load(); });
+    return () => sub.remove();
+  }, [load]);
   // Un Turbo que corre en un grupo se maneja desde el grupo (un solo retiro por
   // tienda): una oferta aceptada o un aviso que abre este recorrido va al grupo.
   useEffect(() => {
@@ -70,14 +82,12 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
       .then((d) => setTurboWindow({ deadline: d?.deadline_at ?? null, start: d?.window_start_at ?? null }))
       .catch(() => setTurboWindow(null));
   }, [route?.type, routeId]);
-
   // Ejecuta una acción, recarga y muestra el error del servidor si lo hay
   // (arriba de todo, o donde diga `onError`). Si la acción falla no se recarga.
   const act = async (fn: () => Promise<unknown>, onError?: (message: string) => void) => {
     setBusy(true); setError(null);
     try { await fn(); await load(); } catch (e: any) { (onError ?? setError)(errorMessage(e, "No se pudo completar la acción")); } finally { setBusy(false); }
   };
-
   // Con el recorrido cargado o en curso el GPS sigue fuera del horario: si
   // estaba en pausa (antes de las 07:00, después de las 22:00) se pregunta en
   // el acto, sin esperar al sondeo ni a volver a primer plano.
@@ -94,7 +104,6 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
         );
       }
     });
-
   const onStart = () =>
     act(async () => {
       const r = await startRoute(routeId);
@@ -102,22 +111,35 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
       // Flex que no figura «En camino» en Mercado Libre: se avisa, no se frena.
       if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
     });
+  const handleTabPress = (tab: DriverTabKey) => {
+    switch (tab) {
+      case "home": navigation.navigate("DriverScreen"); break;
+      case "deliveries": navigation.navigate("EnviosScreen"); break;
+      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
+      case "activity": navigation.navigate("NotificationsScreen"); break;
+      default: break;
+    }
+  };
+
   const onComplete = () =>
     Alert.alert("Completar recorrido", "¿Terminaste todas las paradas?", [
       { text: "No", style: "cancel" },
       { text: "Sí, completar", onPress: () => act(() => completeRoute(routeId)) },
     ]);
-
   if (!route) {
     return (
-      <View style={[styles.background, styles.center]}>
+      <View style={styles.background}>
         <ThemedStatusBar />
-        {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={theme.text.accent} />}
-        <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 16 }}><Text style={styles.link}>Volver</Text></Pressable>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={[styles.center, { flex: 1 }]}>
+            {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={theme.text.accent} />}
+            <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 16 }}><Text style={styles.link}>Volver</Text></Pressable>
+          </View>
+          <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+        </SafeAreaView>
       </View>
     );
   }
-
   const isDelivery = route.type === "DELIVERY";
   const isPickup = route.type === "PICKUP";
   const canConfirm = isDelivery && route.status === "ASSIGNED";
@@ -132,11 +154,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   // Un Turbo de otro día (programado): se comienza ese día y no se retira antes.
   const programado = route.type === "TURBO" ? programadoLabel({ scheduled_date: route.scheduled_date, window_start_at: windowStart, deadline_at: deadline }, today, hhmm) : null;
   const inProgress = route.status === "IN_PROGRESS";
-  const allClosed = route.stops.every((s) => s.status === "DONE" || s.status === "SKIPPED");
+  // En un reparto, las paradas con todo resuelto las cierra el servidor al finalizar.
+  const allClosed = routeCanFinish(route);
   const declared = isPickup ? declarationSummary(route.stops) : null;
   // La parada que devuelve la declaración se muestra ya, aunque falle la recarga.
   const replaceStop = (stop: Stop) => setRoute((r) => (r ? { ...r, stops: r.stops.map((s) => (s.id === stop.id ? stop : s)) } : r));
-
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
       <ThemedStatusBar />
@@ -144,7 +166,8 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
         {/* KeyboardScreen: la cantidad de bultos, la observación de la parada y
             los importes del cierre no quedan tapados por el teclado (la app es
             edge-to-edge: el adjustResize del manifest ya no corre nada). */}
-        <KeyboardScreen contentContainerStyle={styles.page}>
+        <View style={styles.scrollArea}>
+          <KeyboardScreen contentContainerStyle={styles.page}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
             {isPickup ? (
@@ -161,21 +184,30 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
                 <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
                 <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
                 <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos</Text>
+                {route.stops.length ? (
+                  <Pressable onPress={() => setMapOpen(true)} style={styles.mapLink} accessibilityRole="button" hitSlop={6}>
+                    <Ionicons name="map-outline" size={15} color={theme.text.accent} />
+                    <Text style={styles.link}>Ver recorrido en el mapa</Text>
+                  </Pressable>
+                ) : null}
+                {route.stops.length && canOrganize(route) ? (
+                  <Pressable onPress={() => navigation.navigate("RouteOrganizeScreen", { routeId: route.id })} style={styles.mapLink} accessibilityRole="button" hitSlop={6}>
+                    <Ionicons name="swap-vertical-outline" size={15} color={theme.text.accent} />
+                    <Text style={styles.link}>Organizar recorrido</Text>
+                  </Pressable>
+                ) : null}
                 {programado ? <Text style={styles.deadline}>{programado}</Text>
                   : route.type === "TURBO" && deadline ? <Text style={styles.deadline}>Entregar antes de las {hhmm(deadline)}</Text> : null}
               </View>
             )}
           </View>
-
           {programado ? (
             <View style={styles.warnBox}>
               <Ionicons name="alert-circle-outline" size={18} color={theme.status.pending.text} />
               <Text style={styles.warnText}>{NO_RETIRAR_ANTES}</Text>
             </View>
           ) : null}
-
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
-
           {canConfirm ? (
             <ThemedCard style={styles.panel}>
               <Text style={styles.panelTitle}>Control de carga</Text>
@@ -195,7 +227,6 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               ) : null}
             </ThemedCard>
           ) : null}
-
           {answer ? (
             <ThemedCard style={[styles.panel, answer === "DECLINED" && styles.panelDanger]}>
               <Text style={styles.panelTitle}>Confirmación · {PICKUP_ANSWER_LABEL[answer]}</Text>
@@ -221,7 +252,6 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               ) : null}
             </ThemedCard>
           ) : null}
-
           {answer && answer !== "ACCEPTED" ? (
             <View style={[styles.btn, styles.btnBig, styles.btnDisabled]}>
               <Ionicons name="lock-closed" size={18} color={theme.text.onPrimary} />
@@ -238,7 +268,6 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               <Text style={styles.btnText}>{isPickup ? "Comenzar colecta" : "Salir a la calle"}</Text>
             </Pressable>
           ) : null}
-
           {declared && declared.stops ? (
             <ThemedCard style={styles.panel}>
               <Text style={styles.panelTitle}>Paquetes retirados</Text>
@@ -249,24 +278,24 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               </View>
             </ThemedCard>
           ) : null}
-
           {route.stops.map((s) => (
             <StopCard key={s.id} routeId={route.id} stop={s} stops={route.stops} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
               open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} onStopSaved={replaceStop} />
           ))}
-
           {inProgress ? (
             <Pressable onPress={onComplete} disabled={busy || !allClosed} style={[styles.btn, styles.btnBig, (busy || !allClosed) && styles.btnDisabled]}>
               <Ionicons name="checkmark-done" size={18} color={theme.text.onPrimary} />
               <Text style={styles.btnText}>{allClosed ? "Completar recorrido" : "Cerrá todas las paradas para completar"}</Text>
             </Pressable>
           ) : null}
-        </KeyboardScreen>
+          </KeyboardScreen>
+        </View>
+        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
       </SafeAreaView>
+      <RouteMapModal visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}`} stops={route.stops} onClose={() => setMapOpen(false)} />
     </ImageBackground>
   );
 }
-
 function Stat({ value, label, warn }: { value: number; label: string; warn?: boolean }) {
   const styles = useThemedStyles(makeStyles);
   return (
@@ -276,7 +305,16 @@ function Stat({ value, label, warn }: { value: number; label: string; warn?: boo
     </View>
   );
 }
-
+// Destinatario y tracking, con el logo del canal del envío.
+function DeliveryHead({ d }: { d: Stop["deliveries"][number] }) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.deliveryHead}>
+      <ProviderBadge provider={d.provider} />
+      <Text style={[styles.deliveryTitle, styles.shrink]}>{d.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(d.tracking ?? d.delivery_id)}</Text></Text>
+    </View>
+  );
+}
 function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, busy, open, onToggle, act, onStopSaved }: {
   routeId: number; stop: Stop; stops: Stop[]; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void;
   act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>; onStopSaved: (stop: Stop) => void;
@@ -294,16 +332,19 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
   // sus paradas de entrega), no los pendientes de la tienda: ver turboPickup.ts.
   const turboPickup = isPickup && routeType === "TURBO";
   const turboItems = turboPickup ? turboPickupItems(stops, stop) : null;
+  // Cómo llegar: coordenadas si las hay; si no, la dirección. Abrir Maps no cambia la parada.
   const directions = isPickup
     ? directionsUrl({ latitude: stop.latitude_snapshot, longitude: stop.longitude_snapshot, address: stop.store_address })
-    : null;
-
+    : directionsUrl({ latitude: stop.latitude, longitude: stop.longitude, address: stopMapsAddress(stop) });
+  const actions = stopActions(stop, inProgress);
+  const summary = isPickup ? null : stopSummary(stop);
+  const split = isPickup ? null : splitDeliveries(stop.deliveries);
+  const autoClose = inProgress && closesOnFinish(stop, routeType);
   useEffect(() => {
     if (open && collectsHere && !turboPickup && stop.status === "ARRIVED") {
       fetchPendingAtStore(routeId, stop.id).then(setPending).catch(() => setPending([]));
     }
   }, [open, collectsHere, turboPickup, stop.status, stop.id, routeId, stop.collected_count]);
-
   const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value, notes || undefined));
   // Un envío ajeno al Turbo lo rechaza el servidor (409 TURBO_NOT_IN_ROUTE): se explica.
   const collectTurbo = (deliveryId: number) =>
@@ -328,6 +369,10 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
   const declares = routeType === "PICKUP" && supportsDeclaration(stop);
   const declaring = useRef(false);
   const [declareError, setDeclareError] = useState<string | null>(null);
+  // «Más»: la observación y «Saltear», plegados para que la parada sea corta.
+  const [more, setMore] = useState(false);
+  // «Envíos cerrados», plegado (último estado: las pruebas toman los useState por orden).
+  const [showClosed, setShowClosed] = useState(false);
   const declare = (count: number) => {
     const send = () => {
       if (declaring.current) return;
@@ -342,18 +387,25 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
     ]);
   };
   // Los Flex se cierran desde Envíos Flex: no cuentan como «sin resultado».
-  const withoutOutcome = stop.deliveries.filter((d) => !d.outcome && d.tipo_envio !== "flex");
+  const withoutOutcome = stop.deliveries.filter((d) => !deliveryResolved(d) && d.tipo_envio !== "flex");
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
-
   return (
     <ThemedCard variant="row" style={[styles.stop, closed && styles.stopClosed]}>
       <Pressable onPress={onToggle} style={styles.stopHead}>
         <View style={styles.seq}><Text style={styles.seqText}>{stop.sequence}</Text></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.stopTitle}>{isPickup ? `Retiro · ${stop.store_name ?? stop.warehouse_name ?? `tienda ${stop.store_id}`}` : `Entrega · ${stop.receiver_name ?? stop.address ?? "destino"}`}</Text>
-          <Text style={styles.stopMeta}>
-            {isPickup ? (stop.store_address ?? "") : `${stop.address ?? ""}${stop.postal_code ? ` · CP ${stop.postal_code}` : ""}`}
-          </Text>
+          {isPickup ? (
+            <>
+              <Text style={styles.stopTitle}>{`Retiro · ${stop.store_name ?? stop.warehouse_name ?? `tienda ${stop.store_id}`}`}</Text>
+              <Text style={styles.stopMeta}>{stop.store_address ?? ""}</Text>
+            </>
+          ) : (
+            <>
+              {/* Entrega: la dirección primero; el destinatario y el CP, abajo. */}
+              <Text style={styles.stopAddress}>{stopAddress(stop)}</Text>
+              <Text style={styles.stopMeta}>{[stop.receiver_name, stop.postal_code ? `CP ${stop.postal_code}` : null].filter(Boolean).join(" · ")}</Text>
+            </>
+          )}
           {isPickup && stop.pickup_time_snapshot ? (
             <View style={styles.cutoffRow}>
               <Ionicons name="time-outline" size={14} color={theme.text.accent} />
@@ -367,53 +419,79 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
             </View>
           ) : null}
           <Text style={styles.stopMeta}>
-            {STOP_STATUS_LABEL[stop.status]}
-            {isPickup ? (stop.collected_count ? ` · ${stop.collected_count} colectados en Lynx` : "") : ` · ${stop.deliveries.length} envíos`}
+            {autoClose
+              ? <Text style={[styles.stopStatus, styles.deliveryDone]}>Resuelta</Text>
+              : <Text style={[styles.stopStatus, closed && styles.stopStatusClosed, actions.resolvedButOpen && styles.stopStatusWarn]}>{STOP_STATUS_LABEL[stop.status]}</Text>}
+            {isPickup ? (stop.collected_count ? ` · ${stop.collected_count} colectados en Lynx` : "") : summary ? ` · ${stopPackagesLabel(summary)}` : ""}
             {declares ? ` · ${declarationLabel(stop.declared_count)}` : ""}
           </Text>
         </View>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={theme.text.muted} />
       </Pressable>
-
       {open ? (
         <View style={styles.stopBody}>
-          {!isPickup && stop.deliveries.map((d) => (
+          {directions ? (
+            <Pressable onPress={() => Linking.openURL(directions).catch(() => Alert.alert("Cómo llegar", "No se pudo abrir Google Maps."))} style={[styles.btnSmall, styles.btnGhost, styles.rowBtn]} accessibilityRole="link">
+              <Ionicons name="navigate-outline" size={16} color={theme.text.primary} />
+              <Text style={styles.btnGhostText}>Cómo llegar</Text>
+            </Pressable>
+          ) : null}
+          {actions.resolvedButOpen ? (
+            <View style={styles.resolvedBox}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={theme.status.confirmed.text} />
+              <Text style={styles.resolvedText}>
+                {autoClose
+                  ? "Todos los envíos de esta parada ya figuran resueltos. No hace falta cerrarla: se cierra sola al finalizar el recorrido."
+                  : "Todos los envíos de esta parada ya figuran resueltos. Cerrá la parada para seguir."}
+              </Text>
+            </View>
+          ) : null}
+          {split?.pending.map((d) => (
             <View key={d.delivery_id} style={styles.deliveryRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.deliveryTitle}>{d.nombre_destinatario ?? "—"} <Text style={styles.mono}>{String(d.tracking ?? d.delivery_id)}</Text></Text>
-                <Text style={styles.stopMeta}>{OPS_LABEL[d.ops_status] ?? d.ops_status}{d.outcome ? ` · ${d.outcome === "DELIVERED" ? "entregado" : "no entregado"}` : ""}</Text>
+                <DeliveryHead d={d} />
+                <Text style={styles.stopMeta}>{deliveryStatusLabel(d)}</Text>
               </View>
-              {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !d.outcome ? (
+              {/* Un envío ya resuelto (entregado por ML, con resultado) no admite otro. */}
+              {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !deliveryResolved(d) ? (
                 <View style={styles.row}>
                   {routeType === "TURBO" ? (
                     <Text style={styles.stopMeta}>Cerrá la entrega en Envíos Flex — Lynx se entera solo</Text>
                   ) : d.tipo_envio === "flex" ? (
                     <Text style={styles.stopMeta}>Entregado: se registra en Envíos Flex</Text>
                   ) : (
-                    <Pressable onPress={() => openClose(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregado</Text></Pressable>
+                    <Pressable onPress={() => openClose(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregar</Text></Pressable>
                   )}
-                  <Pressable onPress={() => openClose(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No entregado</Text></Pressable>
+                  <Pressable onPress={() => openClose(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No pude entregar</Text></Pressable>
                 </View>
               ) : null}
-              {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !d.outcome && closing?.deliveryId === d.delivery_id ? (
+              {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !deliveryResolved(d) && closing?.deliveryId === d.delivery_id ? (
                 <OutcomeForm key={closing.outcome} outcome={closing.outcome} cobranza={cobranzaOf(d.importe_cobranza)} busy={busy} error={closeError}
                   onConfirm={confirmClose} onCancel={() => setClosing(null)} />
               ) : null}
             </View>
           ))}
-
-          {directions ? (
-            <Pressable onPress={() => Linking.openURL(directions).catch(() => Alert.alert("Cómo llegar", "No se pudo abrir Google Maps."))} style={[styles.btnSmall, styles.btnGhost, styles.rowBtn]}>
-              <Ionicons name="navigate-outline" size={16} color={theme.text.primary} />
-              <Text style={styles.btnGhostText}>Cómo llegar</Text>
-            </Pressable>
+          {/* Lo resuelto (entregado por el chofer o confirmado por Mercado Libre, no entregado, cancelado) va aparte, plegado. */}
+          {split?.closed.length ? (
+            <>
+              <Pressable onPress={() => setShowClosed(!showClosed)} style={styles.closedHead} accessibilityRole="button" accessibilityState={{ expanded: showClosed }}>
+                <Text style={styles.closedTitle}>Envíos cerrados ({split.closed.length})</Text>
+                <Ionicons name={showClosed ? "chevron-up" : "chevron-down"} size={16} color={theme.text.muted} />
+              </Pressable>
+              {showClosed ? split.closed.map((d) => (
+                <View key={d.delivery_id} style={styles.deliveryRow}>
+                  <View style={{ flex: 1 }}>
+                    <DeliveryHead d={d} />
+                    <Text style={[styles.stopMeta, deliveryDelivered(d) ? styles.deliveryDone : styles.stopStatusClosed]}>{deliveryStatusLabel(d)}</Text>
+                  </View>
+                </View>
+              )) : null}
+            </>
           ) : null}
-
           {declares ? (
             <DeclaredCountForm key={String(stop.declared_count)} count={stop.declared_count ?? null} routeStatus={routeStatus}
               busy={busy} error={declareError} onSubmit={declare} />
           ) : null}
-
           {isPickup && !collectsHere && stop.status === "ARRIVED" ? (
             <>
               <Pressable onPress={showCollectInLightData} style={[styles.btnSmall, styles.rowBtn]}>
@@ -428,7 +506,6 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
               ) : <Text style={styles.stopMeta}>La tienda tenía todo listo.</Text>}
             </>
           ) : null}
-
           {collectsHere && stop.status === "ARRIVED" ? (
             <>
               {turboItems ? (
@@ -470,15 +547,13 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
               ) : <Text style={styles.stopMeta}>La tienda tenía todo listo.</Text>}
             </>
           ) : null}
-
           {inProgress && !closed ? (
             <>
-              <TextInput value={notes} onChangeText={setNotes} placeholder="Observación (opcional)" placeholderTextColor={theme.text.muted} style={styles.input} />
               <View style={styles.row}>
-                {stop.status === "PENDING" ? (
+                {actions.arrive ? (
                   <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "arrive"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}><Text style={styles.btnText}>Llegué</Text></Pressable>
                 ) : null}
-                {stop.status === "ARRIVED" || (!isPickup && stop.status === "PENDING") ? (
+                {actions.close ? (
                   <Pressable
                     onPress={() => {
                       if (!isPickup && withoutOutcome.length) { Alert.alert("Faltan resultados", `Hay ${withoutOutcome.length} envíos sin marcar como entregados o no entregados.`); return; }
@@ -488,12 +563,23 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
                     <Text style={styles.btnText}>Cerrar parada</Text>
                   </Pressable>
                 ) : null}
-                <Pressable
-                  onPress={() => Alert.alert("Saltear parada", "¿Seguro? Queda registrado que no se visitó.", [{ text: "No", style: "cancel" }, { text: "Saltear", style: "destructive", onPress: () => act(() => stopAction(routeId, stop.id, "skip", notes || "salteada")) }])}
-                  disabled={busy} style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}>
-                  <Text style={styles.btnGhostText}>Saltear</Text>
+                <Pressable onPress={() => setMore((v) => !v)} style={[styles.btn, styles.btnGhost]} accessibilityRole="button" accessibilityState={{ expanded: more }}>
+                  <Text style={styles.btnGhostText}>Más</Text>
+                  <Ionicons name={more ? "chevron-up" : "chevron-down"} size={16} color={theme.text.primary} />
                 </Pressable>
               </View>
+              {more ? (
+                <>
+                  <TextInput value={notes} onChangeText={setNotes} placeholder="Observación (opcional)" placeholderTextColor={theme.text.muted} style={styles.input} />
+                  {actions.skip ? (
+                    <Pressable
+                      onPress={() => Alert.alert("Saltear parada", "¿Seguro? Queda registrado que no se visitó.", [{ text: "No", style: "cancel" }, { text: "Saltear", style: "destructive", onPress: () => act(() => stopAction(routeId, stop.id, "skip", notes || "salteada")) }])}
+                      disabled={busy} style={[styles.btn, styles.btnGhost, styles.rowBtn, busy && styles.btnDisabled]}>
+                      <Text style={styles.btnGhostText}>Saltear parada</Text>
+                    </Pressable>
+                  ) : null}
+                </>
+              ) : null}
             </>
           ) : null}
           {!inProgress && !closed ? <Text style={styles.stopMeta}>Las paradas se trabajan cuando el recorrido está en curso.</Text> : null}
@@ -502,13 +588,13 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
     </ThemedCard>
   );
 }
-
 const makeStyles = (t: Theme) => StyleSheet.create({
   background: { flex: 1, backgroundColor: t.colors.background },
   backgroundImage: { opacity: t.backdrop.imageOpacity },
   safeArea: { flex: 1 },
+  scrollArea: { flex: 1, minHeight: 0 },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
-  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 40, gap: t.spacing.sm },
+  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 120, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
   back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },
@@ -518,6 +604,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   warnBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", borderWidth: 1, borderColor: t.status.pending.border, backgroundColor: t.status.pending.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
   warnText: { flex: 1, color: t.text.primary, fontSize: 14 },
   link: { color: t.text.accent },
+  mapLink: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, minHeight: 28 },
   // Fondo, radio y sombra: ThemedCard.
   panel: { borderColor: t.borders.primary, padding: t.spacing.md, gap: 10 },
   panelTitle: { color: t.text.primary, fontWeight: "700", fontSize: 15 },
@@ -548,10 +635,21 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   seq: { width: 30, height: 30, borderRadius: t.radius.full, backgroundColor: t.surfaces.muted, alignItems: "center", justifyContent: "center" },
   seqText: { color: t.text.primary, fontWeight: "700" },
   stopTitle: { color: t.text.primary, fontWeight: "700", fontSize: 15 },
+  stopAddress: { color: t.text.primary, fontWeight: "800", fontSize: 16, lineHeight: 21 },
+  stopStatus: { color: t.status.inTransit.text, fontWeight: "700" },
+  stopStatusClosed: { color: t.text.secondary },
+  stopStatusWarn: { color: t.status.pending.text },
+  deliveryDone: { color: t.status.confirmed.text, fontWeight: "700" },
+  resolvedBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", borderWidth: 1, borderColor: t.status.confirmed.border, backgroundColor: t.status.confirmed.background, borderRadius: t.radius.md, padding: 10 },
+  resolvedText: { flex: 1, color: t.text.primary, fontSize: 13, lineHeight: 18 },
   stopMeta: { color: t.text.secondary, fontSize: 12, marginTop: 2 },
   stopBody: { borderTopWidth: t.separator.width, borderTopColor: t.separator.color, padding: t.spacing.md, gap: 10 },
   deliveryRow: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 6, borderBottomWidth: t.separator.width, borderBottomColor: t.separator.color, flexWrap: "wrap" },
   deliveryTitle: { color: t.text.primary, fontSize: 14 },
+  deliveryHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  shrink: { flexShrink: 1 },
+  closedHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, minHeight: 44 },
+  closedTitle: { color: t.text.secondary, fontSize: 13, fontWeight: "700" },
   mono: { color: t.text.muted, fontFamily: "monospace", fontSize: 12 },
   errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, borderRadius: t.radius.md, padding: 12 },
   errorText: { color: t.text.primary },

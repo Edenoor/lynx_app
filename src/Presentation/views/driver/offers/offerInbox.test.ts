@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/offers/offerInbox.test.ts
 //   node /tmp/offer-inbox/offers/offerInbox.test.js
 
-import { buildInbox, offerNoticeText, pendingOffers, routeOfferTitle } from "./offerInbox";
+import { buildInbox, offerNoticeText, pendingOffers, routeOfferTitle, visibleTurboOffers } from "./offerInbox";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -34,6 +34,9 @@ eq("título de recorrido ofrecido", [routeOfferTitle(r(77, 0) as any), routeOffe
 eq("aviso Turbo con tienda", offerNoticeText("TURBO_OFFER", { storeName: " Tienda Uno " }), { title: "Turbo disponible", body: "Tienda Uno. El primero que acepta se lo queda." });
 eq("aviso Turbo sin tienda", offerNoticeText("TURBO_OFFER", null).body, "El primero que acepta se lo queda.");
 eq("aviso de recorrido ofrecido", offerNoticeText("ROUTE_OFFER").title, "Te ofrecieron un recorrido");
+
+eq("sin habilitación Turbo no se muestran ofertas Turbo", visibleTurboOffers([{ route_id: 1 }], false), []);
+eq("habilitado o sin dato: se muestran", [visibleTurboOffers([{ route_id: 1 }], true).length, visibleTurboOffers([{ route_id: 1 }], null).length], [1, 1]);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

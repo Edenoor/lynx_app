@@ -88,6 +88,19 @@ export function loadText(l: TurboLoad | null | undefined): string | null {
 
 export const loadTotal = (l: TurboLoad | null | undefined) => (l ? l.morning + l.other : 0);
 
+// Inicio no muestra los contadores («3 de 10…»); solo avisa cuando se llegó a
+// un tope, porque entonces el servidor no le ofrece ni le deja aceptar más
+// Turbos de ese turno (el turno es el de la hora límite de entrega).
+export function capNotice(l: TurboLoad | null | undefined): string | null {
+  if (!l) return null;
+  const morning = l.cap_morning > 0 && l.morning >= l.cap_morning;
+  const other = l.cap_other > 0 && l.other >= l.cap_other;
+  if (morning && other) return "Llegaste al tope de Turbos de hoy.";
+  if (morning) return `Llegaste al tope de Turbos que se entregan antes de las ${l.morning_until}.`;
+  if (other) return `Llegaste al tope de Turbos que se entregan después de las ${l.morning_until}.`;
+  return null;
+}
+
 // Las ofertas como tarjetas: las de un lote (mismo group_id) van en una sola,
 // en el lugar de la primera; las demás, de a una.
 export type OfferCard<O> = { kind: "single"; offer: O } | { kind: "lote"; group_id: number; offers: O[] };

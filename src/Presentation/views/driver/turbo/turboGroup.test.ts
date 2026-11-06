@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/turbo/turboGroup.ts src/Presentation/views/driver/turbo/turboGroup.test.ts
 //   node /tmp/turbo-group/turboGroup.test.js
 
-import { canMove, deliveryTime, groupActions, groupTitle, loadText, moveTargets, offerCards, routesWithGroups, storeTitle, storeTurbos } from "./turboGroup";
+import { canMove, capNotice, deliveryTime, groupActions, groupTitle, loadText, moveTargets, offerCards, routesWithGroups, storeTitle, storeTurbos } from "./turboGroup";
 import type { GroupTurbo, TurboGroup } from "./turboApi";
 
 let failed = 0;
@@ -75,6 +75,14 @@ eq("mover: solo a otros grupos del mismo día sin terminar", mt.groups.map((g) =
 eq("mover: se puede separar si hay más de uno", mt.canSplit, true);
 eq("mover: el único del grupo no se separa", moveTargets(gB, [gA, gB]).canSplit, false);
 eq("mover: uno terminado no se mueve", canMove(turbo(1, { route_status: "COMPLETED" })), false);
+
+// Inicio: solo el aviso de tope alcanzado (no los contadores).
+const load = (morning: number, other: number) => ({ morning, cap_morning: 10, other, cap_other: 5, morning_until: "13:00" });
+eq("tope: sin datos ni tope alcanzado, nada", [capNotice(null), capNotice(load(9, 4))], [null, null]);
+eq("tope: el de la mañana", capNotice(load(10, 0)), "Llegaste al tope de Turbos que se entregan antes de las 13:00.");
+eq("tope: el de la tarde", capNotice(load(0, 5)), "Llegaste al tope de Turbos que se entregan después de las 13:00.");
+eq("tope: los dos", capNotice(load(10, 5)), "Llegaste al tope de Turbos de hoy.");
+eq("tope 0 (sin cupo configurado) no es «alcanzado»", capNotice({ ...load(0, 0), cap_morning: 0, cap_other: 0 }), null);
 
 if (failed) { console.log(`${failed} fallas`); process.exit(1); }
 console.log("todo ok");

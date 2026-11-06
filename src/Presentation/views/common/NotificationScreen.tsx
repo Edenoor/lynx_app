@@ -8,7 +8,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useNotifications, Noti } from "../../context/NotificationContext";
@@ -24,6 +24,12 @@ import {
   DriverBottomNavigation,
   DriverTabKey,
 } from "../../components/DriverBottomNavigation";
+import { BOTTOM_NAVIGATION_SPACE } from "../../components/BottomNavigationBar";
+import OfferInboxPanel from "../driver/offers/OfferInboxPanel";
+import { useOfferCount } from "../driver/offers/offerStore";
+
+// Alertas del chofer: dos pestañas, las notificaciones y la bandeja de ofertas.
+type AlertsTab = "notifications" | "offers";
 
 const kindLabel: Record<Noti["kind"], string> = {
   NEW_TRAD: "Nuevo envío",
@@ -251,6 +257,14 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
   const [selected, setSelected] = useState<Noti | null>(null);
   const [live, setLive] = useState<LiveRoute | null>(null);
   const driverStack = area === "driver";
+  // El vendedor no tiene ofertas: para él es solo la lista de notificaciones.
+  const route = useRoute<any>();
+  const [tab, setTab] = useState<AlertsTab>(route.params?.tab === "offers" && driverStack ? "offers" : "notifications");
+  // Un aviso o una push que pide la pestaña Ofertas con la pantalla ya abierta.
+  useEffect(() => {
+    if (driverStack && route.params?.tab) setTab(route.params.tab === "offers" ? "offers" : "notifications");
+  }, [driverStack, route.params]);
+  const offerCount = useOfferCount();
 
   const selectedRouteId = selected && LIVE_ROUTE_KINDS.includes(selected.kind) ? routeIdOf(selected.data) : null;
   useEffect(() => {
@@ -278,10 +292,15 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
     if (routeId) (navigation as any).navigate("RouteDetailScreen", { routeId, name: liveName || undefined });
     else (navigation as any).navigate(fallback);
   };
-  const openList = (screen: "CollectionsScreen" | "RoutesScreen" | "TurboOffersScreen") => {
+  const openList = (screen: "CollectionsScreen" | "RoutesScreen") => {
     if (selected) markRead(selected.id);
     setSelected(null);
     (navigation as any).navigate(screen);
+  };
+  const openOffers = () => {
+    if (selected) markRead(selected.id);
+    setSelected(null);
+    setTab("offers");
   };
 
   const data = useMemo(
@@ -354,7 +373,10 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
 
   const handleTabPress = useCallback(
     (tab: DriverTabKey) => {
-      if (tab === "activity") return;
+      if (tab === "activity") {
+        setTab("notifications");
+        return;
+      }
 
       if (tab === "home") {
         navigation.navigate("DriverScreen");
@@ -389,6 +411,35 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
         ) : null}
         <Text style={styles.kicker}>{driverStack ? "LYNX DRIVER" : "LYNX"}</Text>
         <Text style={styles.title}>Alertas</Text>
+        {driverStack ? (
+          <View style={styles.tabs} accessibilityRole="tablist">
+            {([
+              ["notifications", "Notificaciones", unreadCount],
+              ["offers", "Ofertas", offerCount ?? 0],
+            ] as const).map(([key, label, n]) => {
+              const active = tab === key;
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => setTab(key)}
+                  style={[styles.tab, active && styles.tabActive]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={n ? `${label}: ${n}` : label}
+                >
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+                  {n ? (
+                    <View style={styles.tabBadge}>
+                      <Text style={styles.tabBadgeText}>{n > 99 ? "99+" : n}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+        {tab === "notifications" ? (
+        <>
         <Text style={styles.subtitle}>
           {unreadCount > 0
             ? `${unreadCount} notificación${unreadCount === 1 ? "" : "es"} sin leer`
@@ -414,8 +465,13 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
             </Text>
           </TouchableOpacity>
         </View>
+        </>
+        ) : null}
       </View>
 
+      {tab === "offers" ? (
+        <OfferInboxPanel navigation={navigation} bottomSpace={BOTTOM_NAVIGATION_SPACE} />
+      ) : (
       <FlatList
         data={data}
         keyExtractor={(it) => it.id}
@@ -444,6 +500,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
           </View>
         }
       />
+      )}
 
       {driverStack ? <DriverBottomNavigation activeTab="activity" onPress={handleTabPress} /> : null}
 
@@ -523,11 +580,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
               {selected?.kind === "TURBO_OFFER" && (
                 <Pressable
                   style={[styles.btn, styles.btnPrimary]}
-                  onPress={() => {
-                    markRead(selected.id);
-                    setSelected(null);
-                    (navigation as any).navigate("TurboOffersScreen");
-                  }}
+                  onPress={openOffers}
                 >
                   <Text style={styles.btnTxtPrimary}>Ver ofertas</Text>
                 </Pressable>
@@ -548,7 +601,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
                 </Pressable>
               )}
               {selected?.kind === "ROUTE_OFFER" && (
-                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => openList("TurboOffersScreen")}>
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={openOffers}>
                   <Text style={styles.btnTxtPrimary}>Ver ofertas</Text>
                 </Pressable>
               )}
@@ -648,6 +701,55 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   listContent: {
     paddingHorizontal: t.layout.screenPadding,
     paddingBottom: 124,
+  },
+
+  tabs: {
+    flexDirection: "row",
+    gap: t.spacing.xs,
+    marginTop: t.spacing.md,
+    padding: 4,
+    borderRadius: t.radius.full,
+    backgroundColor: t.surfaces.muted,
+  },
+
+  tab: {
+    flex: 1,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: t.radius.full,
+  },
+
+  tabActive: {
+    backgroundColor: t.colors.primary,
+  },
+
+  tabText: {
+    color: t.text.secondary,
+    fontSize: 14,
+    fontWeight: t.font.weight.black,
+  },
+
+  tabTextActive: {
+    color: t.text.onPrimary,
+  },
+
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: t.radius.full,
+    backgroundColor: t.status.rejected.solid,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  tabBadgeText: {
+    color: t.status.rejected.onSolid,
+    fontSize: 11,
+    fontWeight: t.font.weight.black,
   },
 
   // Superficie, borde y radio: theme.listItem (en Minimal, fila con separador).

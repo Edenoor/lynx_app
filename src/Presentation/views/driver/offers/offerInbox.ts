@@ -49,3 +49,8 @@ export function offerNoticeText(kind: "TURBO_OFFER" | "ROUTE_OFFER", raw?: { sto
   const store = typeof raw?.storeName === "string" && raw.storeName.trim() ? `${raw.storeName.trim()}. ` : "";
   return { title: "Turbo disponible", body: `${store}El primero que acepta se lo queda.` };
 }
+
+// Sin habilitación Turbo (false) no se muestran ofertas Turbo: no las puede
+// aceptar. null (no se sabe) no esconde nada. Es solo la vista: quien
+// autoriza es el servidor.
+export const visibleTurboOffers = <T,>(turbos: T[], turboEnabled: boolean | null): T[] => (turboEnabled === false ? [] : turbos);

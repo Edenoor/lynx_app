@@ -1,9 +1,11 @@
 import React from "react";
 import { useNavigation } from "@react-navigation/native";
 import { BottomNavigationBar, BottomNavigationItem } from "./BottomNavigationBar";
+import { useOfferCount } from "../views/driver/offers/offerStore";
 
-// Perfil se abre desde Inicio (arriba a la derecha); los recorridos de reparto
-// y las ofertas, desde Envíos.
+// Perfil se abre desde Inicio (arriba a la derecha); los recorridos de reparto,
+// desde Envíos. Alertas lleva el contador de ofertas sin contestar (la bandeja
+// es su pestaña «Ofertas»).
 export type DriverTabKey =
   | "home"
   | "deliveries"
@@ -51,6 +53,8 @@ export function DriverBottomNavigation({
 }: DriverBottomNavigationProps) {
   // "Colectas" navega desde acá para no tocar el handler de cada pantalla.
   const navigation = useNavigation<any>();
+  const offerCount = useOfferCount();
+  const items = offerCount ? tabs.map((t) => (t.key === "activity" ? { ...t, badge: offerCount > 99 ? "99+" : String(offerCount) } : t)) : tabs;
   const handlePress = (tab: DriverTabKey) => {
     if (tab === "collections") {
       if (activeTab !== "collections") navigation.navigate("CollectionsScreen");
@@ -58,7 +62,7 @@ export function DriverBottomNavigation({
     }
     onPress(tab);
   };
-  return <BottomNavigationBar items={tabs} activeKey={activeTab} onPress={handlePress} />;
+  return <BottomNavigationBar items={items} activeKey={activeTab} onPress={handlePress} />;
 }
 
 export default DriverBottomNavigation;

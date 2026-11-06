@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { IntroScreen } from "../screens/IntroScreen";
 import { TermsScreen } from "../screens/TermsScreen";
 import { VehicleScreen } from "../screens/VehicleScreen";
+import { HomeStepScreen } from "../screens/HomeStepScreen";
 import { CaptureSelfieScreen } from "../screens/CaptureSelfieScreen";
 import { CaptureDocumentScreen } from "../screens/CaptureDocumentScreen";
 import { ReviewSubmitScreen } from "../screens/ReviewSubmitScreen";
@@ -14,6 +15,8 @@ export type OnboardingStackParamList = {
   Intro: undefined;
   Terms: undefined;
   Vehicle: undefined;
+  // Tu domicilio (opcional): se puede saltear.
+  Home: undefined;
   Selfie: undefined;
   Doc: { docKey: DocKey };
   Review: undefined;
@@ -36,6 +39,7 @@ export function OnboardingStackNavigator() {
         <Stack.Screen name="Intro" component={IntroScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Vehicle" component={VehicleScreen} />
+        <Stack.Screen name="Home" component={HomeStepScreen} />
         <Stack.Screen name="Selfie" component={CaptureSelfieScreen} />
         <Stack.Screen name="Doc" component={CaptureDocumentScreen} />
         <Stack.Screen name="Review" component={ReviewSubmitScreen} />

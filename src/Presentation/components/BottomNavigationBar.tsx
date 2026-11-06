@@ -73,6 +73,9 @@ export function BottomNavigationBar<K extends string>({ items, activeKey, onPres
               key={tab.key}
               style={styles.item}
               onPress={() => onPress(tab.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={tab.badge ? `${tab.label}: ${tab.badge}` : tab.label}
             >
               <Ionicons
                 name={tab.icon}

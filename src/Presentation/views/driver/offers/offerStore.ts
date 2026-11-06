@@ -8,7 +8,7 @@
 import { fetchRouteOffers } from "../routes/routesApi";
 import { fetchMyOffers } from "../turbo/turboApi";
 import { sharedValue, useSharedValue } from "../work/sharedValue";
-import { pendingOffers } from "./offerInbox";
+import { pendingOffers, visibleTurboOffers } from "./offerInbox";
 
 const COUNT_TTL_MS = 30_000;
 
@@ -18,6 +18,14 @@ let countAt = 0;
 let inflight: Promise<void> | null = null;
 // Sube al cerrar sesión: lo que estaba en vuelo ya no se publica.
 let generation = 0;
+// Habilitación Turbo conocida (la informan Inicio y la bandeja): sin ella no
+// se cuentan ofertas Turbo, que no se le muestran.
+let turboEnabled: boolean | null = null;
+export function setOfferTurboEnabled(enabled: boolean | null) {
+  if (enabled === turboEnabled) return;
+  turboEnabled = enabled;
+  countAt = 0;
+}
 
 export function publishOfferCount(n: number) {
   countAt = Date.now();
@@ -31,7 +39,7 @@ export function refreshOfferCount(force = false): Promise<void> {
   if (!force && count.get() !== null && Date.now() - countAt < COUNT_TTL_MS) return Promise.resolve();
   const gen = generation;
   inflight = Promise.all([fetchMyOffers(), fetchRouteOffers()])
-    .then(([turbos, routes]) => { if (gen === generation) publishOfferCount(pendingOffers(turbos, routes)); })
+    .then(([turbos, routes]) => { if (gen === generation) publishOfferCount(pendingOffers(visibleTurboOffers(turbos, turboEnabled), routes)); })
     .catch(() => {})
     .finally(() => { if (gen === generation) inflight = null; });
   return inflight;
@@ -62,6 +70,12 @@ export function resetOfferStore() {
   generation++;
   inflight = null;
   countAt = 0;
+  turboEnabled = null;
   count.set(null);
   notice.set(null);
 }
+
+// La bandeja es la pestaña «Ofertas» de Alertas: todos los accesos (aviso,
+// push, Envíos, Recorridos) llegan por acá.
+export const openOfferInbox = (navigation: { navigate: (...args: any[]) => void }) =>
+  navigation.navigate("NotificationsScreen", { tab: "offers" });

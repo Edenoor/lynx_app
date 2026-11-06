@@ -66,7 +66,7 @@ import {
   SourceState,
   useDriverWork,
 } from "../work/workSource";
-import { refreshOfferCount, useOfferCount } from "../offers/offerStore";
+import { openOfferInbox, refreshOfferCount, useOfferCount } from "../offers/offerStore";
 import { RouteSummary, tomorrowIso } from "../routes/routesApi";
 import { loadText, loadTotal } from "../turbo/turboGroup";
 import { errorMessage } from "../errorMessage";
@@ -621,7 +621,8 @@ export const EnviosScreen = ({ navigation }: any) => {
           <Text style={styles.muted}>Turbos que llevás: {loadText(w?.turboLoad)}</Text>
         ) : null}
 
-        {sub === "tomorrow" ? (
+        {/* Tomar programados pide habilitación Turbo: sin ella solo se ven los suyos. */}
+        {sub === "tomorrow" && w?.turboEnabled !== false ? (
           <Pressable style={styles.linkRow} onPress={() => navigation.navigate("TurboTomorrowScreen")} accessibilityRole="button">
             <Ionicons name="add-circle-outline" size={18} color={theme.text.accent} />
             <Text style={styles.linkRowText}>Tomar Turbos de mañana disponibles</Text>
@@ -721,25 +722,12 @@ export const EnviosScreen = ({ navigation }: any) => {
                 <Ionicons name={downloadingExcel ? "hourglass-outline" : "download-outline"} size={19} color={theme.text.onPrimary} />
               </Pressable>
             ) : null}
-
-            <Pressable
-              style={styles.offersButton}
-              onPress={() => navigation.navigate("TurboOffersScreen")}
-              accessibilityRole="button"
-              accessibilityLabel={`Ofertas${offerCount ? `: ${offerCount} sin contestar` : ""}`}
-            >
-              <Ionicons name="pricetags-outline" size={17} color={theme.text.primary} />
-              <Text style={styles.offersText}>Ofertas</Text>
-              {offerCount ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{offerCount > 99 ? "99+" : offerCount}</Text>
-                </View>
-              ) : null}
-            </Pressable>
           </View>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modalities}>
+        {/* Las modalidades en una fila de anchos iguales: todas a la vista, sin
+            scroll ni etiquetas cortadas. */}
+        <View style={styles.modalities} accessibilityRole="tablist">
           {modalities.map((m) => {
             const active = modality === m.key;
             return (
@@ -748,14 +736,27 @@ export const EnviosScreen = ({ navigation }: any) => {
                 onPress={() => pickModality(m.key)}
                 style={[styles.modalityChip, active && styles.modalityChipActive]}
                 accessibilityRole="tab"
+                accessibilityLabel={m.label}
                 accessibilityState={{ selected: active }}
               >
-                <Ionicons name={m.icon} size={15} color={active ? theme.text.onPrimary : theme.text.muted} />
-                <Text style={[styles.modalityText, active && styles.modalityTextActive]}>{m.label}</Text>
+                <Ionicons name={m.icon} size={16} color={active ? theme.text.onPrimary : theme.text.muted} />
+                <Text style={[styles.modalityText, active && styles.modalityTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {m.label}
+                </Text>
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
+
+        {/* Las ofertas se contestan en Alertas: acá solo el aviso. */}
+        {offerCount ? (
+          <Pressable onPress={() => openOfferInbox(navigation)} style={styles.offersHint} accessibilityRole="button" hitSlop={6}>
+            <Ionicons name="pricetags-outline" size={14} color={theme.text.accent} />
+            <Text style={styles.offersHintText}>
+              {offerCount === 1 ? "Tenés una oferta sin contestar" : `Tenés ${offerCount > 99 ? "99+" : offerCount} ofertas sin contestar`}: ver en Alertas
+            </Text>
+          </Pressable>
+        ) : null}
 
         {modality === "turbo" || modality === "flex" ? (
           <View style={styles.segmented}>
@@ -995,14 +996,12 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   iconButton: { width: 42, height: 42, borderRadius: t.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: t.surfaces.card, borderWidth: 1, borderColor: t.borders.default },
   downloadButton: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
   iconButtonDisabled: { opacity: 0.58 },
-  offersButton: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, borderRadius: t.radius.full, backgroundColor: t.surfaces.card, borderWidth: 1, borderColor: t.borders.default },
-  offersText: { color: t.text.primary, fontSize: 13, fontWeight: t.font.weight.black },
-  badge: { minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 999, backgroundColor: t.status.rejected.solid, alignItems: "center", justifyContent: "center" },
-  badgeText: { color: t.status.rejected.onSolid, fontSize: 11, fontWeight: t.font.weight.black },
-  modalities: { gap: t.spacing.sm, paddingRight: t.spacing.lg, marginBottom: t.spacing.md },
-  modalityChip: { minHeight: 40, paddingHorizontal: 14, borderRadius: t.radius.full, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.soft },
+  offersHint: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 28, marginTop: -4, marginBottom: t.spacing.sm },
+  offersHintText: { color: t.text.accent, fontSize: 13, fontWeight: t.font.weight.bold },
+  modalities: { flexDirection: "row", gap: 6, marginBottom: t.spacing.md },
+  modalityChip: { flex: 1, minHeight: 52, paddingHorizontal: 4, paddingVertical: 6, borderRadius: t.radius.md, alignItems: "center", justifyContent: "center", gap: 2, backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.soft },
   modalityChipActive: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
-  modalityText: { color: t.text.muted, fontSize: 13, fontWeight: t.font.weight.black },
+  modalityText: { color: t.text.muted, fontSize: 12, fontWeight: t.font.weight.black },
   modalityTextActive: { color: t.text.onPrimary },
   segmented: { flexDirection: "row", padding: 4, borderRadius: t.radius.full, backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.soft, marginBottom: t.spacing.sm },
   segmentButton: { flex: 1, minHeight: 38, borderRadius: t.radius.full, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 4, paddingHorizontal: 4 },

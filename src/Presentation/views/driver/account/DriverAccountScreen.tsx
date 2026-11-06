@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Image,
-  ImageSourcePropType,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,6 +24,9 @@ import {
   DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
 import { fetchMyHome } from "./homeApi";
+import DriverAvatar from "../../../components/driver/DriverAvatar";
+import { loadDriverProfile, useDriverProfile } from "./driverProfileApi";
+import { documentsLabel, DriverDocument, fullName, vehicleLabel } from "./driverProfile";
 
 const DEFAULT_AVATAR = require("../../../../../assets/user.png");
 
@@ -43,60 +46,36 @@ const getDriverDisplayName = (user: any): string => {
   return firstName || "driver";
 };
 
-const getVehicleLabel = (user: any): string => {
-  const raw =
-    user?.vehicle ||
-    user?.vehiculo ||
-    user?.vehicleType ||
-    user?.tipo_vehiculo ||
-    user?.vehicle_type ||
-    "";
-
-  return raw ? String(raw) : "Sin vehículo cargado";
-};
-
-const getDriverSelfieSource = (user: any): ImageSourcePropType => {
-  const selfie =
-    user?.selfie_url ||
-    user?.selfieUrl ||
-    user?.photo_url ||
-    user?.photoUrl ||
-    user?.avatar_url ||
-    user?.avatarUrl ||
-    user?.profile_image ||
-    user?.profileImage ||
-    "";
-
-  if (typeof selfie === "string" && selfie.trim()) {
-    return { uri: selfie.trim() };
-  }
-
-  return DEFAULT_AVATAR;
-};
-
 export default function DriverAccountScreen() {
   const navigation = useNavigation<any>();
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const { user, removeUserSession } = useViewModel();
 
-  const [documentsLoading] = useState(false);
+  // Lo que cargó en el alta (vehículo, documentos, selfie): se relee al entrar.
+  const profile = useDriverProfile();
+  const [profileLoading, setProfileLoading] = useState(false);
   // Domicilio: se relee al volver de «Mi domicilio». undefined = cargando o sin red; null = sin domicilio.
   const [homeAddress, setHomeAddress] = useState<string | null | undefined>(undefined);
+  const userId = (user as any)?.id;
   useFocusEffect(
     useCallback(() => {
       let alive = true;
       fetchMyHome()
         .then((h) => { if (alive) setHomeAddress(h.address); })
         .catch(() => { if (alive) setHomeAddress(undefined); });
+      setProfileLoading(true);
+      loadDriverProfile(userId, { force: true }).finally(() => { if (alive) setProfileLoading(false); });
       return () => { alive = false; };
-    }, [])
+    }, [userId])
   );
+  // Qué sección está abierta y qué documento se está viendo.
+  const [open, setOpen] = useState<"personal" | "vehicle" | "documents" | null>(null);
+  const [viewing, setViewing] = useState<DriverDocument | null>(null);
+  const toggle = (section: "personal" | "vehicle" | "documents") => setOpen(open === section ? null : section);
 
   const driverName = useMemo(() => getDriverDisplayName(user), [user]);
   const username = (user as any)?.username || user?.email || user?.name || "";
-
-  const avatarSource = useMemo(() => getDriverSelfieSource(user), [user]);
 
   const handleTabPress = useCallback(
     (tab: DriverTabKey) => {
@@ -161,7 +140,7 @@ if (tab === "scan") {
         </View>
 
         <View style={styles.profileCard}>
-          <Image source={avatarSource} style={styles.avatar} />
+          <DriverAvatar uri={profile?.selfie} size={50} fallback={<Image source={DEFAULT_AVATAR} style={styles.avatar} />} />
 
           <View style={styles.profileInfo}>
             <Text style={styles.name}>{driverName}</Text>
@@ -175,8 +154,20 @@ if (tab === "scan") {
           <AccountItem
             icon="person-outline"
             title="Datos personales"
-            description={username || "Usuario no disponible"}
+            description={fullName(user as any)}
+            expanded={open === "personal"}
+            onPress={() => toggle("personal")}
           />
+          {open === "personal" ? (
+            <View style={styles.details}>
+              <Detail label="Nombre y apellido" value={fullName(user as any)} />
+              <Detail label="Usuario" value={username || "—"} />
+              <Detail label="Correo electrónico" value={user?.email || "Sin cargar"} />
+              <Detail label="Teléfono" value={(user as any)?.phone || "Sin cargar"} />
+              <Detail label="DNI" value={profile?.dni ?? "Sin cargar"} />
+              <Detail label="CUIL" value={profile?.cuil ?? "Sin cargar"} />
+            </View>
+          ) : null}
 
           <AccountItem
             icon="home-outline"
@@ -188,19 +179,38 @@ if (tab === "scan") {
           <AccountItem
             icon="car-outline"
             title="Vehículo"
-            description={getVehicleLabel(user)}
+            description={vehicleLabel(profile)}
+            loading={profileLoading && profile === undefined}
+            expanded={open === "vehicle"}
+            onPress={profile ? () => toggle("vehicle") : undefined}
           />
+          {open === "vehicle" && profile ? (
+            <View style={styles.details}>
+              <Detail label="Vehículo" value={profile.vehicle ?? "Sin cargar"} />
+              <Detail label="Patente" value={profile.plate ?? "Sin cargar"} />
+            </View>
+          ) : null}
 
           <AccountItem
             icon="document-text-outline"
             title="Documentación"
-            description={
-              documentsLoading
-                ? "Cargando documentación..."
-                : "DNI, registro y cédula"
-            }
-            loading={documentsLoading}
+            description={profileLoading && profile === undefined ? "Cargando documentación..." : documentsLabel(profile)}
+            loading={profileLoading && profile === undefined}
+            expanded={open === "documents"}
+            onPress={profile ? () => toggle("documents") : undefined}
           />
+          {open === "documents" && profile ? (
+            <View style={styles.details}>
+              {/* No hay validación de documentos en el sistema: solo si se envió. */}
+              {profile.documents.map((d) => (
+                <Pressable key={d.key} onPress={d.url ? () => setViewing(d) : undefined} disabled={!d.url} style={styles.docRow} accessibilityRole="button" accessibilityLabel={`${d.label}: ${d.url ? "enviado, ver" : "falta"}`}>
+                  <Text style={styles.detailValue}>{d.label}</Text>
+                  <Text style={[styles.docStatus, d.url ? styles.docSent : styles.docMissing]}>{d.url ? "Enviado · ver" : "Falta"}</Text>
+                </Pressable>
+              ))}
+              <Text style={styles.itemDescription}>Para corregir un documento, hablá con tu coordinador.</Text>
+            </View>
+          ) : null}
 
           <AccountItem
             icon="analytics-outline"
@@ -234,6 +244,19 @@ if (tab === "scan") {
 
       {/* Perfil se abre desde Inicio: la barra lo muestra como parte de Inicio. */}
       <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
+
+      {/* El documento se ve dentro de la app (la dirección viene del pedido autenticado). */}
+      <Modal visible={!!viewing} transparent animationType="fade" onRequestClose={() => setViewing(null)} statusBarTranslucent>
+        <View style={styles.viewer}>
+          <View style={styles.viewerHead}>
+            <Text style={styles.viewerTitle}>{viewing?.label}</Text>
+            <Pressable onPress={() => setViewing(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cerrar">
+              <Ionicons name="close" size={24} color={theme.text.primary} />
+            </Pressable>
+          </View>
+          {viewing?.url ? <Image source={{ uri: viewing.url }} style={styles.viewerImage} resizeMode="contain" accessibilityLabel={viewing.label} /> : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -244,12 +267,15 @@ function AccountItem({
   description,
   loading,
   onPress,
+  expanded,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
   loading?: boolean;
   onPress?: () => void;
+  // Definido: la fila abre un detalle debajo (flecha hacia abajo / arriba).
+  expanded?: boolean;
 }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -275,11 +301,21 @@ function AccountItem({
       </View>
 
       <Ionicons
-        name="chevron-forward"
+        name={expanded === undefined ? "chevron-forward" : expanded ? "chevron-up" : "chevron-down"}
         size={17}
         color={theme.text.muted}
       />
     </Pressable>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.detail}>
+      <Text style={styles.itemDescription}>{label}</Text>
+      <Text style={styles.detailValue} selectable>{value}</Text>
+    </View>
   );
 }
 
@@ -409,6 +445,72 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     fontSize: 12,
     fontWeight: t.font.weight.bold,
     marginTop: 1,
+  },
+
+  details: {
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    gap: t.spacing.sm,
+    backgroundColor: t.surfaces.muted,
+    borderBottomWidth: t.separator.width,
+    borderBottomColor: t.separator.color,
+  },
+
+  detail: {
+    gap: 1,
+  },
+
+  detailValue: {
+    color: t.text.primary,
+    fontSize: 14,
+    fontWeight: t.font.weight.bold,
+  },
+
+  docRow: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: t.spacing.sm,
+  },
+
+  docStatus: {
+    fontSize: 13,
+    fontWeight: t.font.weight.bold,
+  },
+
+  docSent: {
+    color: t.status.confirmed.text,
+  },
+
+  docMissing: {
+    color: t.status.pending.text,
+  },
+
+  viewer: {
+    flex: 1,
+    backgroundColor: t.surfaces.screen,
+    paddingTop: t.layout.headerTopPadding,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingBottom: t.spacing.lg,
+  },
+
+  viewerHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: t.spacing.md,
+  },
+
+  viewerTitle: {
+    color: t.text.primary,
+    fontSize: 18,
+    fontWeight: t.font.weight.bold,
+  },
+
+  viewerImage: {
+    flex: 1,
+    width: "100%",
   },
 
   logoutButton: {
