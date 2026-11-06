@@ -808,7 +808,7 @@ export const EnviosScreen = ({ navigation }: any) => {
 
       <ContinueBar missions={missions} onOpen={openMission} onSeeAll={() => navigation.navigate("DriverScreen")} />
 
-      <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+      <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} assistantLift={bottomSpace} />
 
       <DriverDeliveryDetailModal visible={!!selected} delivery={selected} onClose={() => setSelected(null)} />
 

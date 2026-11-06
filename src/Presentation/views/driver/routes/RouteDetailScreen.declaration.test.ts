@@ -66,9 +66,10 @@ const RN = {
 };
 const MOCKS: Record<string, any> = {
   "react-native": RN,
-  "@expo/vector-icons": { Ionicons: "Ionicons" },
+  "@expo/vector-icons": { Ionicons: "Ionicons", MaterialCommunityIcons: "MaterialCommunityIcons" },
   "expo-status-bar": { StatusBar: "StatusBar" },
-  "@react-navigation/native": { useIsFocused: () => true },
+  // La barra de abajo (DriverBottomNavigation) navega por su cuenta.
+  "@react-navigation/native": { useIsFocused: () => true, useNavigation: () => nav },
   // El mapa del recorrido (RouteMapModal).
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker" },
   "react-native-safe-area-context": { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },

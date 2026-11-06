@@ -14,8 +14,12 @@
 //
 // El KeyboardAvoidingView mide su posición relativa al padre, no a la
 // pantalla: debajo de un header nativo (o de cualquier cosa arriba) se queda
-// corto justo por esa altura. Acá se mide dónde cae en la ventana y se le
+// corto justo por esa altura. Acá se mide dónde cae en la pantalla y se le
 // pasa como `keyboardVerticalOffset`, así sirve con o sin header.
+// Se mide con `measure` (pageY, desde el borde de arriba de la raíz) y no con
+// `measureInWindow`: en Android este descuenta la barra de estado, que con
+// edge-to-edge sí ocupa pantalla, y el corrimiento quedaba corto por esa
+// altura (medido en el Moto: el `footer` quedaba 105 px debajo del teclado).
 
 import React, { useCallback, useRef, useState } from "react";
 import {
@@ -35,13 +39,15 @@ type Props = React.PropsWithChildren<{
   // Fijo abajo, fuera del desplazamiento y encima del teclado.
   footer?: React.ReactNode;
   scrollProps?: Omit<ScrollViewProps, "contentContainerStyle" | "keyboardShouldPersistTaps">;
+  // Para desplazar desde la pantalla (por ejemplo, al último mensaje de una charla).
+  scrollRef?: React.Ref<ScrollView>;
 }>;
 
-export function KeyboardScreen({ children, style, contentContainerStyle, footer, scrollProps }: Props) {
+export function KeyboardScreen({ children, style, contentContainerStyle, footer, scrollProps, scrollRef }: Props) {
   const outer = useRef<View>(null);
   const [offset, setOffset] = useState(0);
   const onLayout = useCallback(() => {
-    outer.current?.measureInWindow((_x, y) => setOffset(Math.max(0, Math.round(y))));
+    outer.current?.measure((_x, _y, _w, _h, _pageX, pageY) => setOffset(Math.max(0, Math.round(pageY))));
   }, []);
 
   return (
@@ -50,6 +56,7 @@ export function KeyboardScreen({ children, style, contentContainerStyle, footer,
         {/* «handled»: con el teclado abierto, el primer toque en un botón lo
             acciona (no solo cierra el teclado); tocar fuera de un campo lo cierra. */}
         <ScrollView
+          ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           {...scrollProps}
           style={[styles.flex, scrollProps?.style]}

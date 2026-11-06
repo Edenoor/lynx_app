@@ -594,7 +594,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   safeArea: { flex: 1 },
   scrollArea: { flex: 1, minHeight: 0 },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
-  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 120, gap: t.spacing.sm },
+  // Abajo: la barra (112) y el asistente (56), para que no tapen el último botón.
+  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 184, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
   back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },

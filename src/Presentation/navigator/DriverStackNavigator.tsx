@@ -19,6 +19,7 @@ import RouteDetailScreen from "../views/driver/routes/RouteDetailScreen";
 import RouteOrganizeScreen from "../views/driver/routes/RouteOrganizeScreen";
 import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
 import TurboTomorrowScreen from "../views/driver/turbo/TurboTomorrowScreen";
+import DriverHelpScreen from "../views/driver/help/DriverHelpScreen";
 import OfferNoticeBanner from "../components/driver/OfferNoticeBanner";
 import CollectInLightDataModal from "../components/driver/CollectInLightDataModal";
 import { hideCollectInLightData } from "../views/driver/collectionMode";
@@ -52,6 +53,8 @@ export type DriverStackParamList = {
   TurboGroupScreen: { groupId: number };
   // Programados sin chofer que cualquiera puede tomar antes.
   TurboTomorrowScreen: undefined;
+  // Asistente de ayuda: dudas de uso de la app.
+  DriverHelpScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -96,6 +99,7 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="RouteOrganizeScreen" component={RouteOrganizeScreen} />
           <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />
           <Stack.Screen name="TurboTomorrowScreen" component={TurboTomorrowScreen} />
+          <Stack.Screen name="DriverHelpScreen" component={DriverHelpScreen} />
         </>
       )}
     </Stack.Navigator>

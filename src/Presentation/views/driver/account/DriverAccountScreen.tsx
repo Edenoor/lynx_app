@@ -225,6 +225,13 @@ if (tab === "scan") {
           />
 
           <AccountItem
+            icon="help-circle-outline"
+            title="Ayuda"
+            description="Preguntá cómo usar la app"
+            onPress={() => navigation.navigate("DriverHelpScreen")}
+          />
+
+          <AccountItem
             icon="settings-outline"
             title="Configuración"
             description="Apariencia: tema, estilo y bordes"
