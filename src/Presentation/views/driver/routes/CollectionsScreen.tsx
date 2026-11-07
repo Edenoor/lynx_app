@@ -279,7 +279,6 @@ export default function CollectionsScreen({ navigation }: Props) {
         <DriverBottomNavigation
           activeTab="collections"
           onPress={handleTabPress}
-          assistantLift={missions.length ? CONTINUE_BAR_SPACE : 0}
         />
       </SafeAreaView>
     </ImageBackground>

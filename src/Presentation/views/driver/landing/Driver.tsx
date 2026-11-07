@@ -15,7 +15,7 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StackScreenProps } from "@react-navigation/stack";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import useViewModel from "./ViewModel";
 import useEnviosViewModel from "../Envios/ViewModel";
@@ -614,6 +614,9 @@ export const DriverScreen = ({ navigation }: Props) => {
             ) : null}
           </View>
           <View style={styles.headerActions}>
+            <Pressable onPress={() => navigation.navigate("DriverHelpScreen")} style={styles.profileButton} hitSlop={4} accessibilityLabel="Asistente de ayuda" accessibilityRole="button">
+              <MaterialCommunityIcons name="robot-happy-outline" size={22} color={theme.text.primary} />
+            </Pressable>
             <Pressable onPress={() => setTurboPanelVisible(true)} style={styles.profileButton} accessibilityLabel="Opciones Turbo" accessibilityRole="button">
               <Ionicons name={turboEnabled === false ? "flash-outline" : "flash"} size={22} color={turboEnabled !== false && turboOn ? "#D59A19" : theme.text.muted} />
               {offerCount != null && offerCount > 0 && turboEnabled !== false ? <View style={styles.offerDot} /> : null}
