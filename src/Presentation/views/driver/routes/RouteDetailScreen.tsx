@@ -21,7 +21,7 @@ import {
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
 import { NO_RETIRAR_ANTES, programadoLabel } from "../turbo/turboOffer";
 import OutcomeForm from "./OutcomeForm";
-import { buildDeclaration, cobranzaOf, OutcomeDraft, outcomeNotes } from "./outcomeDeclaration";
+import { buildDeclaration, cobranzaOf, OutcomeDraft, outcomeNotes, reverseRequestText } from "./outcomeDeclaration";
 import { errorMessage } from "../errorMessage";
 import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from "./pickupConfirmation";
 import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
@@ -574,6 +574,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
                 <View style={{ flex: 1 }}>
                   <DeliveryHead d={d} />
                   <Text style={[styles.stopMeta, view.tone === "delivered" ? styles.deliveryDone : view.final ? styles.stopStatusClosed : null]}>{view.label}</Text>
+                  {!view.final && d.reverse_kind ? <Text style={styles.reverseRequest}>{reverseRequestText(d.reverse_kind, d.reverse_note)}</Text> : null}
                 </View>
                 {canAct ? (
                   <View style={styles.row}>
@@ -583,8 +584,8 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
                   </View>
                 ) : null}
                 {canAct && !ml && closing?.deliveryId === d.delivery_id ? (
-                  <OutcomeForm key={closing.outcome} outcome={closing.outcome} cobranza={cobranzaOf(d.importe_cobranza)} busy={busy} error={closeError}
-                    onConfirm={confirmClose} onCancel={() => setClosing(null)} />
+                  <OutcomeForm key={closing.outcome} outcome={closing.outcome} cobranza={cobranzaOf(d.importe_cobranza)} reverseRequest={reverseRequestText(d.reverse_kind, d.reverse_note)}
+                    busy={busy} error={closeError} onConfirm={confirmClose} onCancel={() => setClosing(null)} />
                 ) : null}
               </View>
             );
@@ -791,6 +792,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   resolvedBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", borderWidth: 1, borderColor: t.status.confirmed.border, backgroundColor: t.status.confirmed.background, borderRadius: t.radius.md, padding: 10 },
   resolvedText: { flex: 1, color: t.text.primary, fontSize: 13, lineHeight: 18 },
   stopMeta: { color: t.text.secondary, fontSize: 12, marginTop: 2 },
+  reverseRequest: { color: t.status.pending.text, fontSize: 12, marginTop: 2, fontWeight: "600" },
   stopBody: { borderTopWidth: t.separator.width, borderTopColor: t.separator.color, padding: t.spacing.md, gap: 10 },
   deliveryRow: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 6, borderBottomWidth: t.separator.width, borderBottomColor: t.separator.color, flexWrap: "wrap" },
   deliveryTitle: { color: t.text.primary, fontSize: 14 },

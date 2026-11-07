@@ -80,6 +80,8 @@ function draw(node: any, at: string): any {
       else contextOverride.delete(ctx);
     }
   }
+  // React.memo (las paradas del recorrido): se dibuja el componente de adentro.
+  if (node.type?.$$typeof === Symbol.for("react.memo")) return draw({ ...node, type: node.type.type }, at);
   if (typeof node.type === "function") {
     const key = `${at}>${node.type.name}`;
     if (!instances.has(key)) instances.set(key, []);
@@ -173,7 +175,7 @@ const RN = {
 const envios: any = { list: [], currentDeliveries: [], loading: false, error: null, currentError: null, reload: () => {}, username: "driver1" };
 const MOCKS: Record<string, any> = {
   "react-native": RN,
-  "@expo/vector-icons": { Ionicons: "Ionicons" },
+  "@expo/vector-icons": { Ionicons: "Ionicons", MaterialCommunityIcons: "MaterialCommunityIcons" },
   "expo-status-bar": { StatusBar: "StatusBar" },
   "@react-navigation/native": {
     useNavigation: () => nav,
@@ -227,7 +229,9 @@ const RELATIVE_MOCKS: [string, any][] = [
     getJson: (p: string) => reply("GET", p),
     postJson: (p: string, b?: any) => { api.bodies.push([`POST ${p}`, b]); return reply("POST", p); },
     putJson: (p: string, b?: any) => { api.bodies.push([`PUT ${p}`, b]); return reply("PUT", p); },
-    getJsonWithTimeout: (p: string) => reply("GET", p), postJsonWithTimeout: (p: string) => reply("POST", p), putJsonWithTimeout: (p: string) => reply("PUT", p),
+    getJsonWithTimeout: (p: string) => reply("GET", p),
+    postJsonWithTimeout: (p: string, b?: any) => { api.bodies.push([`POST ${p}`, b]); return reply("POST", p); },
+    putJsonWithTimeout: (p: string, b?: any) => { api.bodies.push([`PUT ${p}`, b]); return reply("PUT", p); },
   }],
   ["Envios/ViewModel", { __esModule: true, default: () => envios }],
   ["client/Landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, username: "vendedor", rol: "SELLER" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
@@ -592,7 +596,7 @@ const setDriverApi = () => {
     const prev = Array.from({ length: 7 }, (_, i) => `GET /v2/routes/mine?date=${shiftIso(TODAY, -(i + 1))}`);
     check("Envíos: hoy (pidiendo también los abiertos), los 7 días anteriores, grupos, habilitación, el detalle de lo que está en la calle y las ofertas",
       [`GET /v2/routes/mine?date=${TODAY}&open=1`, ...prev, `GET /v2/turbo/groups/mine?date=${TODAY}`, "POST /driver/availability/get", "GET /v2/routes/8", "GET /v2/routes/12", "GET /v2/turbo/offers/mine", "GET /v2/offers/mine"].every((c) => api.calls.includes(c)), api.calls.join(", "));
-    check("Envíos: ni rutas administrativas ni el Baúl de admin", !api.calls.some((c) => /\/v2\/baul|\/v2\/routes\?|\/v2\/drivers\/\d+\/legacy/.test(c)), api.calls.join(", "));
+    check("Envíos: ni rutas administrativas ni el Baúl de admin", !api.calls.some((c) => /\/v2\/baul\/(?!me$)|\/v2\/routes\?|\/v2\/drivers\/\d+\/legacy/.test(c)), api.calls.join(", "));
     check("Envíos: un solo pedido por día (sin duplicados)", new Set(api.calls).size === api.calls.length, api.calls.join(", "));
 
     // Turbo en curso: el Turbo en la calle; ni repartos ni colectas.
@@ -659,11 +663,44 @@ const setDriverApi = () => {
     check("Flex › Historial: la información legacy sigue a mano, con el Excel", textOf(tree).includes("Viejo 1") && byLabel(tree, "Descargar Excel semanal").length === 1);
     envios.list = [];
 
-    // Baúl: sin contrato para el chofer, no se pide nada ni se clasifica.
+    // Baúl: lo propio del chofer (GET /v2/baul/me); la app no deduce nada de los envíos.
     api.calls = [];
+    api.replies["GET /v2/baul/me"] = {
+      ok: true, start_at: "2026-11-01",
+      totals: { cash_count: 1, cash_amount: 1500, transfer_count: 0, transfer_amount: 0, parcels: 3, items: 1 },
+      cash: [{ delivery_id: 1, tracking: "C1", store: "Tienda Uno", expected_amount: 1500, declared_amount: null, declared_method: null }],
+      parcels: [
+        { delivery_id: 2, tracking: "P-CANC", store: "Tienda Dos", kind: "CANCELLED", attempted: false },
+        { delivery_id: 3, tracking: "P-INT", store: "Tienda Tres", kind: "NOT_DELIVERED", attempted: true },
+        { delivery_id: 4, tracking: "P-CUST", store: "Tienda Cuatro", kind: "NOT_DELIVERED", attempted: false },
+      ],
+      items: [{ delivery_id: 5, tracking: "I1", store: "Tienda Cinco", closure: "CAMBIO", return_item: "zapatillas" }],
+      to_verify: [{ delivery_id: 6, tracking: "V1", store: "Tienda Seis", reverse_kind: "OTRO", reverse_note: "control remoto" }],
+    };
     tree = await press(tree, "Baúl");
-    check("Baúl: estado de función pendiente, sin datos inventados", textOf(tree).includes("Función pendiente") && textOf(tree).includes("Pronto vas a ver acá") && !textOf(tree).includes("San Martín 10"));
-    check("Baúl: no pide nada al servidor", !api.calls.length, api.calls.join(", "));
+    const baulTxt = textOf(tree);
+    check("Baúl: un solo pedido, el propio (/v2/baul/me)", js(api.calls) === js(["GET /v2/baul/me"]), api.calls.join(", "));
+    check("Baúl: totales y cada sección", ["Tu Baúl", "Efectivo por rendir: $1.500 (1)", "Paquetes para devolver: 3", "Cambios y retiros: 1", "Cambio: zapatillas"].every((x) => baulTxt.includes(x)), baulTxt.slice(0, 400));
+    check("Baúl: el cancelado no se vuelve a entregar; la custodia sin intento no es «No entregado»",
+      byLabel(tree, "P-CANC: Cancelado: devolvelo en planta, no se vuelve a entregar").length === 1
+      && byLabel(tree, "P-INT: No entregado").length === 1
+      && byLabel(tree, "P-CUST: Sin entregar (quedó con vos, sin intento)").length === 1);
+    check("Baúl: no mezcla los envíos de Flex", !baulTxt.includes("San Martín 10"));
+    check("Baúl: lo pedido y no declarado va aparte, «a verificar», sin sumar a los totales",
+      byLabel(tree, "V1: Pidieron traer Otro: control remoto y no lo declaraste. Si lo tenés, entregalo en planta.").length === 1 && baulTxt.includes("A verificar con coordinación") && baulTxt.includes("Cambios y retiros: 1"));
+    const baulRefresh = async (r: any) => {
+      api.replies["GET /v2/baul/me"] = r;
+      const sv = all(tree, (x) => x.type === "ScrollView" && !!x.props.refreshControl)[0];
+      await sv.props.refreshControl.props.onRefresh();
+      return settle();
+    };
+    tree = await baulRefresh({ ok: false, status: 404, invalidResponse: true, error: "x" });
+    check("Baúl: servidor sin el contrato (404) → función pendiente, sin error", textOf(tree).includes("Función pendiente") && textOf(tree).includes("Pronto vas a ver acá"));
+    tree = await baulRefresh(new Error("Network request failed"));
+    check("Baúl: sin red → aviso y reintento, sin datos viejos", textOf(tree).includes("Sin conexión") && !textOf(tree).includes("P-CANC"));
+    tree = await baulRefresh({ ok: true, totals: { cash_count: 0, cash_amount: 0, transfer_count: 0, transfer_amount: 0, parcels: 0, items: 0 }, cash: [], parcels: [], items: [] });
+    check("Baúl vacío: lo dice", textOf(tree).includes("No tenés nada pendiente"));
+    delete api.replies["GET /v2/baul/me"];
     tree = await press(tree, "Tradicionales");
     check("Tradicionales: «Próximamente»", textOf(tree).includes("Próximamente") && textOf(tree).includes("Envíos tradicionales"));
     for (const scheme of ["dark", "light"]) {
@@ -1212,6 +1249,7 @@ const setDriverApi = () => {
     check("Asignarme: la cámara sigue lista", all(tree, (x) => x.type === "CameraView").length === 1);
     check("Asignarme: contador de la sesión", summary(tree) === "1 escaneado", summary(tree));
     check("Asignarme: mismo pedido que antes (rol + self-assign)", same(api.calls, ["GET /v2/users/38/role", "PUT /v2/deliveries/self-assign"]), api.calls.join(", "));
+    check("Asignarme: manda el QR completo ({ qr }), sin parsearlo", same(api.bodies.filter(([k]) => k === "PUT /v2/deliveries/self-assign").map(([, b]) => b), [{ qr: ML("47000000101") }]), JSON.stringify(api.bodies));
     check("Asignarme: sin ids internos, patente ni vehículo en pantalla", !/24385|AB123CD|Moto|driver_data|user\.id|Backend|PRODUCCIÓN/.test(textOf(tree)), textOf(tree));
 
     // Dos códigos distintos seguidos: los dos se procesan; el rol se pide una vez.
@@ -1271,14 +1309,37 @@ const setDriverApi = () => {
     tree = await settle();
     check("Asignarme: «Entendido» cierra el escáner", same(lastNav(), ["goBack"]), JSON.stringify(nav.calls));
 
-    // Colecta: mismo contrato (POST /v2/deliveries/scan con sender_id y shipping_id).
+    // LightData y Lynx: llegan al servidor completos (antes la app rechazaba
+    // LightData y le sacaba el prefijo a Lynx).
+    {
+      const LD = '{"local":"1","did":1600274,"cliente":812,"empresa":72}';
+      api.replies = { "GET /v2/users/38/role": ROLE, "PUT /v2/deliveries/self-assign": { ok: true, result: "claimed", delivery_id: 1, route: { id: 900 } } };
+      tree = await open("asignarme"); api.bodies = [];
+      tree = await scan(tree, LD);
+      check("Asignarme LightData: llega al servidor con el QR entero y se nombra por su número", card(tree) === "Envío asignado. LightData 1600274"
+        && same(api.bodies.map(([, b]) => b), [{ qr: LD }]), `${card(tree)} | ${JSON.stringify(api.bodies)}`);
+      tree = await scan(tree, "LYNX:PKG:LP000012345");
+      check("Asignarme Lynx: con su prefijo, nombrada por su código", card(tree) === "Envío asignado. LP000012345"
+        && same(api.bodies.map(([, b]) => b)[1], { qr: "LYNX:PKG:LP000012345" }), `${card(tree)} | ${JSON.stringify(api.bodies)}`);
+      api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 400, code: "UNKNOWN_FORMAT", error: "El código no se pudo leer: no es una etiqueta de Mercado Libre, ni de Lynx, ni de LightData, ni un tracking" };
+      tree = await scan(tree, "CUALQUIER-COSA-123");
+      check("Asignarme código desconocido: lo decide el servidor y se muestra su motivo", card(tree).startsWith("No se pudo asignar. El código no se pudo leer") && writes() === 3, card(tree));
+      api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 409, code: "RESERVED", error: "Este paquete está asignado a otro chofer (recorrido #77). Si te lo tenés que llevar, pedíselo al coordinador." };
+      tree = await scan(tree, "LYNX:PKG:LP000099998");
+      check("Asignarme ya asignado a otro: rojo con el motivo del servidor, sin reasignar", card(tree).includes("asignado a otro chofer") && alerts.length === 0, card(tree));
+      api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 409, code: "NOT_IN_WAREHOUSE", error: "El envío todavía no está en un depósito (ENTERED): primero lo tiene que recibir un picker" };
+      tree = await scan(tree, "LD:1600275");
+      check("Asignarme estado no permitido: rojo con el motivo", card(tree).includes("primero lo tiene que recibir un picker"), card(tree));
+    }
+
+    // Colecta: POST /v2/deliveries/scan con el QR completo (el servidor lo resuelve).
     api.replies = { "POST /v2/deliveries/scan": { ok: true, status: 200, success: true } };
-    tree = await open("colecta");
+    tree = await open("colecta"); api.bodies = [];
     tree = await scan(tree, ML("47411111111"));
     check("Colecta: éxito en verde, sin diálogo", card(tree) === "Envío ingresado. 47411111111" && alerts.length === 0, card(tree));
-    check("Colecta: un solo pedido, sin buscar el rol", same(api.calls, ["POST /v2/deliveries/scan"]), api.calls.join(", "));
+    check("Colecta: un solo pedido, sin buscar el rol, con { qr }", same(api.calls, ["POST /v2/deliveries/scan"]) && same(api.bodies.map(([, b]) => b), [{ qr: ML("47411111111") }]), `${api.calls.join(", ")} | ${JSON.stringify(api.bodies)}`);
     tree = await scan(tree, "47422222222");
-    check("Colecta: tracking sin cuenta de ML → rojo, sin pedido", card(tree).startsWith("No reconocemos esta etiqueta") && api.calls.length === 1 && alerts.length === 0, card(tree));
+    check("Colecta: tracking pelado → lo resuelve el servidor (la app no lo rechaza)", card(tree) === "Envío ingresado. 47422222222" && api.calls.length === 2 && alerts.length === 0, card(tree));
     api.replies["POST /v2/deliveries/scan"] = { ok: true, status: 200, success: false, error: "No se encontró la cuenta del vendedor" };
     tree = await scan(tree, ML("47433333333"));
     check("Colecta: success:false en rojo con el motivo", card(tree) === "No se pudo ingresar. No se encontró la cuenta del vendedor", card(tree));
@@ -1766,7 +1827,7 @@ const setDriverApi = () => {
     const r158 = { id: 158, type: "DELIVERY", status: "IN_PROGRESS", scheduled_date: YESTERDAY, stops_count: 3, deliveries_count: 3, load_expected_count: 3, load_confirmed_count: 3, qr_token: "q", notes: null, started_at: null, completed_at: null,
       stops: [
         stopOf(1, 1, "DELIVERY", "PENDING", { route_id: 158, address: "Lavalle 300", postal_code: "1043", receiver_name: "Ana Pérez", latitude: -34.6, longitude: -58.38, deliveries: [dlv(1, "DELIVERED", "DELIVERED", { provider: "mercadolibre" })] }),
-        stopOf(2, 2, "DELIVERY", "PENDING", { route_id: 158, address: "Mitre 10", postal_code: null, receiver_name: "Luis", latitude: null, longitude: null, deliveries: [dlv(2, "OUT_FOR_DELIVERY", null, { tipo_envio: "propio" })] }),
+        stopOf(2, 2, "DELIVERY", "PENDING", { route_id: 158, address: "Mitre 10", postal_code: null, receiver_name: "Luis", latitude: null, longitude: null, deliveries: [dlv(2, "OUT_FOR_DELIVERY", null, { tipo_envio: "propio", reverse_kind: "CAMBIO", reverse_note: "remera talle M" })] }),
         stopOf(3, 3, "DELIVERY", "DONE", { route_id: 158, address: "Paso 5", receiver_name: "Eva", latitude: -34.61, longitude: -58.4, deliveries: [dlv(3, "DELIVERED", "DELIVERED")] }),
       ] };
     for (const scheme of ["dark", "light"]) {
@@ -1774,32 +1835,40 @@ const setDriverApi = () => {
       useTheme(th);
       api.calls = []; api.replies = { "GET /v2/routes/158": { ok: true, route: r158 } };
       tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
-      tree = await press(tree, "Lavalle 300");
+      tree = await press(tree, "Mitre 10");
+      tree = await press(tree, "Finalizados (2)");
       check(`Parada ${scheme}: legible`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
     }
     useTheme(dark);
     api.calls = []; api.replies = { "GET /v2/routes/158": { ok: true, route: r158 } };
     tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
-    const head = (t: any, address: string) => all(t, (x) => x.type === "Pressable" && textOf(x).includes(address) && /Pendiente|Cerrada|Resuelta/.test(textOf(x))).pop();
-    check("Parada: la dirección es el título y el destinatario va abajo", !!head(tree, "Lavalle 300") && textOf(head(tree, "Lavalle 300")).indexOf("Ana Pérez") > 0 && textOf(head(tree, "Lavalle 300")).includes("CP 1043"));
-    check("Parada: todo entregado por ML → «Resuelta» (no «Pendiente»), sin «Entregado · entregado»", textOf(head(tree, "Lavalle 300")).includes("Resuelta · 1 paquete · 1 entregado") && !/Entregado · entregado/i.test(textOf(tree)));
-    check("Parada con un envío por entregar: sigue «Pendiente»", textOf(head(tree, "Mitre 10")).includes("Pendiente · 1 paquete"));
-    check("Recorrido #158 con una entrega pendiente: «Completar» sigue frenado", !!pressable(tree, "Cerrá todas las paradas para completar").props.disabled);
-    tree = await press(tree, "Lavalle 300");
+    // El encabezado de cada parada (el que se toca para abrirla).
+    const head = (t: any, address: string) => all(t, (x) => x.type === "Pressable" && x.props.accessibilityState?.expanded !== undefined && textOf(x).includes(address)).pop();
     let body = textOf(tree);
-    check("Parada #158: todos entregados por ML → aviso de que se cierra sola al finalizar; «Cerrar parada» sigue a mano", body.includes("se cierra sola al finalizar el recorrido") && !!pressable(tree, "Cerrar parada") && !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Llegué").length);
-    check("Parada #158: el envío entregado no ofrece «Entregar» ni «No pude entregar»", !body.includes("No pude entregar") && !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Entregar").length);
-    // Envíos cerrados: plegado por defecto, con el contador; al abrirlo, «Entregado» en verde y el logo del canal.
-    check("Parada #158: «Envíos cerrados (1)» plegado, sin la fila del envío", body.includes("Envíos cerrados (1)") && !body.includes("4601"));
-    tree = await press(tree, "Envíos cerrados (1)");
-    const closedRow = all(tree, (x) => x.type === "View" && textOf(x).includes("4601") && textOf(x).includes("Entregado")).pop();
-    const deliveredText = closedRow && all(closedRow, (x) => x.type === "Text" && textOf(x) === "Entregado")[0];
-    check("Envíos cerrados: al abrirlo, el envío entregado en verde", !!deliveredText && flat(deliveredText.props.style).color === dark.status.confirmed.text);
-    check("Envíos cerrados: logo de Mercado Libre junto al tracking", all(closedRow, (x) => x.type === "Image" && x.props.accessibilityLabel === "Mercado Libre").length === 1);
-    tree = await press(tree, "Envíos cerrados (1)");
-    check("Envíos cerrados: se vuelve a plegar", !textOf(tree).includes("4601"));
+    check("Reparto: la cabecera cuenta envíos, pendientes y finalizados", body.includes("3 envíos · 1 pendiente · 2 finalizados"), body.slice(0, 200));
+    check("Reparto: arriba solo lo pendiente; «Finalizados (2)» plegado", !!head(tree, "Mitre 10") && !head(tree, "Lavalle 300") && !head(tree, "Paso 5") && body.includes("Finalizados (2)"));
+    check("Reparto: «Finalizados» debajo de los pendientes y antes de completar", body.indexOf("Mitre 10") < body.indexOf("Finalizados (2)") && body.indexOf("Finalizados (2)") < body.indexOf("Queda 1 parada pendiente"));
+    check("Reparto con una entrega pendiente: completar frenado, dice cuántas faltan", !!pressable(tree, "Queda 1 parada pendiente").props.disabled);
+    check("Parada: dirección como título, destinatario abajo y el estado real del envío", textOf(head(tree, "Mitre 10")).indexOf("Luis") > 0 && textOf(head(tree, "Mitre 10")).includes("En camino"));
+    check("Reparto: nunca «Resuelta» ni «En calle»", !/Resuelta|En calle/.test(body));
+    tree = await press(tree, "Finalizados (2)");
+    body = textOf(tree);
+    check("Finalizados: al abrirlo, las paradas terminadas en orden de visita, con dirección, destinatario y resultado",
+      body.indexOf("Lavalle 300") > 0 && body.indexOf("Lavalle 300") < body.indexOf("Paso 5") && ["Entregado", "Ana Pérez", "CP 1043"].every((x) => textOf(head(tree, "Lavalle 300")).includes(x)));
+    tree = await press(tree, "Lavalle 300");
+    body = textOf(tree);
+    check("Parada entregada por ML: sin «Cerrar parada», «Llegué», «Entregar» ni «No pude entregar»",
+      !all(tree, (x) => x.type === "Pressable" && ["Cerrar parada", "Llegué", "Entregar", "No pude entregar"].includes(textOf(x))).length);
+    check("Parada entregada: sin textos redundantes", !/ya figuran resueltos|No hace falta cerrarla|Envíos cerrados|1 paquete · 1 entregado/.test(body));
+    const deliveredRow = all(tree, (x) => x.type === "View" && textOf(x).includes("4601") && textOf(x).includes("Entregado")).pop();
+    const deliveredText = deliveredRow && all(deliveredRow, (x) => x.type === "Text" && textOf(x) === "Entregado")[0];
+    check("Parada entregada: «Entregado» en verde y el logo de Mercado Libre", !!deliveredText && flat(deliveredText.props.style).color === dark.status.confirmed.text
+      && all(deliveredRow, (x) => x.type === "Image" && x.props.accessibilityLabel === "Mercado Libre").length === 1);
+    const dimmed = (address: string) => all(tree, (x) => x.type === "View" && flat(x.props.style).opacity === 0.6 && textOf(x).includes(address)).length > 0;
+    check("Parada abierta destacada; las demás atenuadas pero tocables", !dimmed("Lavalle 300") && dimmed("Mitre 10") && dimmed("Paso 5") && !!head(tree, "Mitre 10"));
     tree = await press(tree, "Más");
-    check("Parada #158: «Más» trae la observación, pero no «Saltear» (ya se entregó)", all(tree, (x) => x.type === "TextInput" && x.props.placeholder === "Observación (opcional)").length === 1 && !textOf(tree).includes("Saltear parada"));
+    check("Parada entregada: «Más» trae la observación con su botón, sin «Saltear»",
+      byLabel(tree, "Observación de la parada").length === 1 && textOf(tree).includes("Guardar observación") && !textOf(tree).includes("Saltear parada"));
     nav.calls = []; const before = api.calls.length;
     const opened: string[] = [];
     const linking = RN.Linking as any;
@@ -1811,16 +1880,104 @@ const setDriverApi = () => {
     check("Parada sin coordenadas: «Cómo llegar» usa la dirección", opened[1] === "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent("Mitre 10"), opened[1]);
     linking.openURL = prevOpen;
     body = textOf(tree);
-    check("Parada con un envío por entregar: «Llegué», «Entregar» y «No pude entregar»", body.includes("Llegué") && body.includes("Entregar") && body.includes("No pude entregar") && !body.includes("ya figuran resueltos"));
+    check("Parada con un envío propio por entregar: «Llegué», «Entregar», «No pude entregar» y «Cerrar parada»",
+      ["Llegué", "Entregar", "No pude entregar", "Cerrar parada"].every((x) => body.includes(x)) && !body.includes("ya figuran resueltos"));
     tree = await press(tree, "Más");
     check("Parada sin entregas: «Saltear parada» dentro de «Más»", textOf(tree).includes("Saltear parada"));
+    // Observación: se guarda sola, con su botón; si falla, el texto queda.
+    {
+      const notesInput = () => byLabel(tree, "Observación de la parada")[0];
+      const puts = () => api.calls.filter((c) => c.startsWith("PUT"));
+      check("Observación: multilínea, sin enviar con Enter, y «Guardar» apagado sin cambios",
+        notesInput().props.multiline === true && !notesInput().props.onSubmitEditing && !!pressable(tree, "Guardar observación").props.disabled);
+      notesInput().props.onChangeText("Portón verde"); tree = await settle();
+      api.calls = []; api.bodies = [];
+      api.replies["PUT /v2/routes/158/stops/2/notes"] = { ok: false, status: 404, invalidResponse: true, error: "Respuesta inesperada del servidor (404)" };
+      pressable(tree, "Guardar observación").props.onPress(); pressable(tree, "Guardar observación").props.onPress(); tree = await settle();
+      check("Observación: doble toque, un solo pedido", puts().length === 1, js(api.calls));
+      check("Observación sin el endpoint en el servidor: lo dice, no simula el guardado y el texto queda",
+        textOf(tree).includes("falta actualizar el servidor") && !textOf(tree).includes("Observación guardada") && notesInput().props.value === "Portón verde");
+      api.replies["PUT /v2/routes/158/stops/2/notes"] = new Error("Network request failed");
+      tree = await press(tree, "Guardar observación");
+      check("Observación sin red: avisa y el texto queda", textOf(tree).includes("Tu texto sigue acá") && notesInput().props.value === "Portón verde");
+      // El servidor responde la parada con la observación en driver_notes (la nota del sistema queda en notes).
+      api.replies["PUT /v2/routes/158/stops/2/notes"] = { ok: true, stop: { ...r158.stops[1], notes: "escaneado por el chofer", driver_notes: "Portón verde", driver_notes_by: "chofer" } };
+      api.bodies = [];
+      tree = await press(tree, "Guardar observación");
+      check("Observación: PUT /v2/routes/158/stops/2/notes con el texto y confirma", js(api.bodies) === js([["PUT /v2/routes/158/stops/2/notes", { notes: "Portón verde" }]]) && textOf(tree).includes("Observación guardada"), js(api.bodies));
+      check("Observación guardada: el campo queda con driver_notes, sin la nota del sistema", notesInput().props.value === "Portón verde" && !textOf(tree).includes("escaneado por el chofer"));
+      api.bodies = [];
+      tree = await press(tree, "No pude entregar");
+      const comment = all(tree, (x) => x.type === "TextInput" && /Comentario \(opcional\)/.test(x.props.placeholder ?? ""))[0];
+      check("No pude entregar (propio): comentario opcional, multilínea", !!comment && comment.props.multiline === true);
+      comment.props.onChangeText("  Nadie en casa  "); tree = await settle();
+      tree = await press(tree, "Confirmar no entregado");
+      const nd = api.bodies.find(([k]) => k === "POST /v2/routes/158/stops/2/outcomes");
+      check("No pude entregar: el comentario viaja en notes (recortado), sin declarar nada más",
+        !!nd && js(nd[1]) === js({ delivery_id: nd[1].delivery_id, outcome: "NOT_DELIVERED", notes: "Nadie en casa" }), js(api.bodies));
+      api.bodies = [];
+      check("Logística inversa: la parada avisa lo que pidió coordinación", textOf(tree).includes("Coordinación pidió traer: Cambio · remera talle M"));
+      tree = await press(tree, "Entregar");
+      check("Logística inversa al entregar: lo sugiere sin marcarlo (el chofer declara si lo retiró)",
+        textOf(tree).includes("Si lo retiraste, marcalo acá abajo")
+        && all(tree, (x) => x.type === "Pressable" && textOf(x) === "¿Traés algo de vuelta? (opcional)")[0]?.props.accessibilityState?.expanded === false
+        && !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Va y vuelve").length);
+      tree = await press(tree, "Confirmar entrega");
+      const post = api.bodies.find(([k]) => k === "POST /v2/routes/158/stops/2/outcomes");
+      check("Logística inversa sin marcar: no viaja un retiro que el chofer no declaró", !!post && post[1].closure === undefined && post[1].return_item === undefined, js(post));
+      check("Entrega propia: el resultado ya no lleva la observación escondida", !!post && post[1].notes === null, js(api.bodies));
+      delete api.replies["PUT /v2/routes/158/stops/2/notes"];
+    }
+    // Al abrir: el campo trae la observación guardada del chofer (driver_notes), nunca
+    // la nota del sistema (notes); «Saltear» manda «salteada» a notes sin tocarla.
+    {
+      const withNotes = { ...r158, stops: r158.stops.map((s: any) => (s.id === 2 ? { ...s, notes: "escaneado por el chofer", driver_notes: "Timbre roto" } : s)) };
+      api.replies = { "GET /v2/routes/158": { ok: true, route: withNotes } };
+      let t = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      t = await press(t, "Mitre 10");
+      t = await press(t, "Más");
+      check("Observación al abrir: la del chofer, no la del sistema", byLabel(t, "Observación de la parada")[0]?.props.value === "Timbre roto" && !textOf(t).includes("escaneado por el chofer"));
+      alerts.length = 0; api.bodies = [];
+      t = await press(t, "Saltear parada");
+      alerts[0][2][1].onPress(); await settle();
+      check("Saltear: «salteada» va a notes; la observación del chofer no viaja", js(api.bodies.filter(([k]) => k.endsWith("/skip"))) === js([["PUT /v2/routes/158/stops/2/skip", { notes: "salteada" }]]), js(api.bodies));
+      api.replies = { "GET /v2/routes/158": { ok: true, route: r158 } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
+      tree = await press(tree, "Mitre 10");
+    }
     // Mapa del recorrido.
+    api.calls = [];
     tree = await press(tree, "Ver recorrido en el mapa");
     const mapModal = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("Recorrido completo"));
     const pins = mapModal ? all(mapModal, (x) => x.type === "Marker").map((m) => textOf(m)) : [];
     check("Mapa del recorrido: las paradas con ubicación, numeradas en orden", js(pins) === js(["1", "3"]), js(pins));
     check("Mapa del recorrido: dice cuántas no tienen ubicación", !!mapModal && textOf(mapModal).includes("1 sin ubicación"));
     check("Mapa del recorrido: no pide nada al servidor", !api.calls.some((c) => c.startsWith("PUT") || c.startsWith("POST")));
+
+    // Mercado Libre (aunque no sea Flex: se reconoce por el proveedor) se cierra
+    // en Envíos Flex: Lynx avisa y no registra nada.
+    {
+      const r159 = { ...r158, id: 159, stops: [stopOf(5, 1, "DELIVERY", "ARRIVED", { route_id: 159, address: "Corrientes 900", receiver_name: "Mara",
+        deliveries: [dlv(5, "OUT_FOR_DELIVERY", null, { tipo_envio: "otro", provider: "mercadolibre" })] })] };
+      api.calls = []; alerts.length = 0; api.replies = { "GET /v2/routes/159": { ok: true, route: r159 } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 159 } } }));
+      check("ML en camino: pendiente, «Llegaste · En camino»", textOf(head(tree, "Corrientes 900")).includes("Llegaste · En camino") && textOf(tree).includes("1 envío · 1 pendiente · 0 finalizados"));
+      tree = await press(tree, "Corrientes 900");
+      const writes = () => api.calls.filter((c) => c.startsWith("POST") || c.startsWith("PUT"));
+      tree = await press(tree, "Entregar");
+      check("ML: «Entregar» avisa que se finaliza en Envíos Flex, sin pedir nada al servidor",
+        js(alerts[0]?.slice(0, 2)) === js(["Entrega de Mercado Libre", "Para confirmar esta entrega, tenés que finalizarla desde la aplicación Envíos Flex de Mercado Libre. Lynx actualizará automáticamente el estado cuando reciba la información."])
+        && js(alerts[0]?.[2]?.map((b: any) => b.text)) === js(["Entendido"]) && !writes().length && !textOf(tree).includes("Confirmar entrega"));
+      tree = await press(tree, "No pude entregar");
+      check("ML: «No pude entregar» avisa lo mismo, sin registrar un no entregado ni abrir el Baúl",
+        js(alerts[1]?.slice(0, 2)) === js(["Entrega de Mercado Libre", "Registrá el resultado de esta entrega desde la aplicación Envíos Flex de Mercado Libre. Lynx actualizará el estado automáticamente cuando reciba la información."])
+        && !writes().length && !textOf(tree).includes("Confirmar no entregado"));
+      tree = await press(tree, "Cerrar parada");
+      check("Cerrar una parada con ML sin resultado: avisa del Baúl antes y no cierra sin confirmar",
+        alerts[2]?.[0] === "Mercado Libre todavía no lo cerró" && /Baúl/.test(alerts[2]?.[1]) && !writes().length);
+      alerts[2][2][1].onPress(); await settle();
+      check("«Cerrar igual»: cierra la parada (PUT done), sin observación escondida", js(api.bodies.slice(-1)) === js([["PUT /v2/routes/159/stops/5/done", {}]]), js(api.bodies.slice(-1)));
+    }
 
     // Mercado Libre entrega lo que faltaba: la app se entera al volver de Envíos
     // Flex (primer plano) o a la pantalla, sin sondeo, y deja finalizar sin
@@ -1841,7 +1998,7 @@ const setDriverApi = () => {
       appStateCbs.at(-1)("background"); await settle();
       check("Recorrido: pasar a segundo plano no lo pide", gets() === 1);
       appStateCbs.at(-1)("active"); tree = await settle();
-      check("Recorrido: al volver a la app lo relee y refleja lo que cerró ML", gets() === 2 && textOf(head(tree, "Mitre 10")).includes("Resuelta"));
+      check("Recorrido: al volver a la app lo relee y refleja lo que cerró ML", gets() === 2 && textOf(tree).includes("3 envíos · 0 pendientes · 3 finalizados") && textOf(tree).includes("Finalizados (3)"));
       focusCbs.at(-1)(); await settle();
       check("Recorrido: al volver a la pantalla lo relee", gets() === 3);
       const finish = pressable(tree, "Completar recorrido");
@@ -1852,11 +2009,29 @@ const setDriverApi = () => {
       api.replies["PUT /v2/routes/158/complete"] = { ok: true, route: { ...done158, status: "COMPLETED" } };
       alerts[0][2][1].onPress(); await settle();
       check("Completar: un solo PUT /complete, sin cerrar paradas una por una", js(api.calls.filter((c) => c.startsWith("PUT"))) === js(["PUT /v2/routes/158/complete"]), js(api.calls));
-      // Un cancelado sin resultado no lo resuelve el servidor: sigue pidiendo cerrar la parada.
+      // Un cancelado sin resultado está terminado (va a «Finalizados»), pero el
+      // servidor no cierra esa parada solo: la app la cierra antes de completar.
       const cancelled158 = { ...r158, stops: r158.stops.map((s: any) => s.id === 2 ? { ...s, deliveries: [dlv(2, "CANCELLED", null, { tipo_envio: "propio" })] } : s) };
+      api.calls = []; alerts.length = 0;
       api.replies = { "GET /v2/routes/158": { ok: true, route: cancelled158 } };
       tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 158 } } }));
-      check("Cancelado sin resultado: la parada no se da por resuelta y «Completar» sigue frenado", textOf(head(tree, "Mitre 10")).includes("Pendiente") && !!pressable(tree, "Cerrá todas las paradas para completar").props.disabled);
+      check("Cancelado: «Finalizados» y «Completar» habilitado sin cerrarla a mano", textOf(tree).includes("Finalizados (3)") && !pressable(tree, "Completar recorrido").props.disabled);
+      tree = await press(tree, "Finalizados (3)");
+      check("Cancelado: se ve «Cancelado»", textOf(head(tree, "Mitre 10")).includes("Cancelado"));
+      tree = await press(tree, "Completar recorrido");
+      alerts[0][2][1].onPress(); await settle();
+      check("Completar con un cancelado: cierra esa parada y después completa", js(api.calls.filter((c) => c.startsWith("PUT"))) === js(["PUT /v2/routes/158/stops/2/done", "PUT /v2/routes/158/complete"]), js(api.calls));
+      // Recorrido grande: 100 paradas, 30 terminadas. Lo terminado no se dibuja
+      // hasta abrir «Finalizados»; los pendientes, por sequence.
+      const big = { ...r158, id: 160, stops: Array.from({ length: 100 }, (_, i) => stopOf(1000 + i, 100 - i, "DELIVERY", "PENDING", { route_id: 160, address: `Calle ${100 - i}`,
+        deliveries: [dlv(1000 + i, i < 30 ? "DELIVERED" : "OUT_FOR_DELIVERY", i < 30 ? "DELIVERED" : null, { tipo_envio: "propio" })] })) };
+      api.replies = { "GET /v2/routes/160": { ok: true, route: big } };
+      const t0 = Date.now();
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 160 } } }));
+      const heads = all(tree, (x) => x.type === "Pressable" && x.props.accessibilityState?.expanded !== undefined && /^\d+Calle/.test(textOf(x)));
+      const seqs = heads.map((h) => Number(textOf(h).match(/^(\d+)/)?.[1]));
+      check("100 paradas: solo las 70 pendientes dibujadas, en orden de sequence; «Finalizados (30)» plegado",
+        heads.length === 70 && seqs.every((n, i) => i === 0 || n > seqs[i - 1]) && textOf(tree).includes("Finalizados (30)"), `${heads.length} · ${Date.now() - t0} ms`);
       (RN.AppState as any).addEventListener = prevAdd; (nav as any).addListener = prevListen;
     }
 
@@ -2030,6 +2205,12 @@ const setDriverApi = () => {
       const profileBtn = byLabel(tree, "Perfil")[0];
       check("Inicio: la selfie en el botón de perfil (círculo)", !!profileBtn && avatars(profileBtn).length === 1 && flat(avatars(profileBtn)[0].props.style).borderRadius === 21);
       check("Inicio: el rayito Turbo sigue igual", byLabel(tree, "Opciones Turbo").length === 1);
+      // El asistente: en la cabecera, a la izquierda del rayito (y ya no flotando sobre la barra).
+      const headerOrder = all(tree, (x) => ["Asistente de ayuda", "Opciones Turbo", "Perfil"].includes(x.props?.accessibilityLabel)).map((x) => x.props.accessibilityLabel);
+      check("Inicio: cabecera asistente · Turbo · perfil, un solo asistente", JSON.stringify(headerOrder) === JSON.stringify(["Asistente de ayuda", "Opciones Turbo", "Perfil"]), JSON.stringify(headerOrder));
+      nav.calls = [];
+      byLabel(tree, "Asistente de ayuda")[0].props.onPress();
+      check("Inicio: el asistente abre la ayuda", JSON.stringify(nav.calls) === JSON.stringify([["navigate", "DriverHelpScreen"]]), JSON.stringify(nav.calls));
       check("Inicio: la selfie se pide una vez", api.calls.filter((c) => c === "GET /v2/drivers/49/extra").length === 1);
       api.replies = { "GET /v2/users/7/role": { ok: true, rol: "DRIVER", data: { id: 49 } }, "GET /v2/drivers/49/extra": { ok: true, extra: null } };
       tree = await mount(RealReact.createElement(HomeScreen, { navigation: nav, route: { params: {} } }));

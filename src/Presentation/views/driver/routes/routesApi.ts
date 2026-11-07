@@ -36,6 +36,10 @@ export type StopDelivery = {
   // not_delivered, o traducido). Un servidor anterior no lo manda: sin él, un
   // «no entregado» de ML se ve por ops_status/outcome.
   status_ml?: string | null;
+  // Logística inversa pedida por coordinación (CAMBIO, RECUPERO, VA_Y_VUELVE,
+  // OTRO): una solicitud, no algo que el chofer ya tenga. Un servidor anterior no la manda.
+  reverse_kind?: string | null;
+  reverse_note?: string | null;
 };
 export type Stop = {
   id: number; route_id: number; sequence: number; type: "PICKUP" | "DELIVERY"; status: StopStatus;

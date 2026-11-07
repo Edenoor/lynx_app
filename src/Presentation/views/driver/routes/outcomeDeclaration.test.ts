@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/routes/outcomeDeclaration.ts src/Presentation/views/driver/routes/outcomeDeclaration.test.ts
 //   node /tmp/decl/outcomeDeclaration.test.js
 
-import { buildDeclaration, cobranzaOf, emptyDraft, formatAmountAr, NOTES_MAX, OutcomeDraft, outcomeNotes, parseAmountAr } from "./outcomeDeclaration";
+import { buildDeclaration, cobranzaOf, emptyDraft, formatAmountAr, NOTES_MAX, OutcomeDraft, outcomeNotes, parseAmountAr, reverseRequestText } from "./outcomeDeclaration";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -94,6 +94,8 @@ eq("no entregado ignora cobro y vuelta",
   { ok: true, declaration: { closure: "CANCELACION" } });
 eq("entregado ignora destino", buildDeclaration("DELIVERED", draft({ destination: "DEVOLUCION" })), { ok: true, declaration: {} });
 
+eq("logística inversa: texto de la solicitud, o nada", [reverseRequestText("CAMBIO", " talle M "), reverseRequestText("OTRO", null), reverseRequestText(null, "x")], ["Coordinación pidió traer: Cambio · talle M", "Coordinación pidió traer: Otro", null]);
+eq("el chofer puede declarar OTRO (con qué trae)", buildDeclaration("DELIVERED", draft({ returnKind: "OTRO", returnItem: "control" })), { ok: true, declaration: { closure: "OTRO", return_item: "control" } });
 
 console.log(failed ? `\n${failed} pruebas fallaron` : "\nTodas las pruebas pasaron");
 if (failed) throw new Error(`${failed} pruebas fallaron`);

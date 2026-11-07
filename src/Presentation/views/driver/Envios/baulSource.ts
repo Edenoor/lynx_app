@@ -16,8 +16,11 @@ export type BaulCash = BaulRow & { expected_amount: number; declared_amount: num
 // de entrega (si no, quedó con él sin intentarlo).
 export type BaulParcel = BaulRow & { kind?: "NOT_DELIVERED" | "CANCELLED"; attempted?: boolean };
 export type BaulItem = BaulRow & { closure: string; return_item: string | null };
+// Coordinación pidió traer algo y lo entregaste sin declarar que lo retiraste:
+// no está en tu Baúl, es para verificar.
+export type BaulToVerify = BaulRow & { reverse_kind: string; reverse_note: string | null };
 export type BaulTotals = { cash_count: number; cash_amount: number; transfer_count: number; transfer_amount: number; parcels: number; items: number };
-export type MyBaul = { totals: BaulTotals; cash: BaulCash[]; parcels: BaulParcel[]; items: BaulItem[] };
+export type MyBaul = { totals: BaulTotals; cash: BaulCash[]; parcels: BaulParcel[]; items: BaulItem[]; toVerify: BaulToVerify[] };
 
 export type BaulResult =
   | { status: "ok"; baul: MyBaul }
@@ -28,9 +31,9 @@ export function toBaulResult(json: any): BaulResult {
   if (json?.status === 404) return { status: "unsupported" };
   if (!json?.ok) return { status: "error", message: json?.message || json?.error || "No se pudo cargar el Baúl" };
   const list = (x: unknown) => (Array.isArray(x) ? x : []);
-  const cash = list(json.cash), parcels = list(json.parcels), items = list(json.items);
+  const cash = list(json.cash), parcels = list(json.parcels), items = list(json.items), toVerify = list(json.to_verify);
   const totals: BaulTotals = json.totals ?? { cash_count: cash.length, cash_amount: 0, transfer_count: 0, transfer_amount: 0, parcels: parcels.length, items: items.length };
-  return { status: "ok", baul: { totals, cash, parcels, items } };
+  return { status: "ok", baul: { totals, cash, parcels, items, toVerify } };
 }
 
 export async function fetchMyBaul(): Promise<BaulResult> {

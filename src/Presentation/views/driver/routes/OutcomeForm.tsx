@@ -17,6 +17,8 @@ import {
 type Props = {
   outcome: "DELIVERED" | "NOT_DELIVERED";
   cobranza: number | null;
+  // Texto de la logística inversa pedida por coordinación (reverseRequestText).
+  reverseRequest?: string | null;
   busy: boolean;
   error: string | null;
   onConfirm: (draft: OutcomeDraft) => void;
@@ -24,10 +26,10 @@ type Props = {
 };
 
 const PAYMENTS: PaymentMethod[] = ["CASH", "TRANSFER"];
-const RETURNS: ReturnKind[] = ["CAMBIO", "RECUPERO", "VA_Y_VUELVE"];
+const RETURNS: ReturnKind[] = ["CAMBIO", "RECUPERO", "VA_Y_VUELVE", "OTRO"];
 const DESTINATIONS: Destination[] = ["REENTREGA", "DEVOLUCION", "CANCELACION"];
 
-export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm, onCancel }: Props) {
+export default function OutcomeForm({ outcome, cobranza, reverseRequest = null, busy, error, onConfirm, onCancel }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [draft, setDraft] = useState<OutcomeDraft>(() => emptyDraft(cobranza !== null ? formatAmountAr(cobranza) : ""));
@@ -73,6 +75,9 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
             </>
           ) : null}
 
+          {reverseRequest ? (
+            <Text style={styles.request}>{reverseRequest}. Si lo retiraste, marcalo acá abajo; si no, dejalo sin marcar.</Text>
+          ) : null}
           <Toggle label="¿Traés algo de vuelta? (opcional)" open={returnOpen} onPress={() => { if (returnOpen) set({ returnKind: null, returnItem: "" }); setReturnOpen(!returnOpen); }} />
           {returnOpen ? (
             <>
@@ -142,6 +147,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   label: { color: t.text.primary, fontSize: 13, fontWeight: "600" },
   hint: { color: t.text.secondary, fontSize: 12, lineHeight: 16 },
   warn: { color: t.status.pending.text, fontSize: 13 },
+  request: { color: t.status.pending.text, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   cobrar: { borderWidth: 1, borderColor: t.status.pending.border, borderRadius: t.radius.md, padding: 10, gap: 2 },
   cobrarText: { color: t.status.pending.text, fontSize: 16, fontWeight: "700" },
   toggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 4 },

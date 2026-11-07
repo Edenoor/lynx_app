@@ -11,7 +11,7 @@ import type { Theme } from "../../../theme/createTheme";
 import type { BaulParcel, MyBaul } from "./baulSource";
 
 const money = (v: unknown) => `$${(Number(v) || 0).toLocaleString("es-AR")}`;
-const CLOSURE_LABEL: Record<string, string> = { CAMBIO: "Cambio", RECUPERO: "Recupero", VA_Y_VUELVE: "Va y vuelve" };
+const CLOSURE_LABEL: Record<string, string> = { CAMBIO: "Cambio", RECUPERO: "Recupero", VA_Y_VUELVE: "Va y vuelve", OTRO: "Otro" };
 
 const parcelLabel = (p: BaulParcel) =>
   p.kind === "CANCELLED" ? "Cancelado: devolvelo en planta, no se vuelve a entregar"
@@ -20,8 +20,8 @@ const parcelLabel = (p: BaulParcel) =>
 export default function BaulPanel({ baul }: { baul: MyBaul }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
-  const { totals, cash, parcels, items } = baul;
-  const empty = !cash.length && !parcels.length && !items.length;
+  const { totals, cash, parcels, items, toVerify } = baul;
+  const empty = !cash.length && !parcels.length && !items.length && !toVerify.length;
 
   return (
     <View style={styles.wrap}>
@@ -53,6 +53,11 @@ export default function BaulPanel({ baul }: { baul: MyBaul }) {
       {items.length ? <Section title="Cambios y retiros">{items.map((i) => (
         <Row key={`i${i.delivery_id}`} title={i.tracking || i.lynx_code || `#${i.delivery_id}`} sub={i.store}
           detail={`${CLOSURE_LABEL[i.closure] ?? i.closure}${i.return_item ? `: ${i.return_item}` : ""}`} />
+      ))}</Section> : null}
+
+      {toVerify.length ? <Section title="A verificar con coordinación">{toVerify.map((v) => (
+        <Row key={`v${v.delivery_id}`} title={v.tracking || v.lynx_code || `#${v.delivery_id}`} sub={v.store}
+          detail={`Pidieron traer ${CLOSURE_LABEL[v.reverse_kind] ?? v.reverse_kind}${v.reverse_note ? `: ${v.reverse_note}` : ""} y no lo declaraste. Si lo tenés, entregalo en planta.`} />
       ))}</Section> : null}
     </View>
   );

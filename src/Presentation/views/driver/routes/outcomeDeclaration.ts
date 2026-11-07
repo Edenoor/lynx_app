@@ -5,11 +5,20 @@
 // Módulo puro (sin React Native) para poder probarlo solo.
 
 export type PaymentMethod = "CASH" | "TRANSFER";
-export type ReturnKind = "CAMBIO" | "RECUPERO" | "VA_Y_VUELVE";
+export type ReturnKind = "CAMBIO" | "RECUPERO" | "VA_Y_VUELVE" | "OTRO";
 export type Destination = "REENTREGA" | "DEVOLUCION" | "CANCELACION";
 
 export const PAYMENT_LABEL: Record<PaymentMethod, string> = { CASH: "Efectivo", TRANSFER: "Transferencia" };
-export const RETURN_LABEL: Record<ReturnKind, string> = { CAMBIO: "Cambio", RECUPERO: "Recupero", VA_Y_VUELVE: "Va y vuelve" };
+export const RETURN_LABEL: Record<ReturnKind, string> = { CAMBIO: "Cambio", RECUPERO: "Recupero", VA_Y_VUELVE: "Va y vuelve", OTRO: "Otro" };
+
+// Lo que pidió coordinación, para avisarle al chofer. Es una solicitud: la
+// app no la da por retirada ni la marca sola (eso lo declara el chofer).
+export function reverseRequestText(kind?: string | null, note?: string | null): string | null {
+  if (!kind) return null;
+  const label = RETURN_LABEL[kind as ReturnKind] ?? kind;
+  const what = String(note ?? "").trim();
+  return `Coordinación pidió traer: ${label}${what ? ` · ${what}` : ""}`;
+}
 export const DESTINATION_LABEL: Record<Destination, string> = { REENTREGA: "Reentrega", DEVOLUCION: "Devolución", CANCELACION: "Cancelación" };
 
 // Mismo tope que el servidor (columna NUMERIC(12,2)).
