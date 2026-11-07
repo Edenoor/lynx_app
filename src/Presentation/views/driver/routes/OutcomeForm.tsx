@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import {
-  Destination, DESTINATION_LABEL, emptyDraft, formatAmountAr, OutcomeDraft, parseAmountAr, PAYMENT_LABEL, PaymentMethod, RETURN_LABEL, ReturnKind,
+  Destination, DESTINATION_LABEL, emptyDraft, formatAmountAr, NOTES_MAX, OutcomeDraft, parseAmountAr, PAYMENT_LABEL, PaymentMethod, RETURN_LABEL, ReturnKind,
 } from "./outcomeDeclaration";
 
 type Props = {
@@ -90,6 +90,8 @@ export default function OutcomeForm({ outcome, cobranza, busy, error, onConfirm,
           <Chips options={DESTINATIONS} labels={DESTINATION_LABEL} value={draft.destination}
             onChange={(v) => set({ destination: v })} />
           <Text style={styles.hint}>Devolución y Cancelación lo mandan de vuelta a la tienda: no vuelve a salir.</Text>
+          <TextInput value={draft.notes} onChangeText={(t) => set({ notes: t })} maxLength={NOTES_MAX} multiline
+            placeholder="Comentario (opcional): qué pasó" placeholderTextColor={theme.text.muted} style={[styles.input, styles.notes]} />
         </>
       )}
 
@@ -148,6 +150,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   chipActive: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
   chipText: { color: t.text.primary, fontWeight: "600" },
   chipTextActive: { color: t.text.onPrimary },
+  notes: { minHeight: 64, paddingVertical: 10, textAlignVertical: "top" },
   input: { minHeight: 44, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, backgroundColor: t.surfaces.input, color: t.text.primary, paddingHorizontal: 12 },
   btn: { alignItems: "center", justifyContent: "center", backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 16, minHeight: 44 },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: t.borders.default },

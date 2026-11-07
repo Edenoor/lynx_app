@@ -21,7 +21,7 @@ import {
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
 import { NO_RETIRAR_ANTES, programadoLabel } from "../turbo/turboOffer";
 import OutcomeForm from "./OutcomeForm";
-import { buildDeclaration, cobranzaOf, OutcomeDraft } from "./outcomeDeclaration";
+import { buildDeclaration, cobranzaOf, OutcomeDraft, outcomeNotes } from "./outcomeDeclaration";
 import { errorMessage } from "../errorMessage";
 import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from "./pickupConfirmation";
 import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
@@ -463,7 +463,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
     setCloseError(null);
     // El error (un 400 de la declaración, o sin red) se muestra solo en el cierre: no arriba de todo, ni se recarga.
     act(async () => {
-      await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, undefined, built.declaration);
+      await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, outcomeNotes(closing.outcome, draft), built.declaration);
       setClosing(null);
     }, setCloseError);
   };

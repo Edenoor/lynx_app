@@ -20,7 +20,7 @@ const brief = (item: Parameters<typeof classifyDelivery>[0]) => {
 for (const [ops, want] of [
   ["DELIVERED", ["delivered", "Entregado", true, false, null]],
   ["CANCELLED", ["cancelled", "Cancelado", true, true, null]],
-  ["NOT_DELIVERED", ["notDelivered", "No entregado", false, true, null]],
+  ["NOT_DELIVERED", ["notDelivered", "Sin entregar", false, true, null]],
   ["ENTERED", ["inProgress", "Ingresado", false, false, null]],
   ["COLLECTED", ["inProgress", "Colectado", false, false, null]],
   ["ARRIVED_WAREHOUSE", ["inProgress", "En planta", false, false, null]],
@@ -57,6 +57,7 @@ for (const [ml, want] of [
 ] as const) {
   eq(`sin ops, status_ml «${ml}»`, brief({ ops_status: null, status_ml: ml }), want);
 }
+eq("NOT_DELIVERED es custodia: «No entregado» solo si ML registró el intento", [brief({ ops_status: "NOT_DELIVERED" })[1], brief({ ops_status: "NOT_DELIVERED", status_ml: "not_delivered" })[1]], ["Sin entregar", "No entregado"]);
 eq("«No entregado» nunca cuenta como entregado", classifyDelivery({ status_ml: "No entregado" }).phase, "notDelivered");
 eq("sin ops ni status_ml: usa status (mapa ML en español)", brief({ status: "Entregado" }), ["delivered", "Entregado", true, false, null]);
 eq("sin ops ni status_ml: usa estado legacy", brief({ estado: "En camino" }), ["inProgress", "En camino", false, false, null]);

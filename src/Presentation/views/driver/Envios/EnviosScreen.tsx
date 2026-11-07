@@ -4,7 +4,7 @@
 //     programados para mañana.
 //   Flex: recorridos de reparto abiertos (también de días anteriores) y sus
 //     envíos; finalizados por día o rango; el historial legacy (/v1).
-//   Baúl: pendiente de un contrato de lectura para el chofer (baulSource.ts).
+//   Baúl: lo que el chofer tiene que rendir o devolver (GET /v2/baul/me).
 //   Envíos tradicionales: próximamente.
 // Arriba, la bandeja de ofertas con su contador; abajo, «Continuar» si hay un
 // recorrido en la calle. Los recorridos se leen de workSource (compartido con
@@ -32,6 +32,7 @@ import { File, Paths } from "expo-file-system/next";
 import useEnviosViewModel from "./ViewModel";
 import { classifyDelivery, deliveryKey } from "./deliveryState";
 import { fetchMyBaul, BaulResult } from "./baulSource";
+import BaulPanel from "./BaulPanel";
 import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
 import global from "../../../theme/global";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
@@ -376,6 +377,13 @@ export const EnviosScreen = ({ navigation }: any) => {
   useEffect(() => {
     if (modality === "turbo" && sub === "tomorrow" && !scheduled) void loadScheduled();
   }, [modality, sub, scheduled, loadScheduled]);
+
+  const [baulRefreshing, setBaulRefreshing] = useState(false);
+  const reloadBaul = useCallback(async () => {
+    setBaulRefreshing(true);
+    setBaul(await fetchMyBaul());
+    setBaulRefreshing(false);
+  }, []);
 
   useEffect(() => {
     if (modality === "baul" && !baul) void fetchMyBaul().then(setBaul);
@@ -770,17 +778,24 @@ export const EnviosScreen = ({ navigation }: any) => {
       </View>
 
       {modality === "baul" ? (
-        <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 124 + bottomSpace }]}>
-          <InfoPanel
-            icon="briefcase-outline"
-            title="Baúl"
-            text={
-              baul?.status === "unsupported"
-                ? "Pronto vas a ver acá lo que tenés en el Baúl: cobranzas por rendir, paquetes y cambios para devolver. Por ahora, consultalo con coordinación o en planta."
-                : "Cargando…"
-            }
-            tag="Función pendiente"
-          />
+        <ScrollView
+          contentContainerStyle={[styles.listContent, { paddingBottom: 124 + bottomSpace }]}
+          refreshControl={<RefreshControl refreshing={baulRefreshing} onRefresh={reloadBaul} tintColor={theme.colors.primary} />}
+        >
+          {baul?.status === "ok" ? (
+            <BaulPanel baul={baul.baul} />
+          ) : baul?.status === "unsupported" ? (
+            <InfoPanel
+              icon="briefcase-outline"
+              title="Baúl"
+              text="Pronto vas a ver acá lo que tenés en el Baúl: cobranzas por rendir, paquetes y cambios para devolver. Por ahora, consultalo con coordinación o en planta."
+              tag="Función pendiente"
+            />
+          ) : baul?.status === "error" ? (
+            <InfoPanel icon="briefcase-outline" title="Baúl" text={`${baul.message} Deslizá hacia abajo para reintentar.`} tag="Sin datos" />
+          ) : (
+            <InfoPanel icon="briefcase-outline" title="Baúl" text="Cargando…" tag="Baúl" />
+          )}
         </ScrollView>
       ) : modality === "tradicional" ? (
         <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 124 + bottomSpace }]}>

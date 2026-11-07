@@ -15,7 +15,7 @@ import type { Stop, StopDelivery } from "./routesApi";
 
 export const OPS_LABEL: Record<string, string> = {
   ENTERED: "Ingresado", COLLECTED: "Colectado", ARRIVED_WAREHOUSE: "En planta", SHELVED: "Estanteado", ASSIGNED_TO_ROUTE: "En recorrido",
-  OUT_FOR_DELIVERY: "En calle", DELIVERED: "Entregado", NOT_DELIVERED: "No entregado", CANCELLED: "Cancelado",
+  OUT_FOR_DELIVERY: "En calle", DELIVERED: "Entregado", NOT_DELIVERED: "Sin entregar", CANCELLED: "Cancelado",
 };
 
 // Terminales del envío: no admiten otro resultado (el servidor responde 409).
@@ -68,7 +68,9 @@ export function deliveryView(d: Pick<StopDelivery, "outcome" | "ops_status" | "s
   if (ops === "DELIVERED" || d.outcome === "DELIVERED" || ml === "delivered") return { label: "Entregado", final: true, tone: "delivered" };
   if (ops === "CANCELLED" || ml === "cancelled") return { label: "Cancelado", final: true, tone: "cancelled" };
   if (d.outcome === "RETURNED") return { label: "Devuelto", final: true, tone: "failed" };
-  if (d.outcome === "NOT_DELIVERED" || ops === "NOT_DELIVERED" || ml === "not_delivered") return { label: "No entregado", final: true, tone: "failed" };
+  if (d.outcome === "NOT_DELIVERED" || ml === "not_delivered") return { label: "No entregado", final: true, tone: "failed" };
+  // ops NOT_DELIVERED sin resultado ni ML: quedó con el chofer sin intento (custodia).
+  if (ops === "NOT_DELIVERED") return { label: "Sin entregar · en tu Baúl", final: true, tone: "pending" };
   if (ops === "OUT_FOR_DELIVERY" || ml === "shipped") return { label: "En camino", final: false, tone: "transit" };
   return { label: "Pendiente", final: false, tone: "pending" };
 }

@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/routes/outcomeDeclaration.ts src/Presentation/views/driver/routes/outcomeDeclaration.test.ts
 //   node /tmp/decl/outcomeDeclaration.test.js
 
-import { buildDeclaration, cobranzaOf, emptyDraft, formatAmountAr, OutcomeDraft, parseAmountAr } from "./outcomeDeclaration";
+import { buildDeclaration, cobranzaOf, emptyDraft, formatAmountAr, NOTES_MAX, OutcomeDraft, outcomeNotes, parseAmountAr } from "./outcomeDeclaration";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -67,6 +67,9 @@ eq("cobranza basura", cobranzaOf("x"), null);
 // Declaración
 eq("entregado sin nada", buildDeclaration("DELIVERED", emptyDraft()), { ok: true, declaration: {} });
 eq("no entregado sin nada", buildDeclaration("NOT_DELIVERED", emptyDraft()), { ok: true, declaration: {} });
+eq("comentario de no entregado: viaja recortado; vacío no viaja", [outcomeNotes("NOT_DELIVERED", draft({ notes: "  nadie atendió " })), outcomeNotes("NOT_DELIVERED", draft({ notes: "   " }))], ["nadie atendió", undefined]);
+eq("comentario: nunca en un entregado, y con tope", [outcomeNotes("DELIVERED", draft({ notes: "x" })), outcomeNotes("NOT_DELIVERED", draft({ notes: "a".repeat(NOTES_MAX + 9) }))?.length], [undefined, NOTES_MAX]);
+eq("el comentario no entra en la declaración del Baúl", buildDeclaration("NOT_DELIVERED", draft({ notes: "hola" })), { ok: true, declaration: {} });
 eq("cobro completo", buildDeclaration("DELIVERED", draft({ paymentMethod: "CASH", amountText: "1.234,56" })),
   { ok: true, declaration: { payment_method: "CASH", collected_amount: 1234.56 } });
 eq("solo medio", buildDeclaration("DELIVERED", draft({ paymentMethod: "TRANSFER" })), { ok: true, declaration: { payment_method: "TRANSFER" } });
@@ -90,6 +93,7 @@ eq("no entregado ignora cobro y vuelta",
   buildDeclaration("NOT_DELIVERED", draft({ paymentMethod: "CASH", amountText: "basura", returnKind: "CAMBIO", returnItem: "x", destination: "CANCELACION" })),
   { ok: true, declaration: { closure: "CANCELACION" } });
 eq("entregado ignora destino", buildDeclaration("DELIVERED", draft({ destination: "DEVOLUCION" })), { ok: true, declaration: {} });
+
 
 console.log(failed ? `\n${failed} pruebas fallaron` : "\nTodas las pruebas pasaron");
 if (failed) throw new Error(`${failed} pruebas fallaron`);

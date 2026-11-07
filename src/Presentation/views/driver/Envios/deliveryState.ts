@@ -2,8 +2,9 @@
 // Estado de un envío para la pantalla Envíos. Manda ops_status (el ciclo
 // operativo de Lynx); si falta, status_ml (lo que dice Mercado Libre), que
 // llega en inglés o en español según la época del dato. Solo DELIVERED y
-// CANCELLED cierran el envío: NOT_DELIVERED queda abierto y pide resolución
-// (no implica que esté en el Baúl). Solo lee: nunca corrige el backend.
+// CANCELLED cierran el envío: NOT_DELIVERED queda abierto y pide resolución.
+// NOT_DELIVERED es custodia del chofer: solo es «No entregado» (un intento)
+// si Mercado Libre lo dice; si no, «Sin entregar». Solo lee: nunca corrige el backend.
 // Sin React: se prueba con node.
 
 export type DeliveryPhase = "delivered" | "cancelled" | "notDelivered" | "inProgress";
@@ -95,7 +96,8 @@ export function classifyDelivery(item: DeliveryStatusFields): DeliveryState {
   const mlClosed = mlPhase === "delivered" || mlPhase === "cancelled";
 
   if (ops === "NOT_DELIVERED") {
-    return build("notDelivered", PHASE_LABELS.notDelivered, mlClosed ? "mismatch" : null);
+    const label = mlPhase === "notDelivered" ? PHASE_LABELS.notDelivered : "Sin entregar";
+    return build("notDelivered", label, mlClosed ? "mismatch" : null);
   }
 
   const openLabel = OPS_OPEN_LABELS[ops];

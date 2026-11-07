@@ -21,11 +21,21 @@ export type OutcomeDraft = {
   returnKind: ReturnKind | null;
   returnItem: string;
   destination: Destination | null;
+  // Comentario de «no pude entregar» (route_stop_deliveries.notes).
+  notes: string;
 };
 
 export const emptyDraft = (amountText = ""): OutcomeDraft => ({
-  paymentMethod: null, amountText, returnKind: null, returnItem: "", destination: null,
+  paymentMethod: null, amountText, returnKind: null, returnItem: "", destination: null, notes: "",
 });
+
+export const NOTES_MAX = 500;
+
+// El comentario solo viaja en un no entregado y si dice algo.
+export function outcomeNotes(outcome: string, draft: OutcomeDraft): string | undefined {
+  const text = draft.notes.trim();
+  return outcome === "NOT_DELIVERED" && text ? text.slice(0, NOTES_MAX) : undefined;
+}
 
 // Campos opcionales del POST .../outcomes. Solo viaja lo que se completó.
 export type OutcomeDeclaration = {

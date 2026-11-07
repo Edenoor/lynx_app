@@ -104,6 +104,9 @@ eq("desconocido o sin dato → «Pendiente», no finalizado", [v(d(1, "")), v(d(
 eq("propio entregado o no entregado por el chofer → finalizado", [v(d(1, "DELIVERED", "DELIVERED", { tipo_envio: "propio" })), v(d(2, "NOT_DELIVERED", "NOT_DELIVERED", { tipo_envio: "propio" }))], [["Entregado", true], ["No entregado", true]]);
 eq("cancelado (sin resultado) → «Cancelado», finalizado; ML entregado después de un «No entregado» → «Entregado»",
   [v(d(1, "CANCELLED")), v(d(2, "DELIVERED", "NOT_DELIVERED"))], [["Cancelado", true], ["Entregado", true]]);
+eq("D6: ops NOT_DELIVERED sin resultado ni ML = custodia sin intento (no «No entregado»)", v(d(1, "NOT_DELIVERED")), ["Sin entregar · en tu Baúl", true]);
+eq("D6: con intento (resultado del chofer o ML) sí es «No entregado»", [v(d(1, "NOT_DELIVERED", "NOT_DELIVERED")), v(d(2, "NOT_DELIVERED", null, { status_ml: "not_delivered" }))], [["No entregado", true], ["No entregado", true]]);
+eq("estado operativo NOT_DELIVERED sin resultado → «Sin entregar»", deliveryStatusLabel(d(1, "NOT_DELIVERED")), "Sin entregar");
 eq("nunca «Resuelta» ni «En calle»", [d(1, "OUT_FOR_DELIVERY"), d(2, "DELIVERED"), d(3, "CANCELLED")].map((x) => deliveryView(x).label).some((l) => /Resuelta|En calle/.test(l)), false);
 eq("Mercado Libre se reconoce por el proveedor (no solo Flex)",
   [providerGoverned(d(1, "X", null, { tipo_envio: "otro", provider: "mercadolibre" })), providerGoverned(d(2, "X", null, { tipo_envio: "flex", provider: undefined })), providerGoverned(d(3, "X", null, { tipo_envio: "propio", provider: "tiendanube" }))], [true, true, false]);
