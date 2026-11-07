@@ -4,7 +4,8 @@
 //   node /tmp/stop-view/routes/stopView.test.js
 
 import {
-  closesOnFinish, deliveryDelivered, deliveryResolved, deliveryStatusLabel, routeCanFinish, routeMapPoints, splitDeliveries, stopActions, stopAddress, stopMapsAddress, stopPackagesLabel, stopSummary,
+  awaitingProvider, closesOnFinish, deliveryDelivered, deliveryResolved, deliveryStatusLabel, deliveryView, providerGoverned, routeCanFinish, routeMapPoints, routeProgress, splitDeliveries,
+  splitStops, stopActions, stopAddress, stopFinished, stopMapsAddress, stopPackagesLabel, stopsToCloseOnFinish, stopStateLabel, stopSummary,
 } from "./stopView";
 import type { Stop, StopDelivery } from "./routesApi";
 
@@ -91,6 +92,41 @@ eq("Turbo y colecta: no se tocan", [closesOnFinish(stop("PENDING", [d(1, "DELIVE
   eq("finalizar: con una entrega pendiente, no", routeCanFinish({ type: "DELIVERY", stops: [done, resolved, open] }), false);
   eq("finalizar: un Turbo sigue exigiendo cerrar sus paradas", routeCanFinish({ type: "TURBO", stops: [done, resolved] }), false);
   eq("finalizar: colecta, como siempre", [routeCanFinish({ type: "PICKUP", stops: [stop("DONE", [], { type: "PICKUP" })] }), routeCanFinish({ type: "PICKUP", stops: [stop("ARRIVED", [], { type: "PICKUP" })] })], [true, false]);
+}
+
+// ---------- Reparto: estado real por envío ----------
+const v = (x: StopDelivery) => { const r = deliveryView(x); return [r.label, r.final]; };
+eq("ML entregado → «Entregado», finalizado", v(d(1, "DELIVERED", "DELIVERED", { provider: "mercadolibre" })), ["Entregado", true]);
+eq("ML no entregado (status_ml, crudo o traducido) → «No entregado», finalizado",
+  [v(d(1, "OUT_FOR_DELIVERY", null, { status_ml: "not_delivered" })), v(d(2, "OUT_FOR_DELIVERY", null, { status_ml: "No entregado" }))], [["No entregado", true], ["No entregado", true]]);
+eq("ML en camino → «En camino», pendiente", [v(d(1, "OUT_FOR_DELIVERY")), v(d(2, "OUT_FOR_DELIVERY", null, { status_ml: "shipped" }))], [["En camino", false], ["En camino", false]]);
+eq("desconocido o sin dato → «Pendiente», no finalizado", [v(d(1, "")), v(d(2, "RARO")), v(d(3, "ASSIGNED_TO_ROUTE", null, { status_ml: "algo_nuevo" }))], [["Pendiente", false], ["Pendiente", false], ["Pendiente", false]]);
+eq("propio entregado o no entregado por el chofer → finalizado", [v(d(1, "DELIVERED", "DELIVERED", { tipo_envio: "propio" })), v(d(2, "NOT_DELIVERED", "NOT_DELIVERED", { tipo_envio: "propio" }))], [["Entregado", true], ["No entregado", true]]);
+eq("cancelado (sin resultado) → «Cancelado», finalizado; ML entregado después de un «No entregado» → «Entregado»",
+  [v(d(1, "CANCELLED")), v(d(2, "DELIVERED", "NOT_DELIVERED"))], [["Cancelado", true], ["Entregado", true]]);
+eq("nunca «Resuelta» ni «En calle»", [d(1, "OUT_FOR_DELIVERY"), d(2, "DELIVERED"), d(3, "CANCELLED")].map((x) => deliveryView(x).label).some((l) => /Resuelta|En calle/.test(l)), false);
+eq("Mercado Libre se reconoce por el proveedor (no solo Flex)",
+  [providerGoverned(d(1, "X", null, { tipo_envio: "otro", provider: "mercadolibre" })), providerGoverned(d(2, "X", null, { tipo_envio: "flex", provider: undefined })), providerGoverned(d(3, "X", null, { tipo_envio: "propio", provider: "tiendanube" }))], [true, true, false]);
+
+// Paradas: pendientes y finalizadas.
+{
+  const s1 = stop("PENDING", [d(1, "DELIVERED", "DELIVERED")], { id: 1, sequence: 3 });
+  const s2 = stop("PENDING", [d(2, "DELIVERED", "DELIVERED"), d(3, "OUT_FOR_DELIVERY")], { id: 2, sequence: 1 });
+  const s3 = stop("SKIPPED", [d(4, "OUT_FOR_DELIVERY")], { id: 3, sequence: 2 });
+  const s4 = stop("PENDING", [d(5, "OUT_FOR_DELIVERY")], { id: 4, sequence: 4 });
+  const split = splitStops([s1, s2, s3, s4]);
+  eq("parada mixta (uno entregado, otro en camino): sigue en pendientes; todo por sequence", [split.pending.map((s) => s.id), split.finished.map((s) => s.id)], [[2, 4], [3, 1]]);
+  eq("una parada vacía no se da por terminada", stopFinished(stop("PENDING", [])), false);
+  eq("progreso por envío", routeProgress([s1, s2, s3, s4]), { total: 5, pending: 3, finished: 2 });
+  eq("estado de la parada: el del envío; con varios, por estado", [stopStateLabel(s1), stopStateLabel(s2), stopStateLabel(s3), stopStateLabel(stop("ARRIVED", [d(9, "OUT_FOR_DELIVERY")]))],
+    ["Entregado", "Entregado: 1 · En camino: 1", "Salteada · En camino", "Llegaste · En camino"]);
+  eq("finalizar un reparto: con todo terminado sí, con una pendiente no", [routeCanFinish({ type: "DELIVERY", stops: [s1, s3] }), routeCanFinish({ type: "DELIVERY", stops: [s1, s4] })], [true, false]);
+  const cancelled = stop("PENDING", [d(6, "CANCELLED")], { id: 6 });
+  const mlNot = stop("ARRIVED", [d(7, "OUT_FOR_DELIVERY", null, { status_ml: "not_delivered" })], { id: 7 });
+  eq("al finalizar la app cierra solo lo terminado que el servidor no cierra (cancelado, no entregado de ML)",
+    stopsToCloseOnFinish([s1, s3, s4, cancelled, mlNot], "DELIVERY").map((s) => s.id), [6, 7]);
+  eq("en Turbo y colecta no cierra nada", stopsToCloseOnFinish([cancelled], "TURBO"), []);
+  eq("envíos de ML que ML todavía no cerró", awaitingProvider(stop("PENDING", [d(1, "OUT_FOR_DELIVERY", null, { provider: "mercadolibre" }), d(2, "DELIVERED", "DELIVERED"), d(3, "OUT_FOR_DELIVERY", null, { tipo_envio: "propio" })])).map((x) => x.delivery_id), [1]);
 }
 
 console.log(failed ? `\n${failed} FALLAS` : "\nOK");

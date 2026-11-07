@@ -1,9 +1,10 @@
 // src/Presentation/views/driver/routes/RouteDetailScreen.tsx
 // Un recorrido del chofer: confirmar la carga (reparto), salir, llegar a
 // cada parada, registrar qué pasó con cada envío, cerrar la parada y
-// completar el recorrido. Sin mapa en esta etapa.
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, ImageBackground, Linking, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+// completar el recorrido. En un reparto, las paradas con todos sus envíos
+// terminados van a «Finalizados» y los de Mercado Libre se cierran en Envíos Flex.
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, AppState, ImageBackground, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
@@ -11,9 +12,10 @@ import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import ThemedCard from "../../../components/ThemedCard";
 import { KeyboardScreen } from "../../../components/KeyboardScreen";
+import { EDGES_ABOVE_BOTTOM_BAR, SafeScreen } from "../../../components/SafeScreen";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
-  completeRoute, confirmLoad, declareStopCount, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, startRoute, todayIso,
+  completeRoute, confirmLoad, declareStopCount, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, saveStopNotes, startRoute, todayIso,
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
@@ -29,13 +31,19 @@ import RouteMapModal from "../../../components/driver/RouteMapModal";
 import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
 import { turboPickupError, turboPickupItems } from "./turboPickup";
 import {
-  closesOnFinish, deliveryDelivered, deliveryResolved, deliveryStatusLabel, routeCanFinish, splitDeliveries, stopActions, stopAddress, stopMapsAddress, stopPackagesLabel, stopSummary,
+  awaitingProvider, deliveryDelivered, deliveryResolved, deliveryStatusLabel, deliveryView, providerGoverned, routeCanFinish, routeProgress, splitDeliveries, splitStops, stopActions,
+  stopAddress, stopFinished, stopMapsAddress, stopPackagesLabel, stopsToCloseOnFinish, stopStateLabel, stopSummary,
 } from "./stopView";
 import ProviderBadge from "../../../components/driver/ProviderBadge";
 import { canOrganize } from "./routePlan";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
+// Mercado Libre decide el resultado de sus envíos: desde Lynx no se registra nada.
+const ML_TITLE = "Entrega de Mercado Libre";
+const ML_DELIVER = "Para confirmar esta entrega, tenés que finalizarla desde la aplicación Envíos Flex de Mercado Libre. Lynx actualizará automáticamente el estado cuando reciba la información.";
+const ML_NOT_DELIVERED = "Registrá el resultado de esta entrega desde la aplicación Envíos Flex de Mercado Libre. Lynx actualizará el estado automáticamente cuando reciba la información.";
+const mlNotice = (message: string) => Alert.alert(ML_TITLE, message, [{ text: "Entendido" }]);
 // Las horas de llegada, salida, «tienda lista» y entrega (arrived_at,
 // started_at, store_ready_at, outcome_at) se guardan sin zona horaria y en una
 // prueba se vieron corridas: no se muestran hasta que el servidor lo corrija.
@@ -84,10 +92,15 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   }, [route?.type, routeId]);
   // Ejecuta una acción, recarga y muestra el error del servidor si lo hay
   // (arriba de todo, o donde diga `onError`). Si la acción falla no se recarga.
-  const act = async (fn: () => Promise<unknown>, onError?: (message: string) => void) => {
+  // Estables (useCallback): las paradas están memorizadas y no se vuelven a
+  // dibujar todas al abrir una o al escribir.
+  const act = useCallback(async (fn: () => Promise<unknown>, onError?: (message: string) => void) => {
     setBusy(true); setError(null);
     try { await fn(); await load(); } catch (e: any) { (onError ?? setError)(errorMessage(e, "No se pudo completar la acción")); } finally { setBusy(false); }
-  };
+  }, [load]);
+  const toggleStop = useCallback((id: number) => setOpenStop((cur) => (cur === id ? null : id)), []);
+  // La parada que devuelve la declaración se muestra ya, aunque falle la recarga.
+  const replaceStop = useCallback((stop: Stop) => setRoute((r) => (r ? { ...r, stops: r.stops.map((s) => (s.id === stop.id ? stop : s)) } : r)), []);
   // Con el recorrido cargado o en curso el GPS sigue fuera del horario: si
   // estaba en pausa (antes de las 07:00, después de las 22:00) se pregunta en
   // el acto, sin esperar al sondeo ni a volver a primer plano.
@@ -121,22 +134,30 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     }
   };
 
+  // Antes de completar, la app cierra las paradas terminadas que el servidor no
+  // cierra solo (stopsToCloseOnFinish), una por una, como haría el chofer.
   const onComplete = () =>
     Alert.alert("Completar recorrido", "¿Terminaste todas las paradas?", [
       { text: "No", style: "cancel" },
-      { text: "Sí, completar", onPress: () => act(() => completeRoute(routeId)) },
+      {
+        text: "Sí, completar",
+        onPress: () => act(async () => {
+          for (const s of stopsToCloseOnFinish(route?.stops ?? [], route?.type ?? "")) await stopAction(routeId, s.id, "done");
+          await completeRoute(routeId);
+        }),
+      },
     ]);
   if (!route) {
     return (
       <View style={styles.background}>
         <ThemedStatusBar />
-        <SafeAreaView style={styles.safeArea}>
+        <SafeScreen edges={EDGES_ABOVE_BOTTOM_BAR} style={styles.safeArea}>
           <View style={[styles.center, { flex: 1 }]}>
             {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={theme.text.accent} />}
             <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 16 }}><Text style={styles.link}>Volver</Text></Pressable>
           </View>
           <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
-        </SafeAreaView>
+        </SafeScreen>
       </View>
     );
   }
@@ -157,12 +178,19 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   // En un reparto, las paradas con todo resuelto las cierra el servidor al finalizar.
   const allClosed = routeCanFinish(route);
   const declared = isPickup ? declarationSummary(route.stops) : null;
-  // La parada que devuelve la declaración se muestra ya, aunque falle la recarga.
-  const replaceStop = (stop: Stop) => setRoute((r) => (r ? { ...r, stops: r.stops.map((s) => (s.id === stop.id ? stop : s)) } : r));
+  // Reparto: pendientes arriba y lo terminado plegado abajo. Colecta y Turbo, como siempre.
+  const sections = isDelivery ? splitStops(route.stops) : null;
+  const progress = isDelivery ? routeProgress(route.stops) : null;
+  const stopCard = (s: Stop) => (
+    <StopCard key={s.id} routeId={route.id} stop={s} stops={route.stops} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
+      open={openStop === s.id} dimmed={openStop !== null && openStop !== s.id} onToggle={toggleStop} act={act} onStopSaved={replaceStop} />
+  );
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
       <ThemedStatusBar />
-      <SafeAreaView style={styles.safeArea}>
+      {/* Arriba y a los lados respeta las barras del sistema (edge-to-edge);
+          abajo la cubre la barra de navegación del chofer, que queda donde estaba. */}
+      <SafeScreen edges={EDGES_ABOVE_BOTTOM_BAR} style={styles.safeArea}>
         {/* KeyboardScreen: la cantidad de bultos, la observación de la parada y
             los importes del cierre no quedan tapados por el teclado (la app es
             edge-to-edge: el adjustResize del manifest ya no corre nada). */}
@@ -183,7 +211,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
                 <Text style={styles.title}>{STATUS_LABEL[route.status]}</Text>
-                <Text style={styles.meta}>{route.stops.length} paradas · {route.deliveries_count} envíos</Text>
+                <Text style={styles.meta}>
+                  {progress
+                    ? `${progress.total} ${progress.total === 1 ? "envío" : "envíos"} · ${progress.pending} ${progress.pending === 1 ? "pendiente" : "pendientes"} · ${progress.finished} ${progress.finished === 1 ? "finalizado" : "finalizados"}`
+                    : `${route.stops.length} paradas · ${route.deliveries_count} envíos`}
+                </Text>
                 {route.stops.length ? (
                   <Pressable onPress={() => setMapOpen(true)} style={styles.mapLink} accessibilityRole="button" hitSlop={6}>
                     <Ionicons name="map-outline" size={15} color={theme.text.accent} />
@@ -278,20 +310,26 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               </View>
             </ThemedCard>
           ) : null}
-          {route.stops.map((s) => (
-            <StopCard key={s.id} routeId={route.id} stop={s} stops={route.stops} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
-              open={openStop === s.id} onToggle={() => setOpenStop(openStop === s.id ? null : s.id)} act={act} onStopSaved={replaceStop} />
-          ))}
+          {sections ? (
+            <>
+              {sections.pending.map(stopCard)}
+              {sections.finished.length ? <FinishedStops count={sections.finished.length}>{() => sections.finished.map(stopCard)}</FinishedStops> : null}
+            </>
+          ) : route.stops.map(stopCard)}
           {inProgress ? (
             <Pressable onPress={onComplete} disabled={busy || !allClosed} style={[styles.btn, styles.btnBig, (busy || !allClosed) && styles.btnDisabled]}>
               <Ionicons name="checkmark-done" size={18} color={theme.text.onPrimary} />
-              <Text style={styles.btnText}>{allClosed ? "Completar recorrido" : "Cerrá todas las paradas para completar"}</Text>
+              <Text style={styles.btnText}>
+                {allClosed ? "Completar recorrido"
+                  : sections ? `${sections.pending.length === 1 ? "Queda 1 parada pendiente" : `Quedan ${sections.pending.length} paradas pendientes`}`
+                  : "Cerrá todas las paradas para completar"}
+              </Text>
             </Pressable>
           ) : null}
           </KeyboardScreen>
         </View>
         <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
-      </SafeAreaView>
+      </SafeScreen>
       <RouteMapModal visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}`} stops={route.stops} onClose={() => setMapOpen(false)} />
     </ImageBackground>
   );
@@ -305,6 +343,62 @@ function Stat({ value, label, warn }: { value: number; label: string; warn?: boo
     </View>
   );
 }
+// «Finalizados (N)»: plegado al entrar; las paradas se dibujan recién al abrirlo.
+function FinishedStops({ count, children }: { count: number; children: () => React.ReactNode }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable onPress={() => setOpen((v) => !v)} style={styles.finishedHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+        <Text style={styles.finishedTitle}>Finalizados ({count})</Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={theme.text.secondary} />
+      </Pressable>
+      {open ? children() : null}
+    </>
+  );
+}
+// Observación de la parada, con guardado propio. Si falla, el texto queda.
+function StopNotes({ routeId, stopId, saved, onSaved }: { routeId: number; stopId: number; saved: string | null; onSaved: (stop: Stop) => void }) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [text, setText] = useState(saved ?? "");
+  const [status, setStatus] = useState<{ kind: "idle" | "saving" | "saved" | "error"; message?: string }>({ kind: "idle" });
+  // Frena el segundo toque antes de que el estado deshabilite el botón.
+  const sending = useRef(false);
+  const changed = text.trim() !== (saved ?? "").trim();
+  const save = async () => {
+    if (sending.current || !changed) return;
+    sending.current = true;
+    setStatus({ kind: "saving" });
+    try {
+      onSaved(await saveStopNotes(routeId, stopId, text));
+      setStatus({ kind: "saved" });
+    } catch (e: any) {
+      setStatus({
+        kind: "error",
+        message: e?.status === 404
+          ? "Todavía no se pueden guardar observaciones: falta actualizar el servidor. Tu texto sigue acá."
+          : `${errorMessage(e, "No se pudo guardar la observación").replace(/\.?$/, ".")} Tu texto sigue acá.`,
+      });
+    } finally { sending.current = false; }
+  };
+  const saving = status.kind === "saving";
+  return (
+    <View style={styles.notes}>
+      <TextInput value={text} onChangeText={(v) => { setText(v); if (status.kind !== "saving") setStatus({ kind: "idle" }); }} placeholder="Observación (opcional)"
+        placeholderTextColor={theme.text.muted} style={[styles.input, styles.notesInput]} multiline textAlignVertical="top" editable={!saving} accessibilityLabel="Observación de la parada" />
+      <View style={styles.row}>
+        <Pressable onPress={save} disabled={saving || !changed} style={[styles.btnSmall, styles.rowBtn, (saving || !changed) && styles.btnDisabled]} accessibilityRole="button">
+          {saving ? <ActivityIndicator size="small" color={theme.text.onPrimary} /> : null}
+          <Text style={styles.btnText}>Guardar observación</Text>
+        </Pressable>
+        {status.kind === "saved" && !changed ? <Text style={[styles.stopMeta, styles.deliveryDone]}>Observación guardada</Text> : null}
+      </View>
+      {status.kind === "error" ? <Text style={styles.warn}>{status.message}</Text> : null}
+    </View>
+  );
+}
 // Destinatario y tracking, con el logo del canal del envío.
 function DeliveryHead({ d }: { d: Stop["deliveries"][number] }) {
   const styles = useThemedStyles(makeStyles);
@@ -315,15 +409,23 @@ function DeliveryHead({ d }: { d: Stop["deliveries"][number] }) {
     </View>
   );
 }
-function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, busy, open, onToggle, act, onStopSaved }: {
-  routeId: number; stop: Stop; stops: Stop[]; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean; onToggle: () => void;
+// Memorizada: con 80-100 paradas, abrir una o recargar no vuelve a dibujar las
+// que no cambiaron (las funciones que recibe son estables).
+const StopCard = memo(StopCardView);
+function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress, busy, open, dimmed, onToggle, act, onStopSaved }: {
+  routeId: number; stop: Stop; stops: Stop[]; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean;
+  // Otra parada está abierta: esta se atenúa, pero se puede tocar.
+  dimmed: boolean; onToggle: (stopId: number) => void;
   act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>; onStopSaved: (stop: Stop) => void;
 }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [pending, setPending] = useState<PendingDelivery[] | null>(null);
-  const [notes, setNotes] = useState("");
   const isPickup = stop.type === "PICKUP";
+  // Reparto: estados por envío, «Finalizados» y Mercado Libre por Envíos Flex.
+  // Turbo y colecta siguen como estaban.
+  const isRouteDelivery = routeType === "DELIVERY" && !isPickup;
+  const finished = isRouteDelivery && stopFinished(stop);
   const closed = stop.status === "DONE" || stop.status === "SKIPPED";
   // Marcar envíos como colectados: en una colecta (PICKUP) eso se hace en
   // LightData durante este MVP; el retiro de un Turbo se sigue marcando acá.
@@ -336,19 +438,20 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
   const directions = isPickup
     ? directionsUrl({ latitude: stop.latitude_snapshot, longitude: stop.longitude_snapshot, address: stop.store_address })
     : directionsUrl({ latitude: stop.latitude, longitude: stop.longitude, address: stopMapsAddress(stop) });
-  const actions = stopActions(stop, inProgress);
+  // Una parada de reparto terminada no pide llegar, cerrar ni saltear.
+  const actions = finished ? { arrive: false, close: false, skip: false, resolvedButOpen: false } : stopActions(stop, inProgress);
   const summary = isPickup ? null : stopSummary(stop);
-  const split = isPickup ? null : splitDeliveries(stop.deliveries);
-  const autoClose = inProgress && closesOnFinish(stop, routeType);
+  const split = isPickup || isRouteDelivery ? null : splitDeliveries(stop.deliveries);
   useEffect(() => {
     if (open && collectsHere && !turboPickup && stop.status === "ARRIVED") {
       fetchPendingAtStore(routeId, stop.id).then(setPending).catch(() => setPending([]));
     }
   }, [open, collectsHere, turboPickup, stop.status, stop.id, routeId, stop.collected_count]);
-  const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value, notes || undefined));
+  // La observación se guarda aparte (StopNotes): ya no viaja escondida en cada resultado.
+  const outcome = (deliveryId: number, value: string) => act(() => recordOutcome(routeId, stop.id, deliveryId, value));
   // Un envío ajeno al Turbo lo rechaza el servidor (409 TURBO_NOT_IN_ROUTE): se explica.
   const collectTurbo = (deliveryId: number) =>
-    act(() => recordOutcome(routeId, stop.id, deliveryId, "COLLECTED", notes || undefined).catch((e) => { throw turboPickupError(e); }));
+    act(() => recordOutcome(routeId, stop.id, deliveryId, "COLLECTED").catch((e) => { throw turboPickupError(e); }));
   // Entregado / No entregado abren el cierre con la declaración del Baúl.
   const [closing, setClosing] = useState<{ deliveryId: number; outcome: "DELIVERED" | "NOT_DELIVERED" } | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -360,7 +463,7 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
     setCloseError(null);
     // El error (un 400 de la declaración, o sin red) se muestra solo en el cierre: no arriba de todo, ni se recarga.
     act(async () => {
-      await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, notes || undefined, built.declaration);
+      await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, undefined, built.declaration);
       setClosing(null);
     }, setCloseError);
   };
@@ -386,12 +489,27 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
       { text: "Sí, corregir", onPress: send },
     ]);
   };
-  // Los Flex se cierran desde Envíos Flex: no cuentan como «sin resultado».
-  const withoutOutcome = stop.deliveries.filter((d) => !deliveryResolved(d) && d.tipo_envio !== "flex");
+  // Los de Mercado Libre se cierran desde Envíos Flex: no cuentan como «sin
+  // resultado». En reparto se reconocen por el proveedor; en Turbo, como antes.
+  const governed = isRouteDelivery ? providerGoverned : (d: Stop["deliveries"][number]) => d.tipo_envio === "flex";
+  const withoutOutcome = stop.deliveries.filter((d) => !deliveryResolved(d) && !governed(d));
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
+  const closeStop = () => {
+    if (!isPickup && withoutOutcome.length) { Alert.alert("Faltan resultados", `Hay ${withoutOutcome.length} envíos sin marcar como entregados o no entregados.`); return; }
+    const close = () => act(() => stopAction(routeId, stop.id, "done"));
+    // Cerrar no cambia el envío, pero al completar el recorrido lo que ML no
+    // cerró queda en el Baúl del chofer (regla del servidor): se avisa antes.
+    const waiting = isRouteDelivery ? awaitingProvider(stop).length : 0;
+    if (!waiting) { close(); return; }
+    Alert.alert(
+      "Mercado Libre todavía no lo cerró",
+      `${waiting === 1 ? "1 envío de esta parada sigue" : `${waiting} envíos de esta parada siguen`} sin resultado en Mercado Libre. Si cerrás la parada y completás el recorrido, queda${waiting === 1 ? "" : "n"} en tu Baúl como no entregado${waiting === 1 ? "" : "s"} hasta que Mercado Libre lo confirme.`,
+      [{ text: "Volver", style: "cancel" }, { text: "Cerrar igual", onPress: close }],
+    );
+  };
   return (
-    <ThemedCard variant="row" style={[styles.stop, closed && styles.stopClosed]}>
-      <Pressable onPress={onToggle} style={styles.stopHead}>
+    <ThemedCard variant="row" style={[styles.stop, closed && !isRouteDelivery && styles.stopClosed, open && styles.stopOpen, dimmed && styles.stopDimmed]}>
+      <Pressable onPress={() => onToggle(stop.id)} style={styles.stopHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
         <View style={styles.seq}><Text style={styles.seqText}>{stop.sequence}</Text></View>
         <View style={{ flex: 1 }}>
           {isPickup ? (
@@ -418,13 +536,18 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
               <Text style={styles.cutoffText}>Corte de la tienda: {stop.cutoff_snapshot.slice(0, 5)}</Text>
             </View>
           ) : null}
-          <Text style={styles.stopMeta}>
-            {autoClose
-              ? <Text style={[styles.stopStatus, styles.deliveryDone]}>Resuelta</Text>
-              : <Text style={[styles.stopStatus, closed && styles.stopStatusClosed, actions.resolvedButOpen && styles.stopStatusWarn]}>{STOP_STATUS_LABEL[stop.status]}</Text>}
-            {isPickup ? (stop.collected_count ? ` · ${stop.collected_count} colectados en Lynx` : "") : summary ? ` · ${stopPackagesLabel(summary)}` : ""}
-            {declares ? ` · ${declarationLabel(stop.declared_count)}` : ""}
-          </Text>
+          {isRouteDelivery ? (
+            // El estado real de sus envíos, no el de la parada.
+            <Text style={[styles.stopMeta, styles.stopStatus, finished && (stop.deliveries.every((d) => deliveryView(d).tone === "delivered") ? styles.deliveryDone : styles.stopStatusClosed)]}>
+              {stopStateLabel(stop)}
+            </Text>
+          ) : (
+            <Text style={styles.stopMeta}>
+              <Text style={[styles.stopStatus, closed && styles.stopStatusClosed, actions.resolvedButOpen && styles.stopStatusWarn]}>{STOP_STATUS_LABEL[stop.status]}</Text>
+              {isPickup ? (stop.collected_count ? ` · ${stop.collected_count} colectados en Lynx` : "") : summary ? ` · ${stopPackagesLabel(summary)}` : ""}
+              {declares ? ` · ${declarationLabel(stop.declared_count)}` : ""}
+            </Text>
+          )}
         </View>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={theme.text.muted} />
       </Pressable>
@@ -439,13 +562,33 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
           {actions.resolvedButOpen ? (
             <View style={styles.resolvedBox}>
               <Ionicons name="checkmark-circle-outline" size={18} color={theme.status.confirmed.text} />
-              <Text style={styles.resolvedText}>
-                {autoClose
-                  ? "Todos los envíos de esta parada ya figuran resueltos. No hace falta cerrarla: se cierra sola al finalizar el recorrido."
-                  : "Todos los envíos de esta parada ya figuran resueltos. Cerrá la parada para seguir."}
-              </Text>
+              <Text style={styles.resolvedText}>Todos los envíos de esta parada ya figuran resueltos. Cerrá la parada para seguir.</Text>
             </View>
           ) : null}
+          {isRouteDelivery ? stop.deliveries.map((d) => {
+            const view = deliveryView(d);
+            const canAct = inProgress && !view.final && (stop.status === "ARRIVED" || stop.status === "PENDING");
+            const ml = providerGoverned(d);
+            return (
+              <View key={d.delivery_id} style={styles.deliveryRow}>
+                <View style={{ flex: 1 }}>
+                  <DeliveryHead d={d} />
+                  <Text style={[styles.stopMeta, view.tone === "delivered" ? styles.deliveryDone : view.final ? styles.stopStatusClosed : null]}>{view.label}</Text>
+                </View>
+                {canAct ? (
+                  <View style={styles.row}>
+                    {/* Mercado Libre: se cierra en Envíos Flex; acá solo se avisa, sin pedir nada al servidor. */}
+                    <Pressable onPress={() => (ml ? mlNotice(ML_DELIVER) : openClose(d.delivery_id, "DELIVERED"))} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregar</Text></Pressable>
+                    <Pressable onPress={() => (ml ? mlNotice(ML_NOT_DELIVERED) : openClose(d.delivery_id, "NOT_DELIVERED"))} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No pude entregar</Text></Pressable>
+                  </View>
+                ) : null}
+                {canAct && !ml && closing?.deliveryId === d.delivery_id ? (
+                  <OutcomeForm key={closing.outcome} outcome={closing.outcome} cobranza={cobranzaOf(d.importe_cobranza)} busy={busy} error={closeError}
+                    onConfirm={confirmClose} onCancel={() => setClosing(null)} />
+                ) : null}
+              </View>
+            );
+          }) : null}
           {split?.pending.map((d) => (
             <View key={d.delivery_id} style={styles.deliveryRow}>
               <View style={{ flex: 1 }}>
@@ -554,12 +697,7 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
                   <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "arrive"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}><Text style={styles.btnText}>Llegué</Text></Pressable>
                 ) : null}
                 {actions.close ? (
-                  <Pressable
-                    onPress={() => {
-                      if (!isPickup && withoutOutcome.length) { Alert.alert("Faltan resultados", `Hay ${withoutOutcome.length} envíos sin marcar como entregados o no entregados.`); return; }
-                      act(() => stopAction(routeId, stop.id, "done", notes || undefined));
-                    }}
-                    disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
+                  <Pressable onPress={closeStop} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
                     <Text style={styles.btnText}>Cerrar parada</Text>
                   </Pressable>
                 ) : null}
@@ -570,10 +708,12 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
               </View>
               {more ? (
                 <>
-                  <TextInput value={notes} onChangeText={setNotes} placeholder="Observación (opcional)" placeholderTextColor={theme.text.muted} style={styles.input} />
+                  {/* La del chofer (driver_notes), nunca `notes`: esa también la escribe el sistema. */}
+                  <StopNotes routeId={routeId} stopId={stop.id} saved={stop.driver_notes ?? null} onSaved={onStopSaved} />
                   {actions.skip ? (
+                    // «salteada» va a `notes` (la del sistema); la observación del chofer no se toca.
                     <Pressable
-                      onPress={() => Alert.alert("Saltear parada", "¿Seguro? Queda registrado que no se visitó.", [{ text: "No", style: "cancel" }, { text: "Saltear", style: "destructive", onPress: () => act(() => stopAction(routeId, stop.id, "skip", notes || "salteada")) }])}
+                      onPress={() => Alert.alert("Saltear parada", "¿Seguro? Queda registrado que no se visitó.", [{ text: "No", style: "cancel" }, { text: "Saltear", style: "destructive", onPress: () => act(() => stopAction(routeId, stop.id, "skip", "salteada")) }])}
                       disabled={busy} style={[styles.btn, styles.btnGhost, styles.rowBtn, busy && styles.btnDisabled]}>
                       <Text style={styles.btnGhostText}>Saltear parada</Text>
                     </Pressable>
@@ -591,11 +731,11 @@ function StopCard({ routeId, stop, stops, routeType, routeStatus, inProgress, bu
 const makeStyles = (t: Theme) => StyleSheet.create({
   background: { flex: 1, backgroundColor: t.colors.background },
   backgroundImage: { opacity: t.backdrop.imageOpacity },
-  safeArea: { flex: 1 },
+  // Transparente: el fondo es la imagen de abajo.
+  safeArea: { flex: 1, backgroundColor: "transparent" },
   scrollArea: { flex: 1, minHeight: 0 },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
-  // Abajo: la barra (112) y el asistente (56), para que no tapen el último botón.
-  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 184, gap: t.spacing.sm },
+  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 120, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
   back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },
@@ -632,6 +772,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // Fondo, borde, radio y sombra: ThemedCard (fila de lista).
   stop: { overflow: "hidden" },
   stopClosed: { opacity: 0.65 },
+  // La parada abierta se destaca; las demás se atenúan un poco (siguen tocables).
+  stopOpen: { borderWidth: 1.5, borderColor: t.colors.primary },
+  stopDimmed: { opacity: 0.6 },
+  finishedHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48, paddingHorizontal: 4, marginTop: t.spacing.sm },
+  finishedTitle: { color: t.text.secondary, fontSize: 15, fontWeight: "700" },
+  notes: { gap: 8 },
+  notesInput: { flex: 0, minHeight: 88, paddingTop: 10, paddingBottom: 10 },
   stopHead: { flexDirection: "row", gap: 12, alignItems: "center", padding: t.spacing.md },
   seq: { width: 30, height: 30, borderRadius: t.radius.full, backgroundColor: t.surfaces.muted, alignItems: "center", justifyContent: "center" },
   seqText: { color: t.text.primary, fontWeight: "700" },

@@ -2,7 +2,7 @@
 // Organizador opcional: optimización por Valhalla, ajuste manual y confirmación.
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, ImageBackground, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, ImageBackground, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -11,6 +11,7 @@ import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import ThemedCard from "../../../components/ThemedCard";
 import { KeyboardScreen } from "../../../components/KeyboardScreen";
+import { EDGES_ABOVE_BOTTOM_BAR, SafeScreen } from "../../../components/SafeScreen";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import RouteMapModal from "../../../components/driver/RouteMapModal";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
@@ -75,7 +76,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
     return (
       <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
         <ThemedStatusBar />
-        <SafeAreaView style={styles.safeArea}>
+        <SafeScreen edges={EDGES_ABOVE_BOTTOM_BAR} style={styles.safeArea}>
           <View style={[styles.contentArea, styles.center]}>
             {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={theme.text.accent} />}
             <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 16 }}>
@@ -83,7 +84,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
             </Pressable>
           </View>
           <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
-        </SafeAreaView>
+        </SafeScreen>
       </ImageBackground>
     );
   }
@@ -151,7 +152,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
       <ThemedStatusBar />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeScreen edges={EDGES_ABOVE_BOTTOM_BAR} style={styles.safeArea}>
         <View style={styles.contentArea}>
           <KeyboardScreen contentContainerStyle={styles.page}>
             <View style={styles.header}>
@@ -242,7 +243,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
           </KeyboardScreen>
         </View>
         <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
-      </SafeAreaView>
+      </SafeScreen>
 
       <RouteMapModal visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}${changed ? " · sin confirmar" : ""}`} stops={stops} onClose={() => setMapOpen(false)} />
       {chooser === "start" || chooser === "end" ? (
@@ -364,11 +365,11 @@ function PointChooser({ which, kinds, places, current, onPick, onClose }: {
 const makeStyles = (t: Theme) => StyleSheet.create({
   background: { flex: 1, backgroundColor: t.colors.background },
   backgroundImage: { opacity: t.backdrop.imageOpacity },
-  safeArea: { flex: 1 },
+  // Transparente: el fondo es la imagen de abajo.
+  safeArea: { flex: 1, backgroundColor: "transparent" },
   contentArea: { flex: 1, minHeight: 0 },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
-  // Abajo: la barra (112) y el asistente (56), para que no tapen el último botón.
-  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 184, gap: t.spacing.sm },
+  page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 120, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
   back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },

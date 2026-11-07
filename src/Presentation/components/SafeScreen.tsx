@@ -12,6 +12,8 @@ import { useThemedStyles } from "../theme/ThemeContext";
 import type { Theme } from "../theme/createTheme";
 
 const ALL_EDGES: Edge[] = ["top", "bottom", "left", "right"];
+// Pantallas con la barra inferior del chofer: ella ocupa el borde de abajo.
+export const EDGES_ABOVE_BOTTOM_BAR: Edge[] = ["top", "left", "right"];
 
 // `edges` sin "bottom" en pantallas con barra inferior: la barra ya se corre
 // sobre la barra de gestos.

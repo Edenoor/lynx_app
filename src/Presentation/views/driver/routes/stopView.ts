@@ -40,6 +40,84 @@ export function deliveryStatusLabel(d: Pick<StopDelivery, "outcome" | "ops_statu
   return OPS_LABEL[ops] ?? d.ops_status ?? "Sin estado";
 }
 
+// ---------- Reparto: qué ve el chofer de cada envío ----------
+
+// Mercado Libre gobierna el resultado: el chofer lo cierra en Envíos Flex, no
+// en Lynx. `provider` lo calcula el servidor (cuenta de ML o referencia de ML);
+// `tipo_envio` flex queda para un servidor que todavía no manda `provider`.
+export const providerGoverned = (d: Pick<StopDelivery, "provider" | "tipo_envio">) =>
+  d.provider === "mercadolibre" || String(d.tipo_envio ?? "").toLowerCase() === "flex";
+
+// status_ml (el estado de ML que guardó el poller) llega crudo o traducido;
+// los mismos valores que reconoce el servidor (opsService.js).
+const ML_STATE: Record<string, "delivered" | "not_delivered" | "cancelled" | "shipped"> = {
+  delivered: "delivered", Entregado: "delivered",
+  not_delivered: "not_delivered", "No entregado": "not_delivered",
+  cancelled: "cancelled", Cancelado: "cancelled",
+  shipped: "shipped", "En camino": "shipped",
+};
+
+export type DeliveryTone = "delivered" | "failed" | "cancelled" | "transit" | "pending";
+export type DeliveryView = { label: string; final: boolean; tone: DeliveryTone };
+
+// El estado real de un envío, para la lista: nunca el de la parada. Lo
+// desconocido queda «Pendiente» y no se da por terminado.
+export function deliveryView(d: Pick<StopDelivery, "outcome" | "ops_status" | "status_ml">): DeliveryView {
+  const ops = String(d.ops_status ?? "").toUpperCase();
+  const ml = d.status_ml ? ML_STATE[d.status_ml] : undefined;
+  if (ops === "DELIVERED" || d.outcome === "DELIVERED" || ml === "delivered") return { label: "Entregado", final: true, tone: "delivered" };
+  if (ops === "CANCELLED" || ml === "cancelled") return { label: "Cancelado", final: true, tone: "cancelled" };
+  if (d.outcome === "RETURNED") return { label: "Devuelto", final: true, tone: "failed" };
+  if (d.outcome === "NOT_DELIVERED" || ops === "NOT_DELIVERED" || ml === "not_delivered") return { label: "No entregado", final: true, tone: "failed" };
+  if (ops === "OUT_FOR_DELIVERY" || ml === "shipped") return { label: "En camino", final: false, tone: "transit" };
+  return { label: "Pendiente", final: false, tone: "pending" };
+}
+
+// Una parada de reparto está terminada cuando la cerraron (cerrada o salteada)
+// o cuando todos sus envíos tienen un resultado final. Sin envíos no: el
+// servidor no la cierra sola y pide cerrarla a mano.
+export function stopFinished(s: Pick<Stop, "status" | "deliveries">): boolean {
+  if (s.status === "DONE" || s.status === "SKIPPED") return true;
+  return s.deliveries.length > 0 && s.deliveries.every((d) => deliveryView(d).final);
+}
+
+// Lista del reparto: pendientes y terminadas, cada una en orden de visita.
+// Es solo cómo se muestra: el orden guardado (sequence) no cambia.
+export function splitStops<S extends Pick<Stop, "sequence" | "status" | "deliveries">>(stops: S[]): { pending: S[]; finished: S[] } {
+  const ordered = [...stops].sort((a, b) => a.sequence - b.sequence);
+  return { pending: ordered.filter((s) => !stopFinished(s)), finished: ordered.filter(stopFinished) };
+}
+
+// «12 envíos · 8 pendientes · 4 finalizados» (por envío, no por parada).
+export function routeProgress(stops: Pick<Stop, "deliveries">[]): { total: number; pending: number; finished: number } {
+  const all = stops.flatMap((s) => s.deliveries);
+  const finished = all.filter((d) => deliveryView(d).final).length;
+  return { total: all.length, pending: all.length - finished, finished };
+}
+
+// El estado en el encabezado de la parada: el de su envío; con varios, cuántos
+// hay en cada estado («Entregado: 1 · En camino: 1»). Llegada y salteo van
+// adelante porque son de la parada, no de los envíos.
+export function stopStateLabel(s: Pick<Stop, "status" | "deliveries">): string {
+  const counts = new Map<string, number>();
+  for (const d of s.deliveries) { const l = deliveryView(d).label; counts.set(l, (counts.get(l) ?? 0) + 1); }
+  const deliveries = s.deliveries.length === 1 ? deliveryView(s.deliveries[0]).label
+    : s.deliveries.length ? [...counts].map(([l, n]) => `${l}: ${n}`).join(" · ") : "Sin envíos";
+  const prefix = s.status === "ARRIVED" ? "Llegaste" : s.status === "SKIPPED" ? "Salteada" : null;
+  return prefix ? `${prefix} · ${deliveries}` : deliveries;
+}
+
+// Paradas terminadas que el servidor no cierra solo al finalizar (un cancelado
+// o un no entregado de Mercado Libre, sin resultado cargado): la app las
+// cierra antes de completar, como haría el chofer con «Cerrar parada».
+export function stopsToCloseOnFinish<S extends Pick<Stop, "type" | "status" | "deliveries">>(stops: S[], routeType: string): S[] {
+  if (routeType !== "DELIVERY") return [];
+  return stops.filter((s) => (s.status === "PENDING" || s.status === "ARRIVED") && stopFinished(s) && !closesOnFinish(s, routeType));
+}
+
+// Envíos de Mercado Libre de la parada que ML todavía no cerró.
+export const awaitingProvider = (s: Pick<Stop, "deliveries">) => s.deliveries.filter((d) => providerGoverned(d) && !deliveryView(d).final);
+
 // Pendientes arriba; lo resuelto va a «Envíos cerrados», en el mismo orden.
 export function splitDeliveries<D extends Pick<StopDelivery, "outcome" | "ops_status">>(deliveries: D[]): { pending: D[]; closed: D[] } {
   return { pending: deliveries.filter((d) => !deliveryResolved(d)), closed: deliveries.filter(deliveryResolved) };
@@ -56,7 +134,10 @@ export function closesOnFinish(s: Pick<Stop, "type" | "status" | "deliveries">, 
 
 // «Finalizar recorrido» se habilita con cada parada cerrada o que el servidor
 // cierra sola al finalizar.
+// En un reparto alcanza con que cada parada esté terminada (stopsToCloseOnFinish
+// cierra las que el servidor no cierra solo).
 export function routeCanFinish(r: { type: string; stops: Pick<Stop, "type" | "status" | "deliveries">[] }): boolean {
+  if (r.type === "DELIVERY") return r.stops.every(stopFinished);
   return r.stops.every((s) => s.status === "DONE" || s.status === "SKIPPED" || closesOnFinish(s, r.type));
 }
 

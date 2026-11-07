@@ -32,10 +32,18 @@ export type StopDelivery = {
   // Canal comercial (mercadolibre, tiendanube, shopify, woocommerce) para el
   // logo; null si no se sabe. Un servidor anterior no lo manda.
   provider?: string | null;
+  // Estado de Mercado Libre de ESTE envío que guardó el poller (crudo, p. ej.
+  // not_delivered, o traducido). Un servidor anterior no lo manda: sin él, un
+  // «no entregado» de ML se ve por ops_status/outcome.
+  status_ml?: string | null;
 };
 export type Stop = {
   id: number; route_id: number; sequence: number; type: "PICKUP" | "DELIVERY"; status: StopStatus;
+  // `notes` también la escribe el sistema («escaneado por el chofer»); la
+  // observación del chofer es `driver_notes` (PUT …/notes). Un servidor
+  // anterior no la manda.
   arrived_at: string | null; completed_at: string | null; notes: string | null;
+  driver_notes?: string | null; driver_notes_at?: string | null; driver_notes_by?: string | null;
   store_id?: number; store_name?: string; store_address?: string; cutoff_snapshot?: string | null; window_snapshot?: number | null;
   collected_count?: number; store_ready_at?: string | null;
   // Retiro: coordenadas congeladas al armar la parada (pg las manda como texto)
@@ -119,6 +127,12 @@ export const completeRoute = async (id: number) => unwrap<{ route: RouteDetail }
 
 export const stopAction = async (routeId: number, stopId: number, action: "arrive" | "done" | "skip" | "store-ready", notes?: string) =>
   unwrap<{ stop: Stop }>(await putJson(`/v2/routes/${routeId}/stops/${stopId}/${action}`, notes ? { notes } : {})).stop;
+
+// Observación del chofer en la parada (route_stops.driver_notes): se guarda
+// sola, sin cerrar ni registrar nada; vacío la borra. Un servidor sin el
+// endpoint responde 404.
+export const saveStopNotes = async (routeId: number, stopId: number, notes: string) =>
+  unwrap<{ stop: Stop }>(await putJson(`/v2/routes/${routeId}/stops/${stopId}/notes`, { notes: notes.trim() || null })).stop;
 
 // Cantidad de paquetes retirados en una parada de colecta. stopId es el de la
 // parada de este recorrido (route_stops.id), no el de la tienda ni la plantilla.
