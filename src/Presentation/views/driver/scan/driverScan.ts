@@ -29,18 +29,37 @@ export type ScanFeedback = {
 };
 
 const SHELF_QR_PREFIX = "LYNX:SHELF:";
+// Etiqueta Lynx: «LYNX:PKG:LP» + 8 dígitos + verificador (server labelService).
+const LYNX_PACKAGE = /^LYNX:PKG:([A-Z0-9]+)$/i;
+// LightData tipeado: «LD:1600274», «LD 1600274», «LD-1600274», «LD#1600274».
+const LIGHTDATA_TYPED = /^LD[\s:#-]*(\d+)$/i;
 
-// Cómo se nombra el bulto en pantalla y en el resumen: el tracking si lo hay;
-// nunca el contenido crudo de la etiqueta.
+// Cómo se nombra el bulto en pantalla y en el resumen: el código que el chofer
+// reconoce (tracking de ML, etiqueta Lynx, número de LightData); nunca el
+// contenido crudo de la etiqueta. Solo para mostrar: al servidor va el QR tal
+// cual (lo interpreta resolveScan).
 export function scanLabel(payload: ScanPayload): string {
-  if (payload.raw.startsWith(SHELF_QR_PREFIX)) return "Estantería";
+  const raw = payload.raw;
+  if (raw.startsWith(SHELF_QR_PREFIX)) return "Estantería";
+  const lynx = raw.match(LYNX_PACKAGE);
+  if (lynx) return lynx[1].toUpperCase();
+  const typed = raw.match(LIGHTDATA_TYPED);
+  if (typed) return `LightData ${typed[1]}`;
+  if (raw.startsWith("{")) {
+    try {
+      const did = JSON.parse(raw)?.did;
+      if (did !== undefined && did !== null && /^\d+$/.test(String(did))) return `LightData ${did}`;
+    } catch {
+      // No es JSON: sigue como texto.
+    }
+  }
   return /^\d{6,20}$/.test(payload.id) ? payload.id : "Etiqueta sin tracking";
 }
 
 /**
- * Un escaneo puede venir en tres formatos: el JSON de la etiqueta de Mercado
- * Libre, una query-string, o el tracking pelado (QR o código de barras del
- * depósito).
+ * Para mostrar el tracking de Mercado Libre de la etiqueta (scanLabel): el
+ * JSON de la etiqueta, una query-string, o el tracking pelado. No decide qué
+ * se manda: al servidor va siempre `raw` completo.
  *
  * OJO con el JSON: `JSON.parse("47741557287")` NO tira excepción, devuelve el
  * numero. Si se intenta parsear cualquier payload como JSON, el tracking
@@ -101,20 +120,18 @@ export const SESSION_EXPIRED: ScanFeedback = {
   sessionExpired: true,
 };
 
-// Antes de pedir nada: la etiqueta tiene que traer lo que el modo necesita.
-export function payloadProblem(mode: DriverScanMode, payload: ScanPayload): ScanFeedback | null {
-  if (!payload.raw || !payload.id) {
+// Antes de pedir nada: solo se frena una lectura vacía. Qué etiqueta es (ML,
+// LightData, Lynx u otra) lo decide el servidor, el mismo resolvedor que usa
+// el Picker: la app no rechaza etiquetas que él puede leer.
+export function payloadProblem(payload: ScanPayload): ScanFeedback | null {
+  if (!payload.raw) {
     return { tone: "error", title: "No reconocemos esta etiqueta", detail: "Escaneá el QR del envío." };
-  }
-  if (mode === "colecta" && !payload.senderId) {
-    return {
-      tone: "error",
-      title: "No reconocemos esta etiqueta",
-      detail: "Para ingresar un envío, escaneá el QR de Mercado Libre.",
-    };
   }
   return null;
 }
+
+// Lo que va al servidor en Asignarme y Colecta: el QR completo, sin tocar.
+export const scanBody = (payload: ScanPayload) => ({ qr: payload.raw });
 
 // Texto del servidor solo si es un rechazo de negocio (4xx con mensaje). Un
 // 5xx o una respuesta que no es JSON no le dicen nada al chofer.
@@ -164,13 +181,13 @@ const ASSIGN_RESULT: Record<string, string> = {
   already: "Ya lo tenías cargado",
 };
 
-// PUT /v2/deliveries/self-assign (claimByScan): result claimed | loaded | already.
+// PUT /v2/deliveries/self-assign { qr } (claimByScan): result claimed | loaded | already.
 export function assignFeedback(res: any, tracking: string): ScanFeedback {
   if (!res?.ok) return rejection("asignarme", res);
   return { tone: "success", title: ASSIGN_RESULT[String(res?.result)] ?? "Envío asignado", detail: tracking || null };
 }
 
-// POST /v2/deliveries/scan: { success } o { success: false, error }.
+// POST /v2/deliveries/scan { qr }: { success } o { success: false, error }.
 export function collectFeedback(res: any, tracking: string): ScanFeedback {
   if (!res?.ok || res?.success === false) return rejection("colecta", res);
   return { tone: "success", title: "Envío ingresado", detail: tracking || null };

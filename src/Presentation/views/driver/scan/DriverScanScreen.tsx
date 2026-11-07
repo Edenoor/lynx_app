@@ -42,6 +42,7 @@ import {
   ScanPayload,
   ScanSession,
   ScanTone,
+  scanBody,
   scanLabel,
   SESSION_EXPIRED,
   sessionSummary,
@@ -182,7 +183,7 @@ export default function DriverScanScreen({ navigation, route }: Props) {
 
   const runScan = useCallback(
     async (payload: ScanPayload, gen: number): Promise<ScanFeedback> => {
-      const problem = payloadProblem(mode, payload);
+      const problem = payloadProblem(payload);
       if (problem) return problem;
       const label = scanLabel(payload);
 
@@ -196,17 +197,16 @@ export default function DriverScanScreen({ navigation, route }: Props) {
       if (mode === "asignarme") {
         const roleIssue = await resolveDriver();
         if (roleIssue) return roleIssue;
-        const body = { driverId: driverIdRef.current, shippingId: payload.id, senderId: payload.senderId || null };
+        // El chofer lo saca el servidor del token; la etiqueta va completa.
         try {
-          return assignFeedback(await putJsonWithTimeout("/v2/deliveries/self-assign", body, SCAN_TIMEOUT_MS), label);
+          return assignFeedback(await putJsonWithTimeout("/v2/deliveries/self-assign", scanBody(payload), SCAN_TIMEOUT_MS), label);
         } catch {
           return noResponseFeedback(mode);
         }
       }
 
-      const body = { sender_id: payload.senderId, shipping_id: payload.id };
       try {
-        return collectFeedback(await postJsonWithTimeout("/v2/deliveries/scan", body, SCAN_TIMEOUT_MS), label);
+        return collectFeedback(await postJsonWithTimeout("/v2/deliveries/scan", scanBody(payload), SCAN_TIMEOUT_MS), label);
       } catch {
         return noResponseFeedback(mode);
       }

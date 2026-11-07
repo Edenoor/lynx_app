@@ -14,6 +14,7 @@ import {
   plantaFeedback,
   recordScan,
   roleProblem,
+  scanBody,
   scanLabel,
   SESSION_ERRORS_KEPT,
   SESSION_EXPIRED,
@@ -36,15 +37,26 @@ eq("query-string", [parseScanPayload("shipping_id=4770001&sender_id=99").id, par
 eq("JSON inválido se lee como texto", parseScanPayload("{roto 47000000001").id, "47000000001");
 eq("espacios alrededor", parseScanPayload("  47741557287 \n").raw, "47741557287");
 
-// 2) Lo que el modo necesita antes de pedir nada.
-eq("vacío → no reconocida", short(payloadProblem("asignarme", parseScanPayload("   "))!), "error: No reconocemos esta etiqueta");
-eq("colecta sin sender_id → pide el QR de ML", payloadProblem("colecta", parseScanPayload("47741557287"))?.detail, "Para ingresar un envío, escaneá el QR de Mercado Libre.");
-eq("asignarme con tracking pelado → sigue", payloadProblem("asignarme", parseScanPayload("47741557287")), null);
-eq("colecta con QR de ML → sigue", payloadProblem("colecta", parseScanPayload(ML_QR)), null);
-eq("planta con estantería → sigue", payloadProblem("planta", parseScanPayload("LYNX:SHELF:3f2c1a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f")), null);
+// 2) Antes de pedir nada solo se frena lo vacío: qué etiqueta es lo decide el
+// servidor (el mismo resolvedor que el Picker).
+const LD_QR = '{"local":"1","did":1600274,"cliente":812,"empresa":72}';
+const LYNX = "LYNX:PKG:LP000012345";
+eq("vacío → no reconocida", short(payloadProblem(parseScanPayload("   "))!), "error: No reconocemos esta etiqueta");
+eq("ML, LightData (QR y tipeado), Lynx, tracking pelado, código desconocido: no se rechazan en la app",
+  [ML_QR, LD_QR, "LD:1600274", LYNX, "47741557287", "CUALQUIER-COSA-123"].map((r) => payloadProblem(parseScanPayload(r))), [null, null, null, null, null, null]);
 
-// 3) Nombre del bulto en pantalla: tracking o genérico, nunca el contenido crudo.
+// 3) Lo que va al servidor: el QR completo, sin prefijos perdidos ni campos parseados.
+eq("ML: el JSON entero", scanBody(parseScanPayload(ML_QR)), { qr: ML_QR });
+eq("LightData: el JSON entero (antes se rechazaba por no traer id)", scanBody(parseScanPayload(LD_QR)), { qr: LD_QR });
+eq("Lynx: con su prefijo (antes viajaba «000012345»)", scanBody(parseScanPayload(LYNX)), { qr: LYNX });
+eq("LightData tipeado: tal cual", scanBody(parseScanPayload("LD:1600274")), { qr: "LD:1600274" });
+eq("código desconocido: tal cual (el servidor responde UNKNOWN_FORMAT)", scanBody(parseScanPayload("CUALQUIER-COSA-123")), { qr: "CUALQUIER-COSA-123" });
+eq("sin espacios alrededor, sin otros campos (ni driverId ni shippingId)", Object.keys(scanBody(parseScanPayload("  47741557287 \n"))), ["qr"]);
+
+// 4) Nombre del bulto en pantalla: el código que reconoce el chofer, nunca el contenido crudo.
 eq("etiqueta: tracking", scanLabel(parseScanPayload(ML_QR)), "47000000101");
+eq("etiqueta: Lynx completa", scanLabel(parseScanPayload(LYNX)), "LP000012345");
+eq("etiqueta: LightData por QR y tipeado", [scanLabel(parseScanPayload(LD_QR)), scanLabel(parseScanPayload("ld 1600274"))], ["LightData 1600274", "LightData 1600274"]);
 eq("etiqueta: estantería", scanLabel(parseScanPayload("LYNX:SHELF:3f2c1a9e-8b7d-4c6e-9f10-2a3b4c5d6e7f")), "Estantería");
 eq("etiqueta: texto raro", scanLabel(parseScanPayload("https://ejemplo.test/x?token=secreto")), "Etiqueta sin tracking");
 
