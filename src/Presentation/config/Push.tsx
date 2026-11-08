@@ -4,7 +4,7 @@ import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { getJson, postJson, putJson } from "./Api";
 import { rememberPushToken } from "./PushUnregister";
-import { isRouteNotice, normalizeKind, NotiKind, RouteNoticeKind, routeIdOf, shownInApp } from "./pushKind";
+import { conversationIdOf, isChatMessage, isRouteNotice, normalizeKind, NotiKind, RouteNoticeKind, routeIdOf, shownInApp } from "./pushKind";
 
 type MobileRole = "seller" | "driver" | "admin";
 
@@ -15,11 +15,25 @@ const EXPO_PROJECT_ID = "57ae574a-011e-4d21-8627-821f480087a5";
 let activeReceivedSubscription: Notifications.Subscription | null = null;
 let activeResponseSubscription: Notifications.Subscription | null = null;
 
+// La charla que el chofer tiene abierta: un mensaje de esa charla no muestra
+// el aviso del sistema (ya lo está viendo); la pantalla se pone al día sola.
+let openConversationId: number | null = null;
+export const setOpenConversation = (id: number | null) => { openConversationId = id; };
+
+const SILENT: Notifications.NotificationBehavior = {
+  shouldShowBanner: false,
+  shouldShowList: false,
+  shouldShowAlert: false,
+  shouldPlaySound: false,
+  shouldSetBadge: false,
+};
+
 Notifications.setNotificationHandler({
   handleNotification: async (notification): Promise<Notifications.NotificationBehavior> => {
-    const content = notification.request.content;
-    const data: any = content.data ?? {};
-    const inApp = shownInApp(normalizeKind(data?.type, data, content.title));
+    const content = notification?.request?.content;
+    const data: any = content?.data ?? {};
+    if (openConversationId !== null && isChatMessage(data) && conversationIdOf(data) === openConversationId) return SILENT;
+    const inApp = shownInApp(normalizeKind(data?.type, data, content?.title));
     return {
       shouldShowBanner: !inApp,
       shouldShowList: true,
@@ -171,6 +185,7 @@ export function attachNotificationListeners({
   onAssignment,
   onTurboOffer,
   onRouteNotice,
+  onChatMessage,
   onAny,
 }: {
   currentUser: { username: string; rol: MobileRole };
@@ -189,6 +204,9 @@ export function attachNotificationListeners({
   // Avisos de recorridos (colecta asignada, quitada o por confirmar, cambios,
   // recorrido ofrecido): al llegar y al tocar la notificación.
   onRouteNotice?: (payload: { kind: RouteNoticeKind; routeId: number | null; source: "received" | "response"; raw?: any }) => void;
+  // Mensaje del chat interno: al llegar y al tocar la notificación. No se
+  // guarda en Alertas (lo muestra el chat, con sus no leídos).
+  onChatMessage?: (payload: { conversationId: number | null; source: "received" | "response" }) => void;
   onAny?: (payload: {
     kind: NotiKind;
     title: string;
@@ -258,6 +276,11 @@ export function attachNotificationListeners({
         body: content.body,
         data,
       });
+    }
+
+    if (isChatMessage(data) && currentUser.rol === "driver") {
+      onChatMessage?.({ conversationId: conversationIdOf(data), source });
+      return;
     }
 
     if (source === "received") {

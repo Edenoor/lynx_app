@@ -75,3 +75,11 @@ export const routeIdOf = (data: any): number | null => {
 // diálogo con «Ver colecta»): el banner del sistema sería el mismo aviso dos
 // veces. Quedan en la bandeja de notificaciones igual.
 export const shownInApp = (kind: NotiKind) => kind === "ROUTE_CONFIRMATION" || kind === "PICKUP_ASSIGNED";
+// Mensaje del chat interno (type CHAT_MESSAGE, data.conversationId). No es un
+// aviso de Alertas: lo muestra el chat, con sus propios no leídos.
+export const isChatMessage = (data: any): boolean => String(data?.type ?? "").toUpperCase().trim() === "CHAT_MESSAGE";
+
+export const conversationIdOf = (data: any): number | null => {
+  const n = Number(data?.conversationId ?? data?.conversation_id);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};

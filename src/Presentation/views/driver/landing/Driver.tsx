@@ -54,6 +54,7 @@ import { loadDriverProfile, useDriverProfile } from "../account/driverProfileApi
 import { invalidateDriverWork, useDriverWork } from "../work/workSource";
 import { offerNoticeText } from "../offers/offerInbox";
 import { openOfferInbox, refreshOfferCount, setOfferTurboEnabled, showOfferNotice, useOfferCount } from "../offers/offerStore";
+import { chatMessageArrived, openChatList, refreshChatUnread } from "../chat/chatStore";
 interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
 type PendingAssignment = {
   deliveryId: string | number;
@@ -329,6 +330,15 @@ export const DriverScreen = ({ navigation }: Props) => {
             if (kind === "TURBO_OFFER" || kind === "ROUTE_OFFER") return;
             add({ title, body, kind, data });
           },
+          // Mensaje del chat: con la app abierta se ponen al día el número y
+          // lo que esté a la vista; al tocar la notificación se abre la charla.
+          onChatMessage: ({ conversationId, source }) => {
+            chatMessageArrived();
+            if (source !== "response") return;
+            const nav = navigation as any;
+            if (conversationId) nav.navigate("ChatScreen", { conversationId });
+            else openChatList(nav);
+          },
           // Avisos de recorridos: al tocar la notificación se abre lo que
           // corresponde; con la app abierta solo se avisa, sin cambiarle la
           // pantalla en medio de un escaneo o una entrega.
@@ -476,7 +486,7 @@ export const DriverScreen = ({ navigation }: Props) => {
       mounted = false;
     };
   }, [username]);
-  useFocusEffect(useCallback(() => { void refreshOfferCount(); }, []));
+  useFocusEffect(useCallback(() => { void refreshOfferCount(); void refreshChatUnread(); }, []));
   const toggleTurbo = async (val: boolean) => {
     if (!username) return;
     setTurboOn(val);
