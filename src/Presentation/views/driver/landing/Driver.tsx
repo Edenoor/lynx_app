@@ -282,13 +282,8 @@ export const DriverScreen = ({ navigation }: Props) => {
     let cancelled = false;
     (async () => {
       try {
-        await setupPushAndRegisterDevice({
-          userId,
-          username,
-          rol: "driver",
-          vehicleType: defaultVehicleType,
-        });
-        if (cancelled) return;
+        // Los avisos se escuchan antes de registrar el teléfono, que pide
+        // permisos y espera una ubicación: el toque que abrió la app no espera al GPS.
         if (detachNotiRef.current) {
           detachNotiRef.current();
           detachNotiRef.current = null;
@@ -392,6 +387,13 @@ export const DriverScreen = ({ navigation }: Props) => {
             showOfferNotice({ ...offerNoticeText("TURBO_OFFER", raw), open: openOffers });
           },
         });
+        await setupPushAndRegisterDevice({
+          userId,
+          username,
+          rol: "driver",
+          vehicleType: defaultVehicleType,
+        });
+        if (cancelled) return;
       } catch (_e) {
         showFeedback(
           "error",

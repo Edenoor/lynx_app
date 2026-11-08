@@ -14,6 +14,10 @@ const EXPO_PROJECT_ID = "57ae574a-011e-4d21-8627-821f480087a5";
 
 let activeReceivedSubscription: Notifications.Subscription | null = null;
 let activeResponseSubscription: Notifications.Subscription | null = null;
+// Toques ya atendidos (por el listener o como el que abrió la app): cada
+// notificación tocada se abre una sola vez, aunque Inicio vuelva a registrar
+// los avisos.
+const handledResponses = new Set<string>();
 
 // La charla que el chofer tiene abierta: un mensaje de esa charla no muestra
 // el aviso del sistema (ya lo está viendo); la pantalla se pone al día sola.
@@ -348,13 +352,23 @@ export function attachNotificationListeners({
     }
   );
 
+  const handleResponse = (response: Notifications.NotificationResponse | null) => {
+    const id = response?.notification?.request?.identifier;
+    if (!response || !id || handledResponses.has(id)) return;
+    handledResponses.add(id);
+    handleNotificationContent(response.notification.request.content, "response");
+  };
+
   activeResponseSubscription =
-    Notifications.addNotificationResponseReceivedListener((response) => {
-      handleNotificationContent(
-        response.notification?.request?.content,
-        "response"
-      );
-    });
+    Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+  // La app se abrió tocando una notificación con la app cerrada del todo: el
+  // toque llegó antes de que hubiera quién lo escuche (quedaba en Inicio).
+  try {
+    handleResponse(Notifications.getLastNotificationResponse());
+  } catch (error) {
+    if (__DEV__) console.log("[Lynx Push Mobile] Sin la notificación que abrió la app:", error);
+  }
 
   return () => {
     if (activeReceivedSubscription) {
