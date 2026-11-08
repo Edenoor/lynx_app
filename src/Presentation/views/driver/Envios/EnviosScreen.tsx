@@ -68,6 +68,7 @@ import {
   useDriverWork,
 } from "../work/workSource";
 import { openOfferInbox, refreshOfferCount, useOfferCount } from "../offers/offerStore";
+import { refreshChatUnread } from "../chat/chatStore";
 import { RouteSummary, tomorrowIso } from "../routes/routesApi";
 import { loadText, loadTotal } from "../turbo/turboGroup";
 import { errorMessage } from "../errorMessage";
@@ -315,7 +316,7 @@ export const EnviosScreen = ({ navigation }: any) => {
   const today = w?.today ?? isoOf(new Date());
   const missions = w?.missions ?? [];
 
-  useFocusEffect(useCallback(() => { void refreshOfferCount(); }, []));
+  useFocusEffect(useCallback(() => { void refreshOfferCount(); void refreshChatUnread(); }, []));
 
   // Turbo se ve si el coordinador lo habilitó o si hay Turbos (no se esconde trabajo).
   const turboRows = useMemo(() => currentRows.filter(isTurboRow), [currentRows]);
@@ -395,6 +396,7 @@ export const EnviosScreen = ({ navigation }: any) => {
       reload(),
       work.refresh(),
       refreshOfferCount(true),
+      refreshChatUnread(true),
       sub === "finished" ? loadHistory() : Promise.resolve(),
       modality === "turbo" && sub === "tomorrow" ? loadScheduled() : Promise.resolve(),
     ]);

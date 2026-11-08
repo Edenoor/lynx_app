@@ -3,7 +3,7 @@
 //     src/Presentation/config/pushKind.ts src/Presentation/config/pushKind.test.ts
 //   node /tmp/pushkind/pushKind.test.js
 
-import { isRouteNotice, normalizeKind, routeIdOf } from "./pushKind";
+import { conversationIdOf, isChatMessage, isRouteNotice, normalizeKind, routeIdOf } from "./pushKind";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -30,6 +30,10 @@ eq("desconocido", normalizeKind("ALGO", {}), "INFO");
 
 eq("isRouteNotice", ["PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_UPDATED", "ROUTE_OFFER", "ROUTE_CONFIRMATION", "TURBO_OFFER", "ASIGNACION"].map((k) => isRouteNotice(k as any)), [true, true, true, true, true, false, false]);
 eq("routeIdOf", [routeIdOf({ routeId: 12 }), routeIdOf({ routeId: "12" }), routeIdOf({ route_id: 7 }), routeIdOf({}), routeIdOf({ routeId: "x" }), routeIdOf(null)], [12, 12, 7, null, null, null]);
+
+// Chat interno: no es un aviso de Alertas
+eq("isChatMessage", [isChatMessage({ type: "CHAT_MESSAGE" }), isChatMessage({ type: "chat_message" }), isChatMessage({ type: "INFO" }), isChatMessage(undefined)], [true, true, false, false]);
+eq("conversationIdOf", [conversationIdOf({ conversationId: 9 }), conversationIdOf({ conversationId: "9" }), conversationIdOf({ conversation_id: 4 }), conversationIdOf({}), conversationIdOf({ conversationId: 0 }), conversationIdOf(null)], [9, 9, 4, null, null, null]);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

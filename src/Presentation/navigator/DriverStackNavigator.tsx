@@ -20,11 +20,13 @@ import RouteOrganizeScreen from "../views/driver/routes/RouteOrganizeScreen";
 import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
 import TurboTomorrowScreen from "../views/driver/turbo/TurboTomorrowScreen";
 import DriverHelpScreen from "../views/driver/help/DriverHelpScreen";
+import ChatScreen from "../views/driver/chat/ChatScreen";
 import OfferNoticeBanner from "../components/driver/OfferNoticeBanner";
 import CollectInLightDataModal from "../components/driver/CollectInLightDataModal";
 import { hideCollectInLightData } from "../views/driver/collectionMode";
 import { resetDriverWork } from "../views/driver/work/workSource";
 import { resetOfferStore } from "../views/driver/offers/offerStore";
+import { resetChatStore } from "../views/driver/chat/chatStore";
 import { resetDriverProfile } from "../views/driver/account/driverProfileApi";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
@@ -33,8 +35,8 @@ export type DriverStackParamList = {
   Onboarding: undefined;
   DriverScreen: undefined;
   EnviosScreen: undefined;
-  // tab: la pestaña que se abre («offers»: la bandeja de ofertas).
-  NotificationsScreen: { tab?: "notifications" | "offers" } | undefined;
+  // tab: la pestaña que se abre («offers»: la bandeja de ofertas; «messages»: los chats).
+  NotificationsScreen: { tab?: "notifications" | "offers" | "messages" } | undefined;
   DriverAccountScreen: undefined;
   DriverHomeScreen: undefined;
   AppearanceScreen: undefined;
@@ -55,6 +57,8 @@ export type DriverStackParamList = {
   TurboTomorrowScreen: undefined;
   // Asistente de ayuda: dudas de uso de la app.
   DriverHelpScreen: undefined;
+  // Una charla del chat interno. title: el de la lista, mientras carga.
+  ChatScreen: { conversationId: number; title?: string };
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -65,7 +69,7 @@ export const DriverStackNavigator = () => {
   const onboardingCompleted = state.completedLocal === true;
 
   // El stack se desmonta al cerrar sesión: lo leído no es del próximo chofer.
-  useEffect(() => () => { resetDriverWork(); resetOfferStore(); resetDriverProfile(); hideCollectInLightData(); }, []);
+  useEffect(() => () => { resetDriverWork(); resetOfferStore(); resetChatStore(); resetDriverProfile(); hideCollectInLightData(); }, []);
 
   // El aviso de oferta va encima de cualquier pantalla y no la bloquea. El de
   // «Registro de colecta» (LightData) se pide desde Colectas y el QR.
@@ -100,6 +104,8 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />
           <Stack.Screen name="TurboTomorrowScreen" component={TurboTomorrowScreen} />
           <Stack.Screen name="DriverHelpScreen" component={DriverHelpScreen} />
+          {/* Una pantalla por charla: abrir otra (un push, una derivación) no le cambia los datos a la que está abierta. */}
+          <Stack.Screen name="ChatScreen" component={ChatScreen} getId={({ params }) => String(params.conversationId)} />
         </>
       )}
     </Stack.Navigator>

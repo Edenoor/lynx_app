@@ -2,12 +2,15 @@
 // «Ayuda»: el chofer le pregunta al asistente cómo usar la app. Es una charla:
 // cada pregunta va con el hilo (conversation_id) y el asistente recuerda lo
 // anterior. Al abrir se retoma la charla si es reciente; si no, arranca vacía
-// con preguntas sugeridas.
+// con preguntas sugeridas. Es el primer chat de la lista: «<<» vuelve a ella.
+// Cuando la respuesta dice que eso lo resuelve coordinación, el botón abre la
+// charla con el equipo de primera línea, con la pregunta y la respuesta ya
+// cargadas (POST /v2/chat/handoff).
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
@@ -25,6 +28,8 @@ import {
   fetchLatestConversation,
   isRecent,
 } from "./helpApi";
+import { handoff } from "../chat/chatApi";
+import { backToChatList } from "../chat/chatStore";
 
 const INTRO =
   "Hola. Preguntame cómo usar Lynx: colectas, repartos, Turbos, el ingreso o los permisos. No veo tus envíos ni tus pagos: eso lo resuelve coordinación.";
@@ -44,6 +49,8 @@ export default function DriverHelpScreen() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  // La respuesta que se está pasando a coordinación.
+  const [handingOff, setHandingOff] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -90,6 +97,22 @@ export default function DriverHelpScreen() {
       setSending(false);
     }
   }, [conversationId, sending]);
+
+  const derive = async (m: HelpMessage) => {
+    if (typeof m.id !== "number" || handingOff !== null) return;
+    setHandingOff(m.id);
+    setSendError("");
+    try {
+      const res = await handoff(m.id);
+      navigation.navigate("ChatScreen", { conversationId: res.conversation_id, title: res.channel.name });
+    } catch (e: any) {
+      setSendError(e?.code === "NO_FIRST_LINE"
+        ? "Todavía no hay un equipo que reciba estas consultas. Consultalo con coordinación por el medio de siempre."
+        : errorMessage(e, "No se pudo pasar la consulta. Probá de nuevo."));
+    } finally {
+      setHandingOff(null);
+    }
+  };
 
   const newConversation = () => {
     setConversationId(null);
@@ -140,16 +163,12 @@ export default function DriverHelpScreen() {
   return (
     <SafeScreen>
       <ThemedStatusBar />
-      <KeyboardScreen
-        contentContainerStyle={styles.content}
-        footer={footer}
-        scrollRef={scrollRef}
-        scrollProps={{ onContentSizeChange: () => scrollRef.current?.scrollToEnd({ animated: true }) }}
-      >
+      {/* Fijo arriba: «<<» y «Nueva consulta» a mano aunque la charla sea larga. */}
+      <View style={styles.header}>
         <View style={styles.topRow}>
-          <Pressable style={styles.back} onPress={() => navigation.goBack()} hitSlop={10}>
-            <Ionicons name="chevron-back" size={20} color={theme.text.secondary} />
-            <Text style={styles.backText}>Volver</Text>
+          <Pressable style={styles.back} onPress={() => backToChatList(navigation)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Volver a los chats">
+            <MaterialCommunityIcons name="chevron-double-left" size={22} color={theme.text.secondary} />
+            <Text style={styles.backText}>Chats</Text>
           </Pressable>
           {messages.length > 0 && !sending ? (
             <Pressable onPress={newConversation} hitSlop={10} accessibilityRole="button">
@@ -157,9 +176,14 @@ export default function DriverHelpScreen() {
             </Pressable>
           ) : null}
         </View>
-
         <Text style={styles.title}>Ayuda</Text>
-
+      </View>
+      <KeyboardScreen
+        contentContainerStyle={styles.content}
+        footer={footer}
+        scrollRef={scrollRef}
+        scrollProps={{ onContentSizeChange: () => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true })) }}
+      >
         {loading ? (
           <ActivityIndicator color={theme.text.accent} style={{ marginTop: 24 }} />
         ) : loadError ? (
@@ -186,7 +210,15 @@ export default function DriverHelpScreen() {
               </View>
             ) : null}
             {messages.map((m) => (
-              <Bubble key={String(m.id)} role={m.role} content={m.content} escalated={m.escalated} />
+              <Bubble
+                key={String(m.id)}
+                role={m.role}
+                content={m.content}
+                escalated={m.escalated}
+                onHandoff={typeof m.id === "number" ? () => derive(m) : undefined}
+                handingOff={handingOff === m.id}
+                handoffDisabled={handingOff !== null}
+              />
             ))}
             {sending ? (
               <View style={[styles.bubble, styles.bubbleAssistant, styles.typing]}>
@@ -206,14 +238,35 @@ export default function DriverHelpScreen() {
   );
 }
 
-function Bubble({ role, content, escalated }: { role: HelpMessage["role"]; content: string; escalated?: boolean }) {
+function Bubble({ role, content, escalated, onHandoff, handingOff, handoffDisabled }: {
+  role: HelpMessage["role"];
+  content: string;
+  escalated?: boolean;
+  // Sin él (una respuesta sin número del servidor) queda solo el texto.
+  onHandoff?: () => void;
+  handingOff?: boolean;
+  handoffDisabled?: boolean;
+}) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const mine = role === "user";
   return (
     <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleAssistant]}>
       <Text style={mine ? styles.bubbleTextMine : styles.bubbleText} selectable>{content}</Text>
-      {escalated ? (
+      {escalated && onHandoff ? (
+        <Pressable
+          style={[styles.handoff, handoffDisabled && !handingOff && styles.handoffOff]}
+          onPress={onHandoff}
+          disabled={handoffDisabled}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: handoffDisabled, busy: handingOff }}
+        >
+          {handingOff
+            ? <ActivityIndicator size="small" color={theme.text.onPrimary} />
+            : <Ionicons name="people-outline" size={16} color={theme.text.onPrimary} />}
+          <Text style={styles.handoffText}>Consultalo con coordinación</Text>
+        </Pressable>
+      ) : escalated ? (
         <View style={styles.escalated}>
           <Ionicons name="people-outline" size={16} color={theme.text.accent} />
           <Text style={styles.escalatedText}>Consultalo con coordinación.</Text>
@@ -224,8 +277,16 @@ function Bubble({ role, content, escalated }: { role: HelpMessage["role"]; conte
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  content: {
+  header: {
     paddingTop: t.spacing.md,
+    paddingHorizontal: t.layout.screenPadding,
+    paddingBottom: t.spacing.sm,
+    gap: t.spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: t.borders.medium,
+  },
+  content: {
+    paddingTop: t.spacing.sm,
     paddingHorizontal: t.layout.screenPadding,
     paddingBottom: t.spacing.md,
     gap: t.spacing.sm,
@@ -236,11 +297,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   link: { color: t.text.accent, fontSize: 14, fontWeight: t.font.weight.bold },
   title: {
     color: t.text.primary,
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 26,
+    lineHeight: 30,
     fontWeight: t.font.weight.black,
-    letterSpacing: -1,
-    marginBottom: t.spacing.xs,
+    letterSpacing: -0.5,
   },
   card: {
     borderRadius: t.radius.xxl,
@@ -265,6 +325,19 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   bubbleTextMine: { color: t.text.onPrimary, fontSize: 15, lineHeight: 21, fontWeight: t.font.weight.bold },
   escalated: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   escalatedText: { color: t.text.accent, fontSize: 13, fontWeight: t.font.weight.black },
+  handoff: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    marginTop: 4,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.primary,
+  },
+  handoffOff: { opacity: 0.5 },
+  handoffText: { color: t.text.onPrimary, fontSize: 14, fontWeight: t.font.weight.black },
   typing: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm },
   typingText: { color: t.text.muted, fontSize: 14, fontWeight: t.font.weight.bold },
   suggestions: { gap: t.spacing.sm, alignItems: "flex-start" },
