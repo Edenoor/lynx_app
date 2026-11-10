@@ -1,9 +1,11 @@
 // src/Presentation/views/picker/PickerNotificationsScreen.tsx
-// Bandeja de notificaciones del Picker, desde el servidor. El contrato actual
-// devuelve solo las no vistas (hasta 20): marcar una como vista no la saca de
-// la lista hasta actualizar, pero después ya no vuelve.
+// Alertas del Picker, en dos pestañas:
+//   Notificaciones  la bandeja del servidor. El contrato actual devuelve solo
+//                   las no vistas (hasta 20): marcar una como vista no la saca
+//                   de la lista hasta actualizar, pero después ya no vuelve.
+//   Mensajes        el chat interno: sus charlas de a uno y «Nueva charla».
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,11 +17,21 @@ import { fetchMyNotifications, InboxNotification, INBOX_LIMIT, markNotifications
 import { loadErrorMessage } from "./warehouseApi";
 import { ListMessage, listStyles, shortDate } from "./pickerUi";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
+import ChatListPanel from "../driver/chat/ChatListPanel";
+import { refreshChatUnread, useChatUnread } from "../driver/chat/chatStore";
+
+type AlertsTab = "notifications" | "messages";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerNotificationsScreen">;
 
-export default function PickerNotificationsScreen({ route }: Props) {
+export default function PickerNotificationsScreen({ route, navigation }: Props) {
   const { warehouseId } = route.params;
+  const [tab, setTab] = useState<AlertsTab>(route.params.tab === "messages" ? "messages" : "notifications");
+  // Volver desde una charla (o un push) con la pantalla ya abierta pide la pestaña Mensajes.
+  useEffect(() => {
+    if (route.params.tab) setTab(route.params.tab);
+  }, [route.params]);
+  const chatUnread = useChatUnread();
   const bottomSpace = usePickerBottomSpace();
   const [items, setItems] = useState<InboxNotification[] | null>(null);
   const [seen, setSeen] = useState<Set<number>>(new Set());
@@ -47,6 +59,7 @@ export default function PickerNotificationsScreen({ route }: Props) {
   useFocusEffect(
     useCallback(() => {
       load(false);
+      void refreshChatUnread();
     }, [load]),
   );
 
@@ -73,14 +86,50 @@ export default function PickerNotificationsScreen({ route }: Props) {
     <SafeScreen edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <Text style={AppTheme.typography.kicker}>LYNX · DEPÓSITO</Text>
-        <Text style={styles.title}>Notificaciones</Text>
-        {unseenIds.length ? (
+        <Text style={styles.title}>Alertas</Text>
+        <View style={styles.tabs} accessibilityRole="tablist">
+          {([
+            ["notifications", "Notificaciones", items ? items.length - seen.size : 0],
+            ["messages", "Mensajes", chatUnread ?? 0],
+          ] as const).map(([key, label, n]) => {
+            const active = tab === key;
+            return (
+              <Pressable
+                key={key}
+                onPress={() => setTab(key)}
+                style={[styles.tab, active && styles.tabActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={n ? `${label}: ${n}` : label}
+              >
+                <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1}>{label}</Text>
+                {n ? (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{n > 99 ? "99+" : n}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+        {tab === "notifications" && unseenIds.length ? (
           <Pressable style={styles.markAll} onPress={() => markSeen(unseenIds)} disabled={busy} hitSlop={8}>
             <Text style={styles.markAllText}>Marcar todas como vistas</Text>
           </Pressable>
         ) : null}
       </View>
 
+      {tab === "messages" ? (
+        <ChatListPanel
+          navigation={navigation}
+          bottomSpace={bottomSpace}
+          assistant={false}
+          chatRoute="PickerChatScreen"
+          onNewChat={() => navigation.navigate("PickerChatPeopleScreen")}
+          emptyText="Todavía no tenés charlas. Tocá «Nueva charla» para escribirle a alguien del equipo."
+        />
+      ) : (
+      <>
       {items && error ? <Text style={styles.error}>{error}</Text> : null}
 
       <FlatList
@@ -100,6 +149,8 @@ export default function PickerNotificationsScreen({ route }: Props) {
           <NotificationRow item={item} seen={seen.has(item.id)} busy={busy} onSeen={() => markSeen([item.id])} />
         )}
       />
+      </>
+      )}
 
       <PickerBottomNavigation activeTab="notifications" warehouseId={warehouseId} />
     </SafeScreen>
@@ -131,6 +182,29 @@ const styles = StyleSheet.create({
   header: { padding: AppTheme.spacing.md, paddingTop: 24, gap: 4 },
   title: { color: AppTheme.text.primary, fontSize: 26, fontWeight: "800" },
   markAll: { alignSelf: "flex-start", marginTop: 6 },
+  // Mismas pestañas que las Alertas del chofer.
+  tabs: {
+    flexDirection: "row",
+    gap: AppTheme.spacing.xs,
+    marginTop: AppTheme.spacing.sm,
+    padding: 4,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: AppTheme.surfaces.muted,
+  },
+  tab: { flex: 1, minHeight: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: AppTheme.radius.full },
+  tabActive: { backgroundColor: AppTheme.colors.primary },
+  tabText: { color: AppTheme.text.secondary, fontSize: 14, fontWeight: "800" },
+  tabTextActive: { color: AppTheme.text.onPrimary },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: AppTheme.radius.full,
+    backgroundColor: AppTheme.status.rejected.solid,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBadgeText: { color: AppTheme.status.rejected.onSolid, fontSize: 11, fontWeight: "800" },
   markAllText: { color: AppTheme.text.accent, fontWeight: "700", fontSize: 14 },
   error: { color: AppTheme.colors.danger, fontSize: 13, paddingHorizontal: AppTheme.spacing.md, paddingBottom: 8 },
   rowNew: { borderColor: AppTheme.borders.primary },

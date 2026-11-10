@@ -4,7 +4,8 @@
 // mano aunque la charla sea larga). Mientras está a la vista se
 // pone al día cada pocos segundos (y al llegar un push de esta charla, que no
 // muestra el aviso del sistema) y marca leído lo nuevo. Si el servidor dice que
-// no se puede escribir, no hay campo para escribir.
+// no se puede escribir, no hay campo para escribir. La usan el chofer y el
+// picker: onBack dice a qué lista vuelve «<<» (por defecto, la del chofer).
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -24,7 +25,9 @@ import { backToChatList, refreshChatUnread, useChatArrivals } from "./chatStore"
 
 const REFRESH_MS = 5_000;
 
-export default function ChatScreen() {
+type Props = { onBack?: (navigation: any) => void };
+
+export default function ChatScreen({ onBack = backToChatList }: Props = {}) {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const conversationId: number = route.params.conversationId;
@@ -192,7 +195,7 @@ export default function ChatScreen() {
     <SafeScreen>
       <ThemedStatusBar />
       <View style={styles.header}>
-        <Pressable style={styles.back} onPress={() => backToChatList(navigation)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Volver a los chats">
+        <Pressable style={styles.back} onPress={() => onBack(navigation)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Volver a los chats">
           <MaterialCommunityIcons name="chevron-double-left" size={22} color={theme.text.secondary} />
           <Text style={styles.backText}>Chats</Text>
         </Pressable>
