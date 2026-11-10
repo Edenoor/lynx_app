@@ -43,6 +43,17 @@ export function RouteMapModal({ visible, title, stops, onClose, routeId, streets
   // El trazado depende del orden y de dónde está cada parada.
   const shapeKey = `${routeId}|${unsaved}|${order}|${points.map((p) => `${p.stopId}:${p.latitude},${p.longitude}`).join(";")}`;
   const last = useRef<{ key: string; lines: LatLng[][] } | null>(null);
+  const map = useRef<MapView>(null);
+  // La próxima a visitar (la primera sin cerrar), resaltada.
+  const nextId = points.find((p) => !p.closed)?.stopId ?? null;
+
+  // Con el trazado dibujado, el encuadre incluye toda la línea (puede salirse
+  // del cuadro de las paradas), con margen para que no quede pegada al borde.
+  useEffect(() => {
+    if (!lines?.length) return;
+    const coords = [...lines.flat(), ...points.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))];
+    map.current?.fitToCoordinates?.(coords, { edgePadding: { top: 48, right: 40, bottom: 48, left: 40 }, animated: true });
+  }, [lines]);
 
   useEffect(() => {
     setLines(null);
@@ -100,13 +111,14 @@ export function RouteMapModal({ visible, title, stops, onClose, routeId, streets
           </Pressable>
         </View>
         {region ? (
-          <MapView style={styles.map} initialRegion={region}>
+          <MapView ref={map} style={styles.map} initialRegion={region}>
             {(lines ?? []).map((line, i) => (
               <Polyline key={`l${i}`} coordinates={line} strokeColor={theme.colors.primary} strokeWidth={4} />
             ))}
             {points.map((p) => (
-              <Marker key={p.stopId} coordinate={{ latitude: p.latitude, longitude: p.longitude }} title={`${p.sequence}. ${p.title}`}>
-                <View style={[styles.pin, p.closed && styles.pinClosed]}>
+              <Marker key={p.stopId} coordinate={{ latitude: p.latitude, longitude: p.longitude }} title={`${p.sequence}. ${p.title}`}
+                anchor={{ x: 0.5, y: 0.5 }} zIndex={p.stopId === nextId ? 2 : p.closed ? 0 : 1}>
+                <View style={[styles.pin, p.closed && styles.pinClosed, p.stopId === nextId && styles.pinNext]}>
                   <Text style={[styles.pinText, p.closed && styles.pinTextClosed]}>{p.sequence}</Text>
                 </View>
               </Marker>
@@ -120,7 +132,7 @@ export function RouteMapModal({ visible, title, stops, onClose, routeId, streets
         )}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           <Text style={styles.footerText}>
-            {points.length} {points.length === 1 ? "parada" : "paradas"} en el mapa, en orden de visita.
+            {points.length} {points.length === 1 ? "parada" : "paradas"} en el mapa, en orden de visita{nextId !== null ? "; la próxima, en verde" : ""}.
             {missing ? ` ${missing} sin ubicación: no se muestran.` : ""}
             {lines?.length ? ` La línea sigue las calles en el orden ${unsaved ? "sin confirmar" : "guardado"}.` : ""}
           </Text>
@@ -139,7 +151,9 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   close: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   map: { flex: 1 },
   pin: { minWidth: 28, height: 28, paddingHorizontal: 6, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: t.colors.primary, borderWidth: 2, borderColor: "#FFFFFF" },
-  pinClosed: { backgroundColor: "#9E9E9E" },
+  // Gris oscuro: el número blanco se sigue leyendo (el #9E9E9E no llegaba al contraste mínimo).
+  pinClosed: { backgroundColor: "#5F6670" },
+  pinNext: { minWidth: 34, height: 34, borderRadius: 17, backgroundColor: t.colors.success, borderWidth: 3 },
   pinText: { color: t.text.onPrimary, fontSize: 13, fontWeight: "800" },
   pinTextClosed: { color: "#FFFFFF" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 24 },

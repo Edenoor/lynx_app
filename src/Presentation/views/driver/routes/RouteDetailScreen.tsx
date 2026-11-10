@@ -28,6 +28,7 @@ import { capitalize, COLLECTION_STATUS_LABEL, collectionComposition, collectionN
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 import DeclaredCountForm from "./DeclaredCountForm";
 import RouteMapModal from "../../../components/driver/RouteMapModal";
+import SuccessFlash, { FlashMessage, takeFlash } from "../../../components/driver/SuccessFlash";
 import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
 import { turboPickupError, turboPickupItems } from "./turboPickup";
 import {
@@ -65,6 +66,8 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const windowStart = turboWindow?.start ?? null;
   // El recorrido completo en el mapa (último estado: las pruebas toman los useState por orden).
   const [mapOpen, setMapOpen] = useState(false);
+  // Confirmación breve de lo que el servidor aceptó (SuccessFlash). Después del mapa: las pruebas toman los useState por orden.
+  const [flash, setFlash] = useState<FlashMessage | null>(null);
   const load = useCallback(async () => {
     try { const r = await fetchRoute(routeId); setRoute(r); setError(null); }
     catch (e: any) { setError(errorMessage(e, "No se pudo cargar el recorrido")); }
@@ -74,7 +77,14 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   // pantalla) se ve al volver: se relee al volver a esta pantalla y al volver
   // la app a primer plano. Sin sondeo. El primer foco es la carga de arriba.
   const focused = useRef(false);
-  useEffect(() => navigation.addListener("focus", () => { if (focused.current) load(); focused.current = true; }), [navigation, load]);
+  useEffect(() => navigation.addListener("focus", () => {
+    if (focused.current) {
+      load();
+      const done = takeFlash();
+      if (done) setFlash({ text: done, key: Date.now() });
+    }
+    focused.current = true;
+  }), [navigation, load]);
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => { if (state === "active") load(); });
     return () => sub.remove();
@@ -92,11 +102,16 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   }, [route?.type, routeId]);
   // Ejecuta una acción, recarga y muestra el error del servidor si lo hay
   // (arriba de todo, o donde diga `onError`). Si la acción falla no se recarga.
+  // `success`: confirmación breve, recién cuando el servidor la aceptó.
   // Estables (useCallback): las paradas están memorizadas y no se vuelven a
   // dibujar todas al abrir una o al escribir.
-  const act = useCallback(async (fn: () => Promise<unknown>, onError?: (message: string) => void) => {
+  const act = useCallback(async (fn: () => Promise<unknown>, onError?: (message: string) => void, success?: string) => {
     setBusy(true); setError(null);
-    try { await fn(); await load(); } catch (e: any) { (onError ?? setError)(errorMessage(e, "No se pudo completar la acción")); } finally { setBusy(false); }
+    try {
+      await fn();
+      await load();
+      if (success) setFlash({ text: success, key: Date.now() });
+    } catch (e: any) { (onError ?? setError)(errorMessage(e, "No se pudo completar la acción")); } finally { setBusy(false); }
   }, [load]);
   const toggleStop = useCallback((id: number) => setOpenStop((cur) => (cur === id ? null : id)), []);
   // La parada que devuelve la declaración se muestra ya, aunque falle la recarga.
@@ -144,7 +159,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
         onPress: () => act(async () => {
           for (const s of stopsToCloseOnFinish(route?.stops ?? [], route?.type ?? "")) await stopAction(routeId, s.id, "done");
           await completeRoute(routeId);
-        }),
+        }, undefined, "Recorrido completado"),
       },
     ]);
   if (!route) {
@@ -328,6 +343,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
           ) : null}
           </KeyboardScreen>
         </View>
+        {flash ? <SuccessFlash message={flash} /> : null}
         <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
       </SafeScreen>
       <RouteMapModal
@@ -420,7 +436,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
   routeId: number; stop: Stop; stops: Stop[]; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean;
   // Otra parada está abierta: esta se atenúa, pero se puede tocar.
   dimmed: boolean; onToggle: (stopId: number) => void;
-  act: (fn: () => Promise<unknown>, onError?: (message: string) => void) => Promise<void>; onStopSaved: (stop: Stop) => void;
+  act: (fn: () => Promise<unknown>, onError?: (message: string) => void, success?: string) => Promise<void>; onStopSaved: (stop: Stop) => void;
 }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -469,7 +485,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
     act(async () => {
       await recordOutcome(routeId, stop.id, closing.deliveryId, closing.outcome, outcomeNotes(closing.outcome, draft), built.declaration);
       setClosing(null);
-    }, setCloseError);
+    }, setCloseError, closing.outcome === "DELIVERED" ? "Entrega registrada" : "No entregado registrado");
   };
   // Cantidad retirada (solo colectas). La ref frena el segundo toque antes de
   // que `busy` llegue a deshabilitar el botón.
@@ -500,7 +516,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
   const collectedIds = new Set(stop.deliveries.map((d) => d.delivery_id));
   const closeStop = () => {
     if (!isPickup && withoutOutcome.length) { Alert.alert("Faltan resultados", `Hay ${withoutOutcome.length} envíos sin marcar como entregados o no entregados.`); return; }
-    const close = () => act(() => stopAction(routeId, stop.id, "done"));
+    const close = () => act(() => stopAction(routeId, stop.id, "done"), undefined, "Parada cerrada");
     // Cerrar no cambia el envío, pero al completar el recorrido lo que ML no
     // cerró queda en el Baúl del chofer (regla del servidor): se avisa antes.
     const waiting = isRouteDelivery ? awaitingProvider(stop).length : 0;
@@ -557,11 +573,22 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
       </Pressable>
       {open ? (
         <View style={styles.stopBody}>
-          {directions ? (
-            <Pressable onPress={() => Linking.openURL(directions).catch(() => Alert.alert("Cómo llegar", "No se pudo abrir Google Maps."))} style={[styles.btnSmall, styles.btnGhost, styles.rowBtn]} accessibilityRole="link">
-              <Ionicons name="navigate-outline" size={16} color={theme.text.primary} />
-              <Text style={styles.btnGhostText}>Cómo llegar</Text>
-            </Pressable>
+          {/* Ir y llegar, juntos arriba: lo primero que se hace en una parada. */}
+          {directions || (inProgress && !closed && actions.arrive) ? (
+            <View style={styles.row}>
+              {directions ? (
+                <Pressable onPress={() => Linking.openURL(directions).catch(() => Alert.alert("Cómo llegar", "No se pudo abrir Google Maps."))} style={[styles.btn, styles.btnGhost, styles.btnHalf]} accessibilityRole="link">
+                  <Ionicons name="navigate-outline" size={16} color={theme.text.primary} />
+                  <Text style={styles.btnGhostText}>Cómo llegar</Text>
+                </Pressable>
+              ) : null}
+              {inProgress && !closed && actions.arrive ? (
+                <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "arrive"))} disabled={busy} style={[styles.btn, styles.btnHalf, busy && styles.btnDisabled]} accessibilityRole="button">
+                  <Ionicons name="location-outline" size={16} color={theme.text.onPrimary} />
+                  <Text style={styles.btnText}>Llegué</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
           {actions.resolvedButOpen ? (
             <View style={styles.resolvedBox}>
@@ -581,10 +608,14 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
                   {!view.final && d.reverse_kind ? <Text style={styles.reverseRequest}>{reverseRequestText(d.reverse_kind, d.reverse_note)}</Text> : null}
                 </View>
                 {canAct ? (
-                  <View style={styles.row}>
+                  // «Entregar», la principal (verde); «No pude entregar», a mano pero secundaria.
+                  <View style={[styles.row, styles.outcomeRow]}>
                     {/* Mercado Libre: se cierra en Envíos Flex; acá solo se avisa, sin pedir nada al servidor. */}
-                    <Pressable onPress={() => (ml ? mlNotice(ML_DELIVER) : openClose(d.delivery_id, "DELIVERED"))} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregar</Text></Pressable>
-                    <Pressable onPress={() => (ml ? mlNotice(ML_NOT_DELIVERED) : openClose(d.delivery_id, "NOT_DELIVERED"))} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No pude entregar</Text></Pressable>
+                    <Pressable onPress={() => (ml ? mlNotice(ML_DELIVER) : openClose(d.delivery_id, "DELIVERED"))} disabled={busy} style={[styles.btn, styles.btnDeliver, styles.btnHalf, busy && styles.btnDisabled]} accessibilityRole="button">
+                      <Ionicons name="checkmark" size={18} color={theme.text.onPrimary} />
+                      <Text style={styles.btnText}>Entregar</Text>
+                    </Pressable>
+                    <Pressable onPress={() => (ml ? mlNotice(ML_NOT_DELIVERED) : openClose(d.delivery_id, "NOT_DELIVERED"))} disabled={busy} style={[styles.btn, styles.btnGhost, styles.btnHalf, busy && styles.btnDisabled]} accessibilityRole="button"><Text style={styles.btnGhostText}>No pude entregar</Text></Pressable>
                   </View>
                 ) : null}
                 {canAct && !ml && closing?.deliveryId === d.delivery_id ? (
@@ -602,15 +633,18 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
               </View>
               {/* Un envío ya resuelto (entregado por ML, con resultado) no admite otro. */}
               {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !deliveryResolved(d) ? (
-                <View style={styles.row}>
+                <View style={[styles.row, styles.outcomeRow]}>
                   {routeType === "TURBO" ? (
                     <Text style={styles.stopMeta}>Cerrá la entrega en Envíos Flex — Lynx se entera solo</Text>
                   ) : d.tipo_envio === "flex" ? (
                     <Text style={styles.stopMeta}>Entregado: se registra en Envíos Flex</Text>
                   ) : (
-                    <Pressable onPress={() => openClose(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btnSmall, busy && styles.btnDisabled]}><Text style={styles.btnText}>Entregar</Text></Pressable>
+                    <Pressable onPress={() => openClose(d.delivery_id, "DELIVERED")} disabled={busy} style={[styles.btn, styles.btnDeliver, styles.btnHalf, busy && styles.btnDisabled]} accessibilityRole="button">
+                      <Ionicons name="checkmark" size={18} color={theme.text.onPrimary} />
+                      <Text style={styles.btnText}>Entregar</Text>
+                    </Pressable>
                   )}
-                  <Pressable onPress={() => openClose(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btnSmall, styles.btnGhost, busy && styles.btnDisabled]}><Text style={styles.btnGhostText}>No pude entregar</Text></Pressable>
+                  <Pressable onPress={() => openClose(d.delivery_id, "NOT_DELIVERED")} disabled={busy} style={[styles.btn, styles.btnGhost, styles.btnHalf, busy && styles.btnDisabled]} accessibilityRole="button"><Text style={styles.btnGhostText}>No pude entregar</Text></Pressable>
                 </View>
               ) : null}
               {inProgress && (stop.status === "ARRIVED" || stop.status === "PENDING") && !deliveryResolved(d) && closing?.deliveryId === d.delivery_id ? (
@@ -698,9 +732,6 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
           {inProgress && !closed ? (
             <>
               <View style={styles.row}>
-                {actions.arrive ? (
-                  <Pressable onPress={() => act(() => stopAction(routeId, stop.id, "arrive"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}><Text style={styles.btnText}>Llegué</Text></Pressable>
-                ) : null}
                 {actions.close ? (
                   <Pressable onPress={closeStop} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
                     <Text style={styles.btnText}>Cerrar parada</Text>
@@ -762,6 +793,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   btn: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 16, minHeight: 44 },
   btnBig: { minHeight: 52, marginVertical: 4 },
   btnSmall: { backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 12, minHeight: 38, justifyContent: "center" },
+  // Relleno verde con texto blanco (colors.success, como colors.primary).
+  btnDeliver: { backgroundColor: t.colors.success },
+  // Dos botones por fila; en un teléfono angosto pasan a dos filas.
+  btnHalf: { flexGrow: 1, flexBasis: 140 },
+  outcomeRow: { width: "100%" },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: t.borders.default },
   rowBtn: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6 },
   cutoffRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },

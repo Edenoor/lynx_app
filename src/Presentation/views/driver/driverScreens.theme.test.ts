@@ -158,8 +158,9 @@ const RN = {
     Value: class { constructor(public v: number) {} interpolate() { return 0; } },
     View: "Animated.View",
     loop: () => ({ start: () => {}, stop: () => {} }),
-    sequence: () => ({}), parallel: () => ({}), timing: () => ({}), delay: () => ({}),
+    sequence: () => ({}), parallel: () => ({}), timing: () => ({ start: (done?: () => void) => done?.() }), delay: () => ({}),
   },
+  AccessibilityInfo: { isReduceMotionEnabled: async () => false, announceForAccessibility: (m: string) => { announced.push(m); } },
   Easing: { inOut: () => ({}), ease: {} },
   Modal: ({ visible, children }: any) => (visible ? RealReact.createElement("Modal", null, children) : null),
   // Como en React Native: el encabezado arriba y, sin datos, el vacío.
@@ -207,6 +208,8 @@ const MOCKS: Record<string, any> = {
   "expo-constants": { __esModule: true, default: { expoConfig: { version: "1.0.0" } } },
   "expo-updates": { isEnabled: true, channel: "preview", updateId: "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d", isEmbeddedLaunch: false, isEmergencyLaunch: false, runtimeVersion: "0ffd0b43565ee42cd72d1aeaec6be1a6c4f2a6e8" },
 };
+// Lo que se anunció al lector de pantalla (confirmaciones breves).
+const announced: string[] = [];
 const alertsParams: { current: any } = { current: {} };
 const stackScreens = new Set<string>();
 // Pantallas que registró el último stack dibujado.
@@ -1920,6 +1923,16 @@ const setDriverApi = () => {
     body = textOf(tree);
     check("Parada con un envío propio por entregar: «Llegué», «Entregar», «No pude entregar» y «Cerrar parada»",
       ["Llegué", "Entregar", "No pude entregar", "Cerrar parada"].every((x) => body.includes(x)) && !body.includes("ya figuran resueltos"));
+    {
+      // «Cómo llegar» y «Llegué» en la misma fila; «Entregar» verde (principal) y «No pude entregar» secundario.
+      const goRow = all(tree, (x) => x.type === "View" && textOf(x) === "Cómo llegarLlegué");
+      check("Parada: «Cómo llegar» y «Llegué» juntos, en la misma fila", goRow.length === 1 && flat(goRow[0].props.style).flexDirection === "row");
+      const deliver = pressable(tree, "Entregar");
+      const notDelivered = pressable(tree, "No pude entregar");
+      check("Parada: «Entregar» destacado en verde; «No pude entregar» disponible pero secundario",
+        flat(deliver.props.style).backgroundColor === dark.colors.success && flat(notDelivered.props.style).backgroundColor === "transparent");
+      check("Parada: «Llegué» no se repite abajo", all(tree, (x) => x.type === "Pressable" && textOf(x) === "Llegué").length === 1);
+    }
     tree = await press(tree, "Más");
     check("Parada sin entregas: «Saltear parada» dentro de «Más»", textOf(tree).includes("Saltear parada"));
     // Observación: se guarda sola, con su botón; si falla, el texto queda.
@@ -1949,7 +1962,16 @@ const setDriverApi = () => {
       const comment = all(tree, (x) => x.type === "TextInput" && /Comentario \(opcional\)/.test(x.props.placeholder ?? ""))[0];
       check("No pude entregar (propio): comentario opcional, multilínea", !!comment && comment.props.multiline === true);
       comment.props.onChangeText("  Nadie en casa  "); tree = await settle();
+      // Sin el OK del servidor no hay confirmación: el error queda en el cierre.
+      announced.length = 0;
+      api.replies["POST /v2/routes/158/stops/2/outcomes"] = { ok: false, status: 409, error: "La parada ya está cerrada" };
       tree = await press(tree, "Confirmar no entregado");
+      check("Resultado rechazado: sin check de confirmación ni anuncio, y el error en el cierre",
+        !announced.length && !textOf(tree).includes("No entregado registrado") && textOf(tree).includes("La parada ya está cerrada"));
+      delete api.replies["POST /v2/routes/158/stops/2/outcomes"];
+      api.bodies = [];
+      tree = await press(tree, "Confirmar no entregado");
+      check("No entregado: confirmación breve recién con el OK", js(announced) === js(["No entregado registrado"]));
       const nd = api.bodies.find(([k]) => k === "POST /v2/routes/158/stops/2/outcomes");
       check("No pude entregar: el comentario viaja en notes (recortado), sin declarar nada más",
         !!nd && js(nd[1]) === js({ delivery_id: nd[1].delivery_id, outcome: "NOT_DELIVERED", notes: "Nadie en casa" }), js(api.bodies));
@@ -1960,8 +1982,11 @@ const setDriverApi = () => {
         textOf(tree).includes("Si lo retiraste, marcalo acá abajo")
         && all(tree, (x) => x.type === "Pressable" && textOf(x) === "¿Traés algo de vuelta? (opcional)")[0]?.props.accessibilityState?.expanded === false
         && !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Va y vuelve").length);
+      announced.length = 0;
       tree = await press(tree, "Confirmar entrega");
       const post = api.bodies.find(([k]) => k === "POST /v2/routes/158/stops/2/outcomes");
+      check("Entrega: confirmación breve (check verde) recién con el OK del servidor, y anunciada",
+        all(tree, (x) => x.props?.accessibilityLabel === "Entrega registrada").length === 1 && js(announced) === js(["Entrega registrada"]));
       check("Logística inversa sin marcar: no viaja un retiro que el chofer no declaró", !!post && post[1].closure === undefined && post[1].return_item === undefined, js(post));
       check("Entrega propia: el resultado ya no lleva la observación escondida", !!post && post[1].notes === null, js(api.bodies));
       delete api.replies["PUT /v2/routes/158/stops/2/notes"];
@@ -1990,6 +2015,10 @@ const setDriverApi = () => {
     const pins = mapModal ? all(mapModal, (x) => x.type === "Marker").map((m) => textOf(m)) : [];
     check("Mapa del recorrido: las paradas con ubicación, numeradas en orden", js(pins) === js(["1", "3"]), js(pins));
     check("Mapa del recorrido: dice cuántas no tienen ubicación", !!mapModal && textOf(mapModal).includes("1 sin ubicación"));
+    {
+      const pinBg = (n: string) => flat(all(mapModal, (x) => x.type === "Marker" && textOf(x) === n)[0]?.children?.[0]?.props?.style ?? all(all(mapModal, (x) => x.type === "Marker" && textOf(x) === n)[0], (x) => x.type === "View")[0]?.props.style).backgroundColor;
+      check("Mapa del recorrido: la próxima parada resaltada en verde; la cerrada en gris legible", pinBg("1") === dark.colors.success && pinBg("3") === "#5F6670" && textOf(mapModal).includes("la próxima, en verde"), `${pinBg("1")} ${pinBg("3")}`);
+    }
     check("Mapa del recorrido: no pide nada al servidor", !api.calls.some((c) => c.startsWith("PUT") || c.startsWith("POST")));
     // Trazado por calles (10-nov): un reparto abierto lo pide UNA vez al abrir el mapa y dibuja una línea por tramo.
     {
@@ -2160,6 +2189,7 @@ const setDriverApi = () => {
       tree = await press(tree, "Confirmar orden");
       check("Ruteador: confirmar guarda el orden con el que estaba viendo y vuelve",
         js(api.bodies) === js([["PUT /v2/routes/158/stops/driver-order", { stop_ids: [2, 1, 3], expected_stop_ids: [1, 2, 3] }]]) && same(lastNav(), ["goBack"]), js(api.bodies));
+      check("Ruteador: el recorrido, al volver, confirma «Orden guardado» (recién con el OK del servidor)", L("src/Presentation/components/driver/SuccessFlash.tsx").takeFlash() === "Orden guardado");
 
       // Vista previa del trazado: solo cuando cambia el orden; una respuesta
       // que llega tarde (de un orden que ya no se ve) no se dibuja; 409 y 503 avisan.
@@ -2234,8 +2264,19 @@ const setDriverApi = () => {
       tree = await mount(organizeEl());
       tree = await press(tree, "Optimizar");
       nav.calls = []; api.calls = [];
+      L("src/Presentation/components/driver/SuccessFlash.tsx").takeFlash(); // lo que dejó una confirmación anterior
       tree = await press(tree, "Confirmar orden");
       check("Ruteador: si el recorrido cambió (409), lo dice, lo recarga y no vuelve", textOf(tree).includes("El recorrido cambió mientras lo organizabas") && api.calls.includes("GET /v2/routes/158") && !nav.calls.length);
+      check("Ruteador 409: explica qué pasó y qué hacer (revisar y confirmar de nuevo), sin «Orden guardado»",
+        textOf(tree).includes("Cargamos el orden actual: revisalo y confirmá de nuevo.") && L("src/Presentation/components/driver/SuccessFlash.tsx").takeFlash() === null);
+
+      // Orden cambiado a mano, sin optimizar: se dice que falta confirmarlo.
+      api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158": { ok: true, route: loaded158 } };
+      tree = await mount(organizeEl());
+      check("Ruteador: sin cambios no hay aviso de orden manual", !textOf(tree).includes("Cambiaste el orden a mano"));
+      byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
+      check("Ruteador: orden cambiado a mano sin optimizar → aviso y «Confirmar orden» habilitado",
+        textOf(tree).includes("Cambiaste el orden a mano: confirmalo para guardarlo.") && !pressable(tree, "Confirmar orden").props.disabled);
 
       // Sin domicilio: termina sin destino fijo, lo explica y no ofrece «Mi domicilio».
       api.replies = { "GET /v2/routes/158/plan/places": { ...PLACES, home: null }, "GET /v2/routes/158": { ok: true, route: loaded158 } };

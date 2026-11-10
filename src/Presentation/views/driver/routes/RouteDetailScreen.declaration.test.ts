@@ -146,14 +146,14 @@ const route = (p: any = {}) => ({
   confirmation_state: "ACCEPTED", qr_token: "x", notes: null, started_at: null, completed_at: null, stops: [stop()], ...p,
 });
 
-// Orden de useState: detalle (route, busy, error, count, openStop, deadline, mapOpen) = 0-6;
-// KeyboardScreen (offset) = 7;
-// la parada abierta, que va primera (pending, closing, closeError, declareError, more, showClosed) = 8-13
+// Orden de useState: detalle (route, busy, error, count, openStop, deadline, mapOpen, flash) = 0-7;
+// KeyboardScreen (offset) = 8;
+// la parada abierta, que va primera (pending, closing, closeError, declareError, more, showClosed) = 9-14
 // (la observación tiene su propio componente, dentro de «Más»);
-// su formulario (editing, text, invalid) = 14-16; después las demás paradas.
-const IDX = { route: 0, error: 2, declareError: 11, editing: 14, invalid: 16 };
+// su formulario (editing, text, invalid) = 15-17; después las demás paradas.
+const IDX = { route: 0, error: 2, declareError: 12, editing: 15, invalid: 17 };
 const draw = (r: any, o: { open?: number; editing?: boolean; text?: string; declareError?: string; pending?: any[] } = {}) => {
-  states = [r, false, null, "", o.open ?? r.stops[0]?.id, null, false, undefined, o.pending, undefined, undefined, o.declareError, false, false, o.editing, o.text];
+  states = [r, false, null, "", o.open ?? r.stops[0]?.id, null, false, null, undefined, o.pending, undefined, undefined, o.declareError, false, false, o.editing, o.text];
   stateIdx = 0; sets = []; calls.length = 0; alerts.length = 0;
   currentRoute = r;
   return render(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: r.id, name: "MAÑANERO 02" } } }));

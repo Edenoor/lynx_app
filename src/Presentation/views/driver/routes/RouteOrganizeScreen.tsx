@@ -14,6 +14,7 @@ import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import { EDGES_ABOVE_BOTTOM_BAR, SafeScreen } from "../../../components/SafeScreen";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import RouteMapModal from "../../../components/driver/RouteMapModal";
+import { queueFlash } from "../../../components/driver/SuccessFlash";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { readCurrentPosition } from "../../../config/DriverLocation";
 import { errorMessage } from "../errorMessage";
@@ -42,6 +43,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
   const [order, setOrder] = useState<number[]>([]);
   const [preview, setPreview] = useState<PlanPreview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chooser, setChooser] = useState<Chooser | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
@@ -117,7 +119,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
     return { kind: "GPS", latitude: pos.latitude, longitude: pos.longitude };
   };
   const optimize = async () => {
-    setBusy(true); setError(null); setUnreachable([]);
+    setBusy(true); setOptimizing(true); setError(null); setUnreachable([]);
     try {
       const [start, end] = await Promise.all([withGps(points.start), withGps(points.end)]);
       const p = await previewPlan(routeId, { start, end, first_stop_id: pins.first, last_stop_id: pins.last });
@@ -132,17 +134,20 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
       if (Array.isArray(e?.stopIds)) setUnreachable(e.stopIds);
       setError(errorMessage(e, "No se pudo calcular el recorrido por calles. Tu orden no cambió."));
     } finally {
-      setBusy(false);
+      setBusy(false); setOptimizing(false);
     }
   };
   const confirm = async () => {
     setBusy(true); setError(null);
     try {
       await saveDriverOrder(routeId, order, base);
+      queueFlash("Orden guardado");
       navigation.goBack();
     } catch (e: any) {
-      if (e?.code === "ROUTE_CHANGED") await load();
-      setError(errorMessage(e, "No se pudo guardar el orden"));
+      if (e?.code === "ROUTE_CHANGED") {
+        await load();
+        setError("El recorrido cambió mientras lo organizabas (coordinación sumó, quitó o movió paradas). Cargamos el orden actual: revisalo y confirmá de nuevo.");
+      } else setError(errorMessage(e, "No se pudo guardar el orden"));
     } finally {
       setBusy(false);
     }
@@ -175,8 +180,8 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
               <Option label="Primera parada" value={pinLabel(pins.first)} onPress={() => setChooser("first")} disabled={busy || !pending.length} />
               <Option label="Última parada" value={pinLabel(pins.last)} onPress={() => setChooser("last")} disabled={busy || !pending.length} />
               <Pressable onPress={optimize} disabled={busy || !editable || !pending.length} style={[styles.btn, (busy || !editable || !pending.length) && styles.btnDisabled]} accessibilityRole="button">
-                {busy ? <ActivityIndicator color={theme.text.onPrimary} /> : <Ionicons name="sparkles-outline" size={18} color={theme.text.onPrimary} />}
-                <Text style={styles.btnText}>Optimizar</Text>
+                {optimizing ? <ActivityIndicator color={theme.text.onPrimary} /> : <Ionicons name="sparkles-outline" size={18} color={theme.text.onPrimary} />}
+                <Text style={styles.btnText}>{optimizing ? "Calculando por calles…" : "Optimizar"}</Text>
               </Pressable>
             </ThemedCard>
 
@@ -231,8 +236,9 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
                 </ThemedCard>
               );
             })}
+            {changed && !preview ? <Text style={styles.panelText}>Cambiaste el orden a mano: confirmalo para guardarlo.</Text> : null}
             <Pressable onPress={confirm} disabled={busy || !changed || !editable} style={[styles.btn, styles.btnBig, (busy || !changed || !editable) && styles.btnDisabled]} accessibilityRole="button">
-              <Ionicons name="checkmark" size={18} color={theme.text.onPrimary} />
+              {busy && !optimizing ? <ActivityIndicator color={theme.text.onPrimary} /> : <Ionicons name="checkmark" size={18} color={theme.text.onPrimary} />}
               <Text style={styles.btnText}>Confirmar orden</Text>
             </Pressable>
             {changed ? (

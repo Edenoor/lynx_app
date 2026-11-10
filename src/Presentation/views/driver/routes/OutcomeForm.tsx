@@ -102,7 +102,7 @@ export default function OutcomeForm({ outcome, cobranza, reverseRequest = null, 
 
       {error ? <Text style={styles.warn}>{error}</Text> : null}
       <View style={styles.row}>
-        <Pressable onPress={confirm} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
+        <Pressable onPress={confirm} disabled={busy} style={[styles.btn, delivered && styles.btnDeliver, busy && styles.btnDisabled]}>
           <Text style={styles.btnText}>{delivered ? "Confirmar entrega" : "Confirmar no entregado"}</Text>
         </Pressable>
         <Pressable onPress={onCancel} disabled={busy} style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}>
@@ -159,6 +159,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   notes: { minHeight: 64, paddingVertical: 10, textAlignVertical: "top" },
   input: { minHeight: 44, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, backgroundColor: t.surfaces.input, color: t.text.primary, paddingHorizontal: 12 },
   btn: { alignItems: "center", justifyContent: "center", backgroundColor: t.colors.primary, borderRadius: t.radius.md, paddingHorizontal: 16, minHeight: 44 },
+  btnDeliver: { backgroundColor: t.colors.success },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: t.borders.default },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: t.text.onPrimary, fontWeight: "700" },
