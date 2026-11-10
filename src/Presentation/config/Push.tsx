@@ -17,7 +17,15 @@ let activeResponseSubscription: Notifications.Subscription | null = null;
 // Toques ya atendidos (por el listener o como el que abrió la app): cada
 // notificación tocada se abre una sola vez, aunque Inicio vuelva a registrar
 // los avisos.
+// Compartido con el push del picker: si se cambia de usuario sin cerrar la
+// app, el toque que ya atendió uno no lo vuelve a abrir el otro.
 const handledResponses = new Set<string>();
+// true la primera vez que se atiende ese toque; false si ya se atendió.
+export function claimNotificationResponse(id: string | null | undefined): boolean {
+  if (!id || handledResponses.has(id)) return false;
+  handledResponses.add(id);
+  return true;
+}
 
 // La charla que el chofer tiene abierta: un mensaje de esa charla no muestra
 // el aviso del sistema (ya lo está viendo); la pantalla se pone al día sola.
@@ -352,8 +360,7 @@ export function attachNotificationListeners({
 
   const handleResponse = (response: Notifications.NotificationResponse | null) => {
     const id = response?.notification?.request?.identifier;
-    if (!response || !id || handledResponses.has(id)) return;
-    handledResponses.add(id);
+    if (!response || !claimNotificationResponse(id)) return;
     handleNotificationContent(response.notification.request.content, "response");
   };
 
