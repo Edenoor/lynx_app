@@ -1,7 +1,9 @@
 // src/Presentation/views/driver/chat/ChatListPanel.tsx
-// Lista de chats del chofer: la pestaña «Mensajes» de Alertas. Arriba el
-// asistente; después su charla fija con el equipo de Lynx («Lynx»). Se
-// refresca sola mientras está a la vista, y al llegar un push.
+// Lista de chats: la pestaña «Mensajes» de Alertas. Para el chofer, arriba
+// el asistente y después su charla fija con el equipo de Lynx («Lynx»). Para
+// el picker, sus charlas de a uno (con quién está en línea) y «Nueva charla»,
+// que abre el directorio. Se refresca sola mientras está a la vista, y al
+// llegar un push.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -15,13 +17,25 @@ import { ChatConversation, ChatInbox, fetchInbox } from "./chatApi";
 import { chatRows, countLabel, listTime, previewOf } from "./chatView";
 import { publishChatUnread, useChatArrivals } from "./chatStore";
 
-// navigation: la del stack del chofer (la de la pantalla que la contiene).
+// navigation: la del stack que la contiene (chofer o picker).
 // bottomSpace: lo que tapa la barra de abajo.
-type Props = { navigation: any; bottomSpace: number };
+// assistant: la fila del asistente (solo el chofer).
+// chatRoute: la pantalla de la charla en ese stack.
+// onNewChat: muestra «Nueva charla» (el picker abre el directorio).
+type Props = {
+  navigation: any;
+  bottomSpace: number;
+  assistant?: boolean;
+  chatRoute?: string;
+  onNewChat?: () => void;
+  emptyText?: string;
+};
 
 const REFRESH_MS = 15_000;
 
-export default function ChatListPanel({ navigation, bottomSpace }: Props) {
+export default function ChatListPanel({
+  navigation, bottomSpace, assistant = true, chatRoute = "ChatScreen", onNewChat, emptyText = "Todavía no tenés chats.",
+}: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [inbox, setInbox] = useState<ChatInbox | null>(null);
@@ -69,10 +83,10 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
   }, [arrivals, load]);
 
   const openConversation = (c: ChatConversation) =>
-    navigation.navigate("ChatScreen", { conversationId: c.id, title: c.title });
+    navigation.navigate(chatRoute, { conversationId: c.id, title: c.title });
 
-  const rows = chatRows(inbox);
-  const empty = !!inbox && rows.length === 1;
+  const rows = chatRows(inbox, { assistant });
+  const empty = !!inbox && !inbox.conversations.length;
 
   return (
     <View style={styles.page}>
@@ -82,10 +96,16 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
         keyExtractor={(r) => r.key}
         contentContainerStyle={{ paddingBottom: bottomSpace + 24 }}
         ItemSeparatorComponent={() => <View style={{ height: theme.list.gap }} />}
+        ListHeaderComponent={onNewChat ? (
+          <Pressable style={[theme.card, styles.newChat]} onPress={onNewChat} accessibilityRole="button" accessibilityLabel="Nueva charla">
+            <Ionicons name="create-outline" size={20} color={theme.text.accent} />
+            <Text style={styles.newChatText}>Nueva charla</Text>
+          </Pressable>
+        ) : null}
         refreshControl={<RefreshControl refreshing={loading && !!inbox} onRefresh={() => load()} tintColor={theme.text.accent} />}
         ListFooterComponent={
           loading && !inbox ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 24 }} />
-          : empty ? <Text style={styles.emptyText}>Todavía no tenés chats.</Text>
+          : empty ? <Text style={styles.emptyText}>{emptyText}</Text>
           : null
         }
         renderItem={({ item: row }) => {
@@ -109,10 +129,11 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
               style={[theme.card, styles.row]}
               onPress={() => openConversation(c)}
               accessibilityRole="button"
-              accessibilityLabel={c.unread ? `${c.title}: ${c.unread} sin leer` : c.title}
+              accessibilityLabel={rowLabel(c)}
             >
               <View style={styles.avatar}>
-                <Ionicons name="chatbubbles-outline" size={22} color={theme.text.accent} />
+                <Ionicons name={c.kind === "direct" ? "person-outline" : "chatbubbles-outline"} size={22} color={theme.text.accent} />
+                {c.kind === "direct" && c.other?.online ? <View style={styles.onlineDot} /> : null}
               </View>
               <View style={styles.body}>
                 <View style={styles.top}>
@@ -134,6 +155,12 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
   );
 }
 
+// «Lynx: 3 sin leer»; de a uno, con si está en línea: «Ana, en línea: 2 sin leer».
+const rowLabel = (c: ChatConversation) => {
+  const who = c.kind === "direct" && c.other?.online ? `${c.title}, en línea` : c.title;
+  return c.unread ? `${who}: ${c.unread} sin leer` : who;
+};
+
 const makeStyles = (t: Theme) => StyleSheet.create({
   page: { flex: 1, paddingHorizontal: t.layout.screenPadding },
   row: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, padding: t.spacing.md },
@@ -146,6 +173,20 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     justifyContent: "center",
   },
   avatarPrimary: { backgroundColor: t.colors.primary },
+  // En línea: el punto verde sobre la foto, como en el directorio.
+  onlineDot: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 13,
+    height: 13,
+    borderRadius: t.radius.full,
+    backgroundColor: t.status.delivered.solid,
+    borderWidth: 2,
+    borderColor: t.surfaces.screen,
+  },
+  newChat: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: t.spacing.xs, padding: t.spacing.md, marginBottom: t.list.gap },
+  newChatText: { color: t.text.accent, fontSize: 15, fontWeight: t.font.weight.bold },
   body: { flex: 1, gap: 2 },
   top: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm },
   title: { flex: 1, color: t.text.primary, fontSize: 16, fontWeight: t.font.weight.bold },

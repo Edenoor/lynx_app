@@ -42,6 +42,15 @@ export const markNotificationsSeen = async (ids: number[]) => {
 export const unreadBadge = (count: number | null) =>
   !count ? null : count >= INBOX_LIMIT ? `${INBOX_LIMIT}+` : String(count);
 
+// La campana de la barra: notificaciones sin ver + mensajes del chat sin leer.
+// Las notificaciones llegan hasta 20 (con 20 puede haber más: «+»).
+export const alertsBadge = (notifications: number | null, chat: number | null) => {
+  const total = (notifications ?? 0) + (chat ?? 0);
+  if (!total) return null;
+  if (total > 99) return "99+";
+  return (notifications ?? 0) >= INBOX_LIMIT ? `${total}+` : String(total);
+};
+
 /* ---------- cantidad sin ver, compartida entre la campana y la bandeja ---------- */
 
 let unread: number | null = null;

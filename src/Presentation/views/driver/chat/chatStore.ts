@@ -57,7 +57,7 @@ export function resetChatStore() {
 type StackNav = {
   popTo: (...args: any[]) => void;
   replace: (...args: any[]) => void;
-  getState: () => { routes?: { name: string }[] } | undefined;
+  getState: () => { routes?: { name: string; params?: any }[] } | undefined;
 };
 const LIST = ["NotificationsScreen", { tab: "messages" }] as const;
 
@@ -68,4 +68,14 @@ export const openChatList = (navigation: StackNav) => navigation.popTo(...LIST);
 export function backToChatList(navigation: StackNav) {
   if (navigation.getState()?.routes?.some((r) => r.name === LIST[0])) navigation.popTo(...LIST);
   else navigation.replace(...LIST);
+}
+
+// Picker: su lista de chats es la pestaña «Mensajes» de sus Alertas. Si ya
+// está abierta más atrás se vuelve a ella con sus parámetros (el Warehouse);
+// si no (se llegó por un push), toma el lugar de esta pantalla.
+const PICKER_LIST = "PickerNotificationsScreen";
+export function backToPickerChatList(navigation: StackNav) {
+  const open = navigation.getState()?.routes?.find((r) => r.name === PICKER_LIST);
+  if (open) navigation.popTo(PICKER_LIST, { ...open.params, tab: "messages" });
+  else navigation.replace(PICKER_LIST, { warehouseId: null, tab: "messages" });
 }

@@ -1,11 +1,12 @@
 // src/Presentation/views/driver/chat/chatApi.ts
-// Cliente de /v2/chat: el chat interno del chofer, que es su charla fija con
-// el equipo de Lynx («Lynx»). El servidor decide qué ve; acá solo se muestra.
+// Cliente de /v2/chat: el chat interno del chofer (su charla fija con el
+// equipo de Lynx, «Lynx») y del picker (charlas de a uno con el equipo).
+// El servidor decide qué ve; acá solo se muestra.
 // Una charla que no puede ver responde 404, igual que una inexistente.
 
 import { getJsonWithTimeout, postJson } from "../../../config/Api";
 
-// driver: la charla fija de un chofer; store y direct son del panel (tiendas y de a uno).
+// driver: la charla fija de un chofer; direct: de a uno entre internos (picker); store: tiendas (panel).
 export type ChatKind = "driver" | "store" | "direct";
 
 // «member»: el chofer es parte de la charla; «team»: es del equipo interno (no pasa en la app).
@@ -19,6 +20,18 @@ export type ChatConversation = {
   can_write: boolean;
   last_message: { id: number; body: string; author_name: string | null; created_at: string } | null;
   unread: number;
+  // De a uno: la otra persona y si está en línea (vista en el chat hace menos de 2 minutos).
+  other?: { id: number; name: string; online: boolean } | null;
+};
+
+// Directorio de usuarios internos (picker y panel): para abrir una charla de a uno.
+export type ChatPerson = {
+  id: number;
+  name: string;
+  profile: string | null;
+  online: boolean;
+  // La charla de a uno que ya hay con esa persona, si hay.
+  conversation_id: number | null;
 };
 
 export type ChatInbox = {
@@ -78,6 +91,14 @@ export const sendMessage = async (conversationId: number, body: string) =>
 export const markRead = async (conversationId: number, messageId: number) => {
   unwrap(await postJson(`/v2/chat/conversations/${conversationId}/read`, { message_id: messageId }));
 };
+
+// Directorio (solo usuarios internos): primero los que están en línea.
+export const fetchPeople = async (text = "") =>
+  (await get<{ people: ChatPerson[] }>(`/v2/chat/people?q=${encodeURIComponent(text.trim())}`)).people;
+
+// Abre (o retoma) la charla de a uno con esa persona.
+export const openDirect = async (userId: number) =>
+  unwrap<{ conversation_id: number }>(await postJson("/v2/chat/direct", { user_id: userId })).conversation_id;
 
 // «Consultalo con coordinación»: deja en la charla del chofer con Lynx la
 // pregunta y la respuesta del asistente, y le avisa al equipo.

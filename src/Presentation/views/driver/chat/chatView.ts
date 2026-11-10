@@ -2,22 +2,32 @@
 // Lo que muestran la lista de chats y la charla, armado a partir de lo que
 // manda /v2/chat. Módulo puro (sin React Native) para poder probarlo solo.
 
-import type { ChatConversation, ChatInbox, ChatMessage } from "./chatApi";
+import type { ChatConversation, ChatInbox, ChatMessage, ChatPerson } from "./chatApi";
 
-// Lista de chats: arriba el asistente y después su charla con Lynx (el
-// servidor la manda siempre, aunque todavía no tenga mensajes).
+// Lista de chats del chofer: arriba el asistente y después su charla con Lynx
+// (el servidor la manda siempre, aunque todavía no tenga mensajes). El picker
+// no tiene asistente: solo sus charlas de a uno.
 export type ChatRow =
   | { kind: "assistant"; key: string }
   | { kind: "conversation"; key: string; conversation: ChatConversation };
 
-export function chatRows(inbox: ChatInbox | null): ChatRow[] {
-  const rows: ChatRow[] = [{ kind: "assistant", key: "assistant" }];
+export function chatRows(inbox: ChatInbox | null, { assistant = true } = {}): ChatRow[] {
+  const rows: ChatRow[] = assistant ? [{ kind: "assistant", key: "assistant" }] : [];
   if (!inbox) return rows;
   rows.push(...inbox.conversations.map((c): ChatRow => ({ kind: "conversation", key: `c${c.id}`, conversation: c })));
   return rows;
 }
 
-export const previewOf = (c: ChatConversation) => c.last_message?.body ?? "Escribile al equipo de Lynx";
+export const previewOf = (c: ChatConversation) =>
+  c.last_message?.body ?? (c.kind === "direct" ? "Todavía no hay mensajes" : "Escribile al equipo de Lynx");
+
+// Debajo del nombre en el directorio: el perfil, si está en línea y si ya hay charla.
+const PROFILE: Record<string, string> = {
+  ADMIN_TOTAL: "Administrador Total", COORDINADOR: "Coordinación", LIQUIDACIONES: "Liquidaciones", PICKER: "Picker",
+};
+export const personDetail = (p: ChatPerson) =>
+  [PROFILE[p.profile ?? ""] ?? "Administración", p.online ? "en línea" : null, p.conversation_id ? "ya hay charla" : null]
+    .filter(Boolean).join(" · ");
 
 export const countLabel = (n: number) => (n > 99 ? "99+" : String(n));
 

@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/chat/chatView.test.ts
 //   node /tmp/chat-view/chatView.test.js
 
-import { chatRows, countLabel, listTime, mergeMessages, messageTime, newestId, previewOf, showAuthor } from "./chatView";
+import { chatRows, countLabel, listTime, mergeMessages, messageTime, newestId, personDetail, previewOf, showAuthor } from "./chatView";
 import type { ChatConversation, ChatMessage } from "./chatApi";
 
 let failed = 0;
@@ -32,6 +32,15 @@ eq("sin datos: solo el asistente", chatRows(null).map((r) => r.key), ["assistant
 eq("orden de la lista", chatRows({ conversations: [conv(2, "che")], unread_total: 0 }).map((r) => r.key), ["assistant", "c2"]);
 eq("vista previa", [previewOf(conv(1, "che")), previewOf(conv(2))], ["che", "Escribile al equipo de Lynx"]);
 eq("contador", [countLabel(3), countLabel(99), countLabel(150)], ["3", "99", "99+"]);
+
+// Picker (fase 2): sin asistente, sus charlas de a uno y el directorio
+const direct = (id: number): ChatConversation => ({ ...conv(id), kind: "direct", title: "Ana", other: { id: 7, name: "Ana", online: true } });
+eq("picker: sin asistente", chatRows({ conversations: [direct(4)], unread_total: 0 }, { assistant: false }).map((r) => r.key), ["c4"]);
+eq("picker: sin datos, lista vacía", chatRows(null, { assistant: false }), []);
+eq("de a uno sin mensajes", previewOf(direct(4)), "Todavía no hay mensajes");
+const person = { id: 7, name: "Ana", profile: "COORDINADOR", online: true, conversation_id: 4 };
+eq("directorio: perfil, en línea y charla", personDetail(person), "Coordinación · en línea · ya hay charla");
+eq("directorio: sin perfil ni charla, desconectado", personDetail({ ...person, profile: null, online: false, conversation_id: null }), "Administración");
 
 // Horas, con fechas locales (no dependen de la zona del equipo que corre la prueba)
 const now = new Date(2026, 10, 7, 15, 30);
