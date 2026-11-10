@@ -245,7 +245,12 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
         <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
       </SafeScreen>
 
-      <RouteMapModal visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}${changed ? " · sin confirmar" : ""}`} stops={stops} onClose={() => setMapOpen(false)} />
+      <RouteMapModal
+        visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}${changed ? " · sin confirmar" : ""}`} stops={stops} onClose={() => setMapOpen(false)}
+        // El trazado es del orden GUARDADO: con un orden sin confirmar no se dibuja (no se confunden).
+        routeId={route.id} streets={!changed}
+        note={changed ? "El trazado por calles se ve con el orden guardado: confirmá el orden nuevo para verlo." : null}
+      />
       {chooser === "start" || chooser === "end" ? (
         <PointChooser which={chooser} kinds={chooser === "start" ? START_KINDS : END_KINDS} places={places} current={points[chooser]}
           onPick={spec => setPoint(chooser, spec)} onClose={() => setChooser(null)} />

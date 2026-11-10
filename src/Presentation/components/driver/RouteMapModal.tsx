@@ -2,25 +2,54 @@
 // El recorrido completo en un mapa: las paradas numeradas en su orden de
 // visita (las cerradas, atenuadas). Solo muestra: no reordena ni cambia nada.
 // Para ir a una parada está «Cómo llegar» en cada una.
+// Con `streets` (un reparto en su orden guardado) pide el trazado por calles
+// al abrirse, o si cambia el orden que se muestra, y lo dibuja; nunca por
+// intervalo. Si no llega o no coincide con lo que se ve, quedan los marcadores.
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme, useThemedStyles } from "../../theme/ThemeContext";
 import type { Theme } from "../../theme/createTheme";
-import type { Stop } from "../../views/driver/routes/routesApi";
+import { fetchRouteShape, Stop } from "../../views/driver/routes/routesApi";
 import { routeMapPoints } from "../../views/driver/routes/stopView";
+import { LatLng, shapeLines } from "../../views/driver/routes/routeShape";
 
-type Props = { visible: boolean; title: string; stops: Stop[]; onClose: () => void };
+type Props = {
+  visible: boolean; title: string; stops: Stop[]; onClose: () => void;
+  // Recorrido cuyo trazado por calles se pide (solo si `streets`).
+  routeId?: number; streets?: boolean;
+  // Aviso al pie (p. ej. que el trazado sigue el orden guardado).
+  note?: string | null;
+};
 
-export function RouteMapModal({ visible, title, stops, onClose }: Props) {
+export function RouteMapModal({ visible, title, stops, onClose, routeId, streets = false, note = null }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const { points, missing } = useMemo(() => routeMapPoints(stops), [stops]);
+  const order = stops.map((s) => s.id).join(",");
+  const [lines, setLines] = useState<LatLng[][] | null>(null);
+  const [streetNote, setStreetNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLines(null);
+    setStreetNote(null);
+    if (!visible || !streets || !routeId) return undefined;
+    let alive = true;
+    fetchRouteShape(routeId)
+      .then((shape) => {
+        if (!alive) return;
+        const drawn = shapeLines(shape, order.split(",").map(Number));
+        setLines(drawn);
+        if (!drawn) setStreetNote("El trazado por calles no coincide con este orden: se ven solo las paradas.");
+      })
+      .catch(() => { if (alive) setStreetNote("No pudimos dibujar el recorrido por calles: se ven solo las paradas."); });
+    return () => { alive = false; };
+  }, [visible, streets, routeId, order]);
 
   // Encuadre de todas las paradas, con un margen.
   const region = useMemo(() => {
@@ -50,6 +79,9 @@ export function RouteMapModal({ visible, title, stops, onClose }: Props) {
         </View>
         {region ? (
           <MapView style={styles.map} initialRegion={region}>
+            {(lines ?? []).map((line, i) => (
+              <Polyline key={`l${i}`} coordinates={line} strokeColor={theme.colors.primary} strokeWidth={4} />
+            ))}
             {points.map((p) => (
               <Marker key={p.stopId} coordinate={{ latitude: p.latitude, longitude: p.longitude }} title={`${p.sequence}. ${p.title}`}>
                 <View style={[styles.pin, p.closed && styles.pinClosed]}>
@@ -68,7 +100,9 @@ export function RouteMapModal({ visible, title, stops, onClose }: Props) {
           <Text style={styles.footerText}>
             {points.length} {points.length === 1 ? "parada" : "paradas"} en el mapa, en orden de visita.
             {missing ? ` ${missing} sin ubicación: no se muestran.` : ""}
+            {lines?.length ? " La línea sigue las calles en el orden guardado." : ""}
           </Text>
+          {streetNote || note ? <Text style={styles.footerText}>{streetNote ?? note}</Text> : null}
         </View>
       </View>
     </Modal>

@@ -2,7 +2,7 @@
 // Cliente de /v2/routes para el chofer. El servidor identifica al chofer por
 // el token: acá no viaja ningún id de chofer.
 
-import { getJson, postJson, putJson } from "../../../config/Api";
+import { getJson, getJsonWithTimeout, postJson, putJson } from "../../../config/Api";
 import type { OutcomeDeclaration } from "./outcomeDeclaration";
 
 export type RouteType = "PICKUP" | "DELIVERY" | "TURBO";
@@ -178,6 +178,14 @@ export const previewPlan = async (id: number, body: { start: PlanPointSpec; end:
 // expected: el orden que el chofer estaba viendo; si cambió, 409 ROUTE_CHANGED.
 export const saveDriverOrder = async (id: number, stopIds: number[], expected: number[]) =>
   unwrap<{ route: RouteDetail }>(await putJson(`/v2/routes/${id}/stops/driver-order`, { stop_ids: stopIds, expected_stop_ids: expected })).route;
+
+// Trazado por calles en el orden GUARDADO (solo reparto del chofer). Lo pide
+// el mapa al abrirse: sin respuesta en este tiempo, el mapa queda con los
+// marcadores.
+const SHAPE_TIMEOUT_MS = 20_000;
+export type RouteShape = { route_id: number; stop_ids: number[]; missing_stop_ids: number[]; shapes: string[]; precision: number; km: number; seconds: number };
+export const fetchRouteShape = async (id: number) =>
+  unwrap<RouteShape>(await getJsonWithTimeout(`/v2/routes/${id}/plan/shape`, SHAPE_TIMEOUT_MS));
 
 // Recorridos que el coordinador le ofrece al chofer (GET /v2/offers/mine trae
 // también los Turbo, que tienen su propia pantalla: acá se dejan afuera).

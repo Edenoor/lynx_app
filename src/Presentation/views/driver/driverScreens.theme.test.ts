@@ -201,7 +201,7 @@ const MOCKS: Record<string, any> = {
   "expo-camera": { CameraView: "CameraView", useCameraPermissions: () => [camera.permission, camera.request] },
   "react-native-safe-area-context": { SafeAreaView: "SafeAreaView", useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
   "expo-splash-screen": { preventAutoHideAsync: () => Promise.resolve(), hideAsync: () => Promise.resolve() },
-  "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker" },
+  "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker", Polyline: "Polyline" },
   "react-native-svg": { __esModule: true, default: "Svg", Circle: "Circle" },
   "expo-constants": { __esModule: true, default: { expoConfig: { version: "1.0.0" } } },
 };
@@ -1953,6 +1953,32 @@ const setDriverApi = () => {
     check("Mapa del recorrido: las paradas con ubicación, numeradas en orden", js(pins) === js(["1", "3"]), js(pins));
     check("Mapa del recorrido: dice cuántas no tienen ubicación", !!mapModal && textOf(mapModal).includes("1 sin ubicación"));
     check("Mapa del recorrido: no pide nada al servidor", !api.calls.some((c) => c.startsWith("PUT") || c.startsWith("POST")));
+    // Trazado por calles (10-nov): un reparto abierto lo pide UNA vez al abrir el mapa y dibuja una línea por tramo.
+    {
+      const closeMap = async () => { byLabel(tree, "Cerrar mapa")[0].props.onPress(); tree = await settle(); };
+      const lines = (t: any) => { const m = all(t, (x) => x.type === "Modal").find((x) => textOf(x).includes("Recorrido completo")); return m ? all(m, (x) => x.type === "Polyline") : []; };
+      await closeMap();
+      api.calls = [];
+      api.replies = { "GET /v2/routes/158/plan/shape": { ok: true, route_id: 158, stop_ids: [1, 3], missing_stop_ids: [2], shapes: ["_p~iF~ps|U_ulLnnqC"], precision: 6, km: 2.1, seconds: 300 }, ...api.replies };
+      tree = await press(tree, "Ver recorrido en el mapa");
+      check("Mapa: pide el trazado una sola vez al abrir y dibuja la línea por calles", lines(tree).length === 1 && api.calls.filter((c) => c === "GET /v2/routes/158/plan/shape").length === 1, js(api.calls));
+      check("Mapa: con el trazado sigue mostrando las paradas", js(all(all(tree, (x) => x.type === "Modal")[0], (x) => x.type === "Marker").map(textOf)) === js(["1", "3"]));
+      await settle();
+      check("Mapa: sin sondeo (no lo vuelve a pedir solo)", api.calls.filter((c) => c === "GET /v2/routes/158/plan/shape").length === 1);
+      await closeMap();
+      api.replies["GET /v2/routes/158/plan/shape"] = { ok: false, status: 503, code: "ROUTING_UNAVAILABLE", error: "No pudimos dibujar el recorrido por calles" };
+      tree = await press(tree, "Ver recorrido en el mapa");
+      const failedMap = all(tree, (x) => x.type === "Modal").find((x) => textOf(x).includes("Recorrido completo"));
+      check("Mapa: si Valhalla falla quedan los marcadores, sin línea y con aviso", lines(tree).length === 0 && js(all(failedMap, (x) => x.type === "Marker").map(textOf)) === js(["1", "3"]) && textOf(failedMap).includes("No pudimos dibujar el recorrido por calles"));
+      // Un trazado de otro orden (el coordinador lo cambió) no se dibuja.
+      await closeMap();
+      api.replies["GET /v2/routes/158/plan/shape"] = { ok: true, route_id: 158, stop_ids: [3, 1], missing_stop_ids: [2], shapes: ["_p~iF~ps|U_ulLnnqC"], precision: 6, km: 2.1, seconds: 300 };
+      tree = await press(tree, "Ver recorrido en el mapa");
+      check("Mapa: un trazado que no coincide con el orden que se ve no se dibuja", lines(tree).length === 0 && textOf(tree).includes("no coincide con este orden"));
+      await closeMap();
+      delete api.replies["GET /v2/routes/158/plan/shape"];
+      tree = await press(tree, "Ver recorrido en el mapa");
+    }
 
     // Mercado Libre (aunque no sea Flex: se reconoce por el proveedor) se cierra
     // en Envíos Flex: Lynx avisa y no registra nada.
@@ -2085,6 +2111,8 @@ const setDriverApi = () => {
       tree = await press(tree, "Ver en el mapa");
       const orgMap = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("Recorrido completo"));
       check("Ruteador: el mapa muestra el orden sin confirmar", !!orgMap && textOf(orgMap).includes("sin confirmar") && js(all(orgMap, (x) => x.type === "Marker").map(textOf)) === js(["2", "3"]));
+      check("Ruteador: con un orden sin confirmar no pide ni dibuja el trazado (es del orden guardado) y lo explica",
+        !api.calls.some((c) => c.includes("/plan/shape")) && all(orgMap, (x) => x.type === "Polyline").length === 0 && textOf(orgMap).includes("confirmá el orden nuevo para verlo"), js(api.calls));
       nav.calls = []; api.bodies = [];
       api.replies["PUT /v2/routes/158/stops/driver-order"] = { ok: true, route: loaded158 };
       tree = await press(tree, "Confirmar orden");

@@ -330,7 +330,11 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
         </View>
         <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
       </SafeScreen>
-      <RouteMapModal visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}`} stops={route.stops} onClose={() => setMapOpen(false)} />
+      <RouteMapModal
+        visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}`} stops={route.stops} onClose={() => setMapOpen(false)}
+        // Trazado por calles: solo un reparto abierto (el servidor no lo arma para los demás).
+        routeId={route.id} streets={route.type === "DELIVERY" && ["ASSIGNED", "LOADED", "IN_PROGRESS"].includes(route.status)}
+      />
     </ImageBackground>
   );
 }
