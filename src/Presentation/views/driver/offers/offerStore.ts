@@ -8,12 +8,14 @@
 import { fetchRouteOffers } from "../routes/routesApi";
 import { fetchMyOffers } from "../turbo/turboApi";
 import { sharedValue, useSharedValue } from "../work/sharedValue";
-import { pendingOffers, visibleTurboOffers } from "./offerInbox";
+import { offerCounts, OfferCounts, visibleTurboOffers } from "./offerInbox";
 
 const COUNT_TTL_MS = 30_000;
 
-// null: todavía no se sabe (o no se pudo leer nunca).
+// null: todavía no se sabe (o no se pudo leer nunca). `count` es el total
+// (Inicio, barra, Recorridos); `counts`, por tipo (cada pestaña de Envíos).
 const count = sharedValue<number | null>(null);
+const counts = sharedValue<OfferCounts | null>(null);
 let countAt = 0;
 let inflight: Promise<void> | null = null;
 // Sube al cerrar sesión: lo que estaba en vuelo ya no se publica.
@@ -27,9 +29,10 @@ export function setOfferTurboEnabled(enabled: boolean | null) {
   countAt = 0;
 }
 
-export function publishOfferCount(n: number) {
+export function publishOfferCounts(c: OfferCounts) {
   countAt = Date.now();
-  count.set(n);
+  counts.set(c);
+  count.set(c.turbo + c.routes);
 }
 
 // Si el pedido falla queda el último número conocido: el error real lo
@@ -39,13 +42,14 @@ export function refreshOfferCount(force = false): Promise<void> {
   if (!force && count.get() !== null && Date.now() - countAt < COUNT_TTL_MS) return Promise.resolve();
   const gen = generation;
   inflight = Promise.all([fetchMyOffers(), fetchRouteOffers()])
-    .then(([turbos, routes]) => { if (gen === generation) publishOfferCount(pendingOffers(visibleTurboOffers(turbos, turboEnabled), routes)); })
+    .then(([turbos, routes]) => { if (gen === generation) publishOfferCounts(offerCounts(visibleTurboOffers(turbos, turboEnabled), routes)); })
     .catch(() => {})
     .finally(() => { if (gen === generation) inflight = null; });
   return inflight;
 }
 
 export const useOfferCount = () => useSharedValue(count);
+export const useOfferCounts = () => useSharedValue(counts);
 
 // ---------- Aviso no bloqueante ----------
 
@@ -72,6 +76,7 @@ export function resetOfferStore() {
   countAt = 0;
   turboEnabled = null;
   count.set(null);
+  counts.set(null);
   notice.set(null);
 }
 

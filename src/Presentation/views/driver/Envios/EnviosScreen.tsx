@@ -67,7 +67,7 @@ import {
   SourceState,
   useDriverWork,
 } from "../work/workSource";
-import { openOfferInbox, refreshOfferCount, useOfferCount } from "../offers/offerStore";
+import { openOfferInbox, refreshOfferCount, useOfferCounts } from "../offers/offerStore";
 import { RouteSummary, tomorrowIso } from "../routes/routesApi";
 import { loadText, loadTotal } from "../turbo/turboGroup";
 import { errorMessage } from "../errorMessage";
@@ -278,7 +278,7 @@ export const EnviosScreen = ({ navigation }: any) => {
     username,
   } = useEnviosViewModel();
   const work = useDriverWork();
-  const offerCount = useOfferCount();
+  const offerCounts = useOfferCounts();
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -297,6 +297,9 @@ export const EnviosScreen = ({ navigation }: any) => {
 
   const [refreshing, setRefreshing] = useState(false);
   const [modality, setModality] = useState<ModalityKey>("flex");
+  // Ofertas de esta pestaña: Turbo cuenta las Turbo, Flex los recorridos ofrecidos; el resto, ninguna.
+  const tabOffers = modality === "turbo" ? offerCounts?.turbo ?? 0 : modality === "flex" ? offerCounts?.routes ?? 0 : 0;
+  const tabOfferWhat = modality === "turbo" ? { one: "una oferta Turbo", many: "ofertas Turbo" } : { one: "un recorrido ofrecido", many: "recorridos ofrecidos" };
   const [picked, setPicked] = useState(false);
   const [sub, setSub] = useState<SubKey>("current");
   const [finishedPeriod, setFinishedPeriod] = useState<Period>({ kind: "today" });
@@ -768,12 +771,13 @@ export const EnviosScreen = ({ navigation }: any) => {
           })}
         </View>
 
-        {/* Las ofertas se contestan en Alertas: acá solo el aviso (no en el Baúl). */}
-        {offerCount && modality !== "baul" ? (
+        {/* Las ofertas se contestan en Alertas: acá solo el aviso, y de las de esta pestaña
+            (Turbo: ofertas Turbo; Flex: recorridos ofrecidos; Baúl y Tradicionales: ninguna). */}
+        {tabOffers ? (
           <Pressable onPress={() => openOfferInbox(navigation)} style={styles.offersHint} accessibilityRole="button" hitSlop={6}>
             <Ionicons name="pricetags-outline" size={14} color={theme.text.accent} />
             <Text style={styles.offersHintText}>
-              {offerCount === 1 ? "Tenés una oferta sin contestar" : `Tenés ${offerCount > 99 ? "99+" : offerCount} ofertas sin contestar`}: ver en Alertas
+              {tabOffers === 1 ? `Tenés ${tabOfferWhat.one} sin contestar` : `Tenés ${tabOffers > 99 ? "99+" : tabOffers} ${tabOfferWhat.many} sin contestar`}: ver en Alertas
             </Text>
           </Pressable>
         ) : null}

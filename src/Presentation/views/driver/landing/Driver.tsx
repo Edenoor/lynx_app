@@ -310,6 +310,11 @@ export const DriverScreen = ({ navigation }: Props) => {
             );
           },
           onAny: ({ kind, title, body, data }) => {
+            // Una oferta (Turbo o recorrido) se contesta en Alertas › Ofertas:
+            // el push y el aviso en la app siguen, pero no se repite en
+            // Notificaciones. El registro persistente es el del servidor
+            // (notification_log); los avisos de coordinación sí se listan.
+            if (kind === "TURBO_OFFER" || kind === "ROUTE_OFFER") return;
             add({ title, body, kind, data });
           },
           // Avisos de recorridos: al tocar la notificación se abre lo que

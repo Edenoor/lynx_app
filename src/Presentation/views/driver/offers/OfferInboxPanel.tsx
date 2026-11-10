@@ -31,8 +31,8 @@ import type { Theme } from "../../../theme/createTheme";
 import { acceptLote, acceptOffer, declineLote, declineOffer, fetchMyOffers, getAvailability, hhmm, km, TurboApiError, TurboOffer } from "../turbo/turboApi";
 import { AcceptOutcome, acceptWithConfirm, isDefinitive, plazoParaResponder, secondsLeft, withLocalExpiry, WithLocalExpiry } from "../turbo/turboOffer";
 import { acceptRouteOffer, declineRouteOffer, fetchRouteOffers, RouteOffer, todayIso } from "../routes/routesApi";
-import { buildInbox, pendingOffers, routeOfferTitle, visibleTurboOffers } from "./offerInbox";
-import { publishOfferCount, setOfferTurboEnabled } from "./offerStore";
+import { buildInbox, offerCounts, routeOfferTitle, visibleTurboOffers } from "./offerInbox";
+import { publishOfferCounts, setOfferTurboEnabled } from "./offerStore";
 import { invalidateDriverWork } from "../work/workSource";
 import { errorMessage } from "../errorMessage";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
@@ -160,7 +160,7 @@ export default function OfferInboxPanel({ navigation, bottomSpace }: Props) {
         if (offered) setError(null);
         else if (!silent) setError(`No se pudieron cargar los recorridos ofrecidos. ${errorMessage(routeList.ok ? null : routeList.error, "Probá de nuevo.")}`);
       }
-      if (offered) publishOfferCount(pendingOffers(list, offered));
+      if (offered) publishOfferCounts(offerCounts(list, offered));
       // El servidor volvió a responder: un Acepto sin confirmar se reintenta una vez.
       const p = pendingRef.current;
       if (p?.phase === "unknown") void confirm(p.offer, 1);

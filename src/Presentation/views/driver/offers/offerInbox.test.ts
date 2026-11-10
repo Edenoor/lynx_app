@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/offers/offerInbox.test.ts
 //   node /tmp/offer-inbox/offers/offerInbox.test.js
 
-import { buildInbox, offerNoticeText, pendingOffers, routeOfferTitle, visibleTurboOffers } from "./offerInbox";
+import { buildInbox, offerCounts, offerNoticeText, pendingOffers, routeOfferTitle, visibleTurboOffers } from "./offerInbox";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -28,6 +28,7 @@ eq("sin ofertas: vacía", buildInbox([], []), []);
 // 2) Contador: un lote cuenta una vez (se acepta entero).
 eq("contador: 2 sueltos + 1 lote + 2 recorridos", pendingOffers([{ group_id: null }, { group_id: null }, { group_id: 7 }, { group_id: 7 }], [{}, {}]), 5);
 eq("contador en cero", pendingOffers([], []), 0);
+eq("contador por tipo: Turbo (lote una vez) aparte de los recorridos", offerCounts([{ group_id: null }, { group_id: 7 }, { group_id: 7 }], [{}]), { turbo: 2, routes: 1 });
 
 // 3) Textos.
 eq("título de recorrido ofrecido", [routeOfferTitle(r(77, 0) as any), routeOfferTitle(r(78, 0, 1) as any)], ["Recorrido #77 · 4 envíos", "Recorrido #78 · 1 envío"]);

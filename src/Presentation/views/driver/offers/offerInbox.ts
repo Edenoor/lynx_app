@@ -34,9 +34,16 @@ export function buildInbox<T extends TurboLike, R extends RouteOfferLike>(turbos
 }
 
 // Ofertas pendientes como las ve el chofer: un lote cuenta una vez (se acepta entero).
-export function pendingOffers(turbos: Pick<TurboOffer, "group_id">[], routeOffers: unknown[]): number {
+// Por tipo (10-nov): cada pestaña de Envíos avisa solo de las suyas (Turbo
+// las Turbo, Flex los recorridos ofrecidos); el total es para Inicio y la barra.
+export type OfferCounts = { turbo: number; routes: number };
+export function offerCounts(turbos: Pick<TurboOffer, "group_id">[], routeOffers: unknown[]): OfferCounts {
   const lotes = new Set(turbos.filter((o) => o.group_id != null).map((o) => o.group_id));
-  return turbos.filter((o) => o.group_id == null).length + lotes.size + routeOffers.length;
+  return { turbo: turbos.filter((o) => o.group_id == null).length + lotes.size, routes: routeOffers.length };
+}
+export function pendingOffers(turbos: Pick<TurboOffer, "group_id">[], routeOffers: unknown[]): number {
+  const c = offerCounts(turbos, routeOffers);
+  return c.turbo + c.routes;
 }
 
 // «Recorrido #77 · 4 envíos».

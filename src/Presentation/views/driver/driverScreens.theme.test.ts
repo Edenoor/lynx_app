@@ -213,7 +213,7 @@ const registeredScreens = new Set<string>();
 const session = { removed: 0 };
 const stackParams: Record<string, any> = { Doc: { docKey: "dni_front" } };
 const notis: any = { items: [], calls: [] as any[] };
-["markRead", "markAllRead", "remove", "clear"].forEach((fn) => (notis[fn] = (...a: any[]) => notis.calls.push([fn, ...a])));
+["add", "markRead", "markAllRead", "remove", "clear"].forEach((fn) => (notis[fn] = (...a: any[]) => notis.calls.push([fn, ...a])));
 const onboarding = {
   state: { acceptedTerms: true, files: {}, completedLocal: false, vehicle: { type: "moto", brand: "Honda", model: "Wave", plate: "AB123CD", dni: "30111222", cuil: "20301112223" } },
   dispatch: () => {},
@@ -616,11 +616,14 @@ const setDriverApi = () => {
     // recorrido) que lleva a Alertas › Ofertas, y el contador en la barra.
     check("Envíos: sin botón «Ofertas» en el encabezado", !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Ofertas").length);
     check("Envíos: el contador de ofertas está en «Alertas» de la barra", byLabel(tree, "Alertas: 3").length === 1);
-    tree = await press(tree, "Tenés 3 ofertas sin contestar: ver en Alertas");
+    // Cada pestaña avisa solo de lo suyo (10-nov): en Turbo, los 2 Turbos (no el recorrido).
+    check("Envíos › Turbo: el aviso cuenta solo las ofertas Turbo", textOf(tree).includes("Tenés 2 ofertas Turbo sin contestar") && !textOf(tree).includes("Tenés 3 ofertas"));
+    tree = await press(tree, "Tenés 2 ofertas Turbo sin contestar: ver en Alertas");
     check("Envíos: el aviso abre Alertas › Ofertas", js(lastNav()) === js(["navigate", "NotificationsScreen", { tab: "offers" }]));
 
     // Flex en curso: repartos abiertos (también de ayer) y sus envíos.
     tree = await press(tree, "Flex");
+    check("Envíos › Flex: el aviso cuenta solo el recorrido ofrecido, no los Turbos", textOf(tree).includes("Tenés un recorrido ofrecido sin contestar") && !textOf(tree).includes("ofertas Turbo"));
     const txt = textOf(tree);
     check("Flex › En curso: el reparto de ayer (lo dice) y el de hoy; sin Turbos", txt.includes("Reparto #8") && txt.includes("Abierto desde ayer") && txt.includes("Reparto #11") && !txt.includes("Turbo #12"), txt.slice(0, 300));
     check("Flex › En curso: envíos abiertos, sin el Turbo ni los cerrados", ["Av. Corrientes 1234", "San Martín 10"].every((x) => txt.includes(x)) && !txt.includes("Mitre 55") && !txt.includes("Belgrano 900") && !txt.includes("Lavalle 300"));
@@ -679,6 +682,7 @@ const setDriverApi = () => {
     };
     tree = await press(tree, "Baúl");
     const baulTxt = textOf(tree);
+    check("Baúl: sin aviso de ofertas (ni Turbo ni recorridos)", !baulTxt.includes("sin contestar"));
     check("Baúl: un solo pedido, el propio (/v2/baul/me)", js(api.calls) === js(["GET /v2/baul/me"]), api.calls.join(", "));
     check("Baúl: totales y cada sección", ["Tu Baúl", "Efectivo por rendir: $1.500 (1)", "Paquetes para devolver: 3", "Cambios, retiros y remitos: 1", "Cambio: zapatillas"].every((x) => baulTxt.includes(x)), baulTxt.slice(0, 400));
     check("Baúl: el cancelado no se vuelve a entregar; la custodia sin intento no es «No entregado»",
@@ -703,6 +707,7 @@ const setDriverApi = () => {
     delete api.replies["GET /v2/baul/me"];
     tree = await press(tree, "Tradicionales");
     check("Tradicionales: «Próximamente»", textOf(tree).includes("Próximamente") && textOf(tree).includes("Envíos tradicionales"));
+    check("Tradicionales: no hereda el aviso de ofertas Turbo", !textOf(tree).includes("sin contestar"));
     for (const scheme of ["dark", "light"]) {
       const th = createTheme({ scheme });
       useTheme(th);
@@ -1089,6 +1094,11 @@ const setDriverApi = () => {
 
     // Ofertas que llegan con la app abierta: aviso arriba, sin diálogo.
     check("Inicio: se registran los avisos de push", !!push.handlers?.onTurboOffer && !!push.handlers?.onRouteNotice);
+    // Las ofertas se gestionan en Ofertas: el push no se repite en Notificaciones; un aviso de coordinación sí.
+    notis.calls = [];
+    for (const kind of ["TURBO_OFFER", "ROUTE_OFFER", "PICKUP_ASSIGNED"]) push.handlers.onAny({ kind, title: kind, body: "", data: {} });
+    check("Notificaciones: una oferta (Turbo o recorrido) no se agrega a la lista; un aviso de coordinación sí",
+      JSON.stringify(notis.calls.filter((c: any[]) => c[0] === "add").map((c: any[]) => c[1].kind)) === JSON.stringify(["PICKUP_ASSIGNED"]), JSON.stringify(notis.calls));
     nav.calls = []; alerts.length = 0;
     push.handlers.onTurboOffer({ routeId: 90, source: "received", raw: { storeName: "Tienda Uno" } });
     tree = await settle();
