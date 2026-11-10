@@ -55,13 +55,15 @@ export function dayLabel(iso: string, today: string): string {
 }
 
 // Período de una vista de historial. «all»: sin filtro de fecha.
-export type Period = { kind: "all" } | { kind: "today" } | { kind: "yesterday" } | { kind: "range"; from: string; to: string };
+export type Period = { kind: "all" } | { kind: "today" } | { kind: "yesterday" } | { kind: "week" } | { kind: "range"; from: string; to: string };
 
 // Días que abarca (null = todos). Un rango al revés se da vuelta.
 export function periodDays(p: Period, today: string): string[] | null {
   if (p.kind === "all") return null;
   if (p.kind === "today") return [today];
   if (p.kind === "yesterday") return [shift(today, -1)];
+  // Últimos 7 días, hoy incluido.
+  if (p.kind === "week") return daysBetween(shift(today, -6), today);
   return p.from <= p.to ? daysBetween(p.from, p.to) : daysBetween(p.to, p.from);
 }
 
@@ -70,6 +72,7 @@ export function periodLabel(p: Period): string {
   if (p.kind === "all") return "Todo";
   if (p.kind === "today") return "Hoy";
   if (p.kind === "yesterday") return "Ayer";
+  if (p.kind === "week") return "Últimos 7 días";
   return p.from === p.to ? ddmm(p.from) : `${ddmm(p.from)} → ${ddmm(p.to)}`;
 }
 

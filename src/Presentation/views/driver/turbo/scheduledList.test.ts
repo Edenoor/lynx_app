@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/turbo/scheduledList.ts src/Presentation/views/driver/turbo/scheduledList.test.ts
 //   node /tmp/scheduled-list/turbo/scheduledList.test.js
 
-import { filterScheduled, hasMine, promiseText, sortScheduled, storesOf } from "./scheduledList";
+import { claimError, filterScheduled, hasMine, promiseText, sortScheduled, storesOf } from "./scheduledList";
 import type { ScheduledTurbo } from "./turboApi";
 
 let failed = 0;
@@ -42,5 +42,10 @@ eq("promesa: solo el fin", promiseText(list[2], TODAY, hora), "Mañana, viernes 
 eq("promesa: solo el día", promiseText(list[3], TODAY, hora), "Sábado 07/11");
 eq("promesa: sin datos", promiseText(t(5, { scheduled_date: "", window_start_at: null, deadline_at: null }), TODAY, hora), "Sin promesa informada");
 
+// Rechazo al aceptar: la prioridad de la tienda se presenta como frase completa; lo demás, tal cual.
+eq("prioridad de la tienda", claimError({ code: "STORE_PRIORITY", message: "este Turbo es de los choferes de la tienda hasta las 09:00 del día del servicio" }),
+  "Todavía no podés tomarlo: este Turbo es de los choferes de la tienda hasta las 09:00 del día del servicio. Si sigue libre después, vas a poder aceptarlo.");
+eq("otro rechazo: el texto del servidor", claimError({ code: "TAKEN", message: "Ya lo tomó otro chofer." }), "Ya lo tomó otro chofer.");
+eq("sin red", claimError({ message: "Network request failed" }), "Sin conexión. Revisá la señal y probá de nuevo.");
 console.log(failed ? `\n${failed} FALLAS` : "\nOK");
 if (failed) process.exit(1);

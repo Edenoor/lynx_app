@@ -8,7 +8,7 @@
 // volvería a listar), y esconderlo solo en el teléfono sería simularlo.
 
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, ImageBackground, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
@@ -16,12 +16,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
+import { SafeScreen } from "../../../components/SafeScreen";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { todayIso } from "../routes/routesApi";
 import { errorMessage } from "../errorMessage";
 import { claimScheduled, fetchScheduledAvailable, hhmm, ScheduledTurbo } from "./turboApi";
 import { NO_RETIRAR_ANTES } from "./turboOffer";
-import { filterScheduled, hasMine, promiseText, ScheduledSort, sortScheduled, StoreFilter, storeName, storesOf } from "./scheduledList";
+import { claimError, filterScheduled, hasMine, promiseText, ScheduledSort, sortScheduled, StoreFilter, storeName, storesOf } from "./scheduledList";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboTomorrowScreen">;
 
@@ -71,7 +72,7 @@ export default function TurboTomorrowScreen({ navigation }: Props) {
             const r = await claimScheduled(t.route_id);
             if (r.group_id) navigation.navigate("TurboGroupScreen", { groupId: r.group_id });
             else navigation.navigate("RouteDetailScreen", { routeId: t.route_id });
-          } catch (e: any) { setError(errorMessage(e, "No se pudo aceptar el Turbo")); await load(); }
+          } catch (e: any) { setError(claimError(e)); await load(); }
           finally { setBusy(null); }
         },
       },
@@ -80,7 +81,8 @@ export default function TurboTomorrowScreen({ navigation }: Props) {
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
       <ThemedStatusBar />
-      <SafeAreaView style={styles.safeArea}>
+      {/* SafeScreen (no el SafeAreaView de react-native, que en Android no corre nada): la app es edge-to-edge. */}
+      <SafeScreen style={styles.safeArea}>
         <View style={styles.page}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
@@ -116,7 +118,12 @@ export default function TurboTomorrowScreen({ navigation }: Props) {
             </>
           ) : null}
 
-          {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
+          {error ? (
+            <View style={styles.errorBox} accessibilityRole="alert">
+              <Ionicons name="alert-circle-outline" size={18} color={theme.status.rejected.text} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
           <FlatList
             data={shown}
             keyExtractor={(t) => String(t.route_id)}
@@ -141,10 +148,10 @@ export default function TurboTomorrowScreen({ navigation }: Props) {
                 </Pressable>
               </View>
             )}
-            contentContainerStyle={{ paddingBottom: 24 }}
+            contentContainerStyle={styles.listContent}
           />
         </View>
-      </SafeAreaView>
+      </SafeScreen>
     </ImageBackground>
   );
 }
@@ -152,9 +159,10 @@ export default function TurboTomorrowScreen({ navigation }: Props) {
 const makeStyles = (t: Theme) => StyleSheet.create({
   background: { flex: 1, backgroundColor: t.colors.background },
   backgroundImage: { opacity: t.backdrop.imageOpacity },
-  safeArea: { flex: 1 },
-  page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 24 },
-  header: { flexDirection: "row", gap: 4, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
+  safeArea: { backgroundColor: "transparent" },
+  page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.md },
+  header: { flexDirection: "row", gap: 4, alignItems: "flex-start", marginBottom: t.spacing.md },
+  listContent: { paddingTop: t.spacing.xs, paddingBottom: t.spacing.xl, flexGrow: 1 },
   back: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -11, marginTop: -8 },
   eyebrow: { ...t.typography.kicker },
   title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
@@ -165,13 +173,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   chipActive: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
   chipText: { color: t.text.secondary, fontSize: 13, fontWeight: "700" },
   chipTextActive: { color: t.text.onPrimary },
-  sortRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: t.spacing.sm },
+  sortRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: t.spacing.md },
   count: { flex: 1, color: t.text.secondary, fontSize: 13, fontWeight: "600" },
   sortBtn: { minHeight: 32, paddingHorizontal: 10, borderRadius: t.radius.md, justifyContent: "center", borderWidth: 1, borderColor: t.borders.default },
   sortBtnActive: { borderColor: t.text.accent, backgroundColor: t.overlays.primary },
   sortText: { color: t.text.secondary, fontSize: 12, fontWeight: "700" },
   sortTextActive: { color: t.text.accent },
-  card: { borderWidth: 1, borderColor: t.borders.primary, padding: t.spacing.md, marginBottom: t.spacing.sm, gap: 4 },
+  card: { borderWidth: 1, borderColor: t.borders.primary, padding: t.spacing.md, marginBottom: t.spacing.md, gap: 4 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   store: { flex: 1, color: t.text.primary, fontSize: 16, fontWeight: "800" },
   mine: { color: t.status.confirmed.text, fontSize: 12, fontWeight: "700" },
@@ -183,6 +191,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   btnText: { color: t.text.onPrimary, fontWeight: "700", fontSize: 15 },
   empty: { alignItems: "center", gap: 10, marginTop: 40 },
   emptyText: { color: t.text.secondary, textAlign: "center" },
-  errorBox: { borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
-  errorText: { color: t.text.primary },
+  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderWidth: 1, borderColor: t.status.rejected.border, backgroundColor: t.status.rejected.background, borderRadius: t.radius.md, padding: 12, marginBottom: 12 },
+  errorText: { flex: 1, color: t.text.primary, lineHeight: 19 },
 });

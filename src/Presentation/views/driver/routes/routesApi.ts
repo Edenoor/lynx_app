@@ -92,17 +92,15 @@ const unwrap = <T,>(res: any): T => {
   return res as T;
 };
 
-// Fecha local del teléfono (YYYY-MM-DD). toISOString() da la de UTC, que en
-// Argentina ya es el día siguiente desde las 21:00.
-const localIso = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// Día operativo (YYYY-MM-DD): el de Buenos Aires, como el servidor, aunque el
+// teléfono tenga otra zona. Argentina es UTC−3 todo el año (sin horario de
+// verano); toISOString() solo daría el de UTC, que desde las 21:00 ya es el
+// día siguiente.
+const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
+const arIso = (ms: number) => new Date(ms - AR_OFFSET_MS).toISOString().slice(0, 10);
 
-export const todayIso = () => localIso(new Date());
-export const tomorrowIso = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return localIso(d);
-};
+export const todayIso = () => arIso(Date.now());
+export const tomorrowIso = () => arIso(Date.now() + 24 * 60 * 60 * 1000);
 
 export const fetchMyRoutes = async (date: string) =>
   unwrap<{ routes: RouteSummary[] }>(await getJson(`/v2/routes/mine?date=${date}`)).routes;

@@ -13,6 +13,7 @@
 
 import type { ScheduledTurbo } from "./turboApi";
 import { capitalize, executionDayLabel } from "../routes/collectionLabels";
+import { errorMessage } from "../errorMessage";
 
 export type StoreFilter = { kind: "all" } | { kind: "mine" } | { kind: "store"; name: string };
 export type ScheduledSort = "promise" | "store";
@@ -56,4 +57,12 @@ export function promiseText(t: Item, todayIso: string, hora: (iso: string) => st
   const hasta = t.deadline_at ? hora(t.deadline_at) : null;
   const franja = desde && hasta ? `${desde} a ${hasta}` : hasta ? `antes de las ${hasta}` : "";
   return [day, franja].filter(Boolean).join(" · ") || "Sin promesa informada";
+}
+
+// La prioridad de la tienda la decide el servidor (409 STORE_PRIORITY, con la
+// hora en su texto): acá solo se presenta como una frase completa.
+export function claimError(e: any): string {
+  const msg = errorMessage(e, "No se pudo aceptar el Turbo");
+  if (e?.code !== "STORE_PRIORITY") return msg;
+  return `Todavía no podés tomarlo: ${msg.charAt(0).toLowerCase()}${msg.slice(1).replace(/\.$/, "")}. Si sigue libre después, vas a poder aceptarlo.`;
 }

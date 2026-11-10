@@ -26,8 +26,6 @@ export type SourceState = "ok" | "unsupported" | "error";
 export type DriverWork = {
   today: string;
   openRoutes: RouteSummary[];
-  // Desde qué día se revisaron los abiertos; null si el servidor los mandó todos.
-  checkedFrom: string | null;
   failedDays: string[];
   groups: TurboGroup[];
   groupsState: SourceState;
@@ -54,7 +52,6 @@ export function isUnsupported(e: unknown): boolean {
 const state = sharedValue<WorkState>({ work: null, loading: false, error: null });
 let loadedAt = 0;
 let inflight: Promise<void> | null = null;
-let lookback = LOOKBACK_DAYS;
 // Si el servidor ya contestó `open`, no hace falta revisar día por día.
 let serverSendsOpen = false;
 // Sube al cerrar sesión: lo que estaba en vuelo ya no se publica.
@@ -77,7 +74,7 @@ const readGroups = (date: string): Promise<GroupsRead> =>
 
 async function readWork(): Promise<DriverWork> {
   const today = todayIso();
-  const days = serverSendsOpen ? [] : previousDays(today, lookback);
+  const days = serverSendsOpen ? [] : previousDays(today, LOOKBACK_DAYS);
   const [current, before, groups, turboEnabled] = await Promise.all([
     // Sin los de hoy no hay pantalla: el error sube.
     fetchMyRoutesWithOpen(today),
@@ -98,7 +95,6 @@ async function readWork(): Promise<DriverWork> {
   return {
     today,
     openRoutes,
-    checkedFrom: current.open ? null : days[days.length - 1] ?? today,
     failedDays,
     groups: groups.groups,
     groupsState: groups.state,
@@ -131,12 +127,6 @@ export function refreshDriverWork(force = false): Promise<void> {
   return inflight;
 }
 
-// «Buscar más atrás»: otra semana más de días anteriores.
-export function searchFurtherBack(): Promise<void> {
-  lookback += LOOKBACK_DAYS;
-  return refreshDriverWork(true);
-}
-
 // Algo cambió (se aceptó una oferta, se cerró sesión): la próxima lectura va al servidor.
 export function invalidateDriverWork() {
   loadedAt = 0;
@@ -147,16 +137,15 @@ export function resetDriverWork() {
   generation++;
   inflight = null;
   loadedAt = 0;
-  lookback = LOOKBACK_DAYS;
   serverSendsOpen = false;
   state.set({ work: null, loading: false, error: null });
 }
 
 // La pantalla lee el trabajo al ganar el foco (si lo leído es viejo).
-export function useDriverWork(): WorkState & { refresh: () => Promise<void>; searchFurtherBack: () => Promise<void> } {
+export function useDriverWork(): WorkState & { refresh: () => Promise<void> } {
   const value = useSharedValue(state);
   useFocusEffect(useCallback(() => { void refreshDriverWork(); }, []));
-  return { ...value, refresh: () => refreshDriverWork(true), searchFurtherBack };
+  return { ...value, refresh: () => refreshDriverWork(true) };
 }
 
 // ---------- Historial y programados (se piden al abrir esa vista) ----------

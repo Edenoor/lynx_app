@@ -630,13 +630,12 @@ const setDriverApi = () => {
     check("Flex › En curso: el reparto de ayer (lo dice) y el de hoy; sin Turbos", txt.includes("Reparto #8") && txt.includes("Abierto desde ayer") && txt.includes("Reparto #11") && !txt.includes("Turbo #12"), txt.slice(0, 300));
     check("Flex › En curso: envíos abiertos, sin el Turbo ni los cerrados", ["Av. Corrientes 1234", "San Martín 10"].every((x) => txt.includes(x)) && !txt.includes("Mitre 55") && !txt.includes("Belgrano 900") && !txt.includes("Lavalle 300"));
     const chips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
-    check("Flex › En curso: estados de los recorridos y de los envíos; el no entregado sigue abierto", js(chips) === js(["Estado: En curso", "Estado: Asignado", "Estado: En camino", "Estado: No entregado"]), chips.join(", "));
+    check("Flex › En curso: estados de los recorridos y de los envíos; el no entregado sigue abierto", js(chips) === js(["Estado: Asignado", "Estado: En curso", "Estado: En camino", "Estado: No entregado"]), chips.join(", "));
     const chipBg = (label: string) => flat(byLabel(tree, `Estado: ${label}`)[0].props.style).backgroundColor;
     check("Flex: «No entregado» con el color de incidencia (no verde)", chipBg("No entregado") === dark.status.incident.background);
-    check("Flex: dice desde qué día revisó los abiertos", txt.includes(`Revisamos recorridos abiertos desde ${L("src/Presentation/views/driver/work/driverWork.ts").dayLabel(shiftIso(TODAY, -7), TODAY)}`));
-    api.calls = [];
-    tree = await press(tree, "Buscar más atrás");
-    check("Flex: «Buscar más atrás» revisa otra semana", Array.from({ length: 14 }, (_, i) => `GET /v2/routes/mine?date=${shiftIso(TODAY, -(i + 1))}`).every((c) => api.calls.includes(c)), api.calls.join(", "));
+    check("Flex › En curso: primero lo de hoy; el abierto de un día anterior va aparte, con aviso (no se esconde)",
+      txt.indexOf("Reparto #11") < txt.indexOf("Quedó abierto un recorrido de días anteriores") && txt.indexOf("Quedó abierto un recorrido de días anteriores") < txt.indexOf("Reparto #8"), txt.slice(0, 400));
+    check("Flex › En curso: sin controles para buscar días anteriores", !txt.includes("Buscar más atrás") && !txt.includes("Revisamos recorridos abiertos"));
     tree = await press(tree, "Reparto #11");
     check("Flex: tocar un reparto abre su detalle", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 11 }]));
     tree = await press(tree, "Av. Corrientes 1234");
@@ -657,6 +656,9 @@ const setDriverApi = () => {
     tree = await press(tree, "Ayer");
     fin = textOf(tree);
     check("Flex › Finalizados › Ayer: otro día, sin los de hoy", api.calls.includes(`GET /v2/routes/mine?date=${YESTERDAY}`) && !fin.includes("Belgrano 900") && fin.includes("No hay recorridos finalizados en este período"), api.calls.join(", "));
+    api.calls = [];
+    tree = await press(tree, "Últimos 7 días");
+    check("Flex › Finalizados › Últimos 7 días: pide los 7 días, hoy incluido", Array.from({ length: 7 }, (_, i) => `GET /v2/routes/mine?date=${shiftIso(TODAY, -i)}`).every((c) => api.calls.includes(c)) && !api.calls.includes(`GET /v2/routes/mine?date=${shiftIso(TODAY, -7)}`), api.calls.join(", "));
     tree = await press(tree, "Rango");
     check("Flex › Finalizados: «Rango» abre el selector de fechas", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Seleccionar rango")));
     tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cancelar");
@@ -693,7 +695,7 @@ const setDriverApi = () => {
       && byLabel(tree, "P-CUST: Sin entregar (quedó con vos, sin intento)").length === 1);
     check("Baúl: no mezcla los envíos de Flex", !baulTxt.includes("San Martín 10"));
     check("Baúl: lo pedido y no declarado va aparte, «a verificar», sin sumar a los totales",
-      byLabel(tree, "V1: Pidieron traer Otro: control remoto y no lo declaraste. Si lo tenés, entregalo en planta.").length === 1 && baulTxt.includes("A verificar con coordinación") && baulTxt.includes("Cambios, retiros y remitos: 1"));
+      byLabel(tree, "V1: Pidieron traer: control remoto. No lo declaraste: si lo tenés, entregalo en planta.").length === 1 && !baulTxt.includes("traer Otro") && baulTxt.includes("A verificar con coordinación") && baulTxt.includes("Cambios, retiros y remitos: 1"));
     const baulRefresh = async (r: any) => {
       api.replies["GET /v2/baul/me"] = r;
       const sv = all(tree, (x) => x.type === "ScrollView" && !!x.props.refreshControl)[0];
@@ -769,12 +771,12 @@ const setDriverApi = () => {
     setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
     envios.currentDeliveries = [{ id: 40, numero_tracking: "T40", direccion: "Viamonte 40", nombre_fantasia: "Tienda", ops_status: "OUT_FOR_DELIVERY", status_ml: "shipped", updated_at: UPDATED }];
     tree = await press(await mount(screens[1][1]()), "Flex");
-    check("Flex: envíos en recorrido sin recorrido abierto en los días revisados → aviso con «Buscar más atrás»", textOf(tree).includes("en recorrido y no encontramos el recorrido abierto"));
+    check("Flex: envíos en recorrido sin recorrido abierto a la vista → aviso con «Actualizar» (no se esconden)", textOf(tree).includes("en recorrido y no encontramos su recorrido abierto") && byLabel(tree, "Buscar más atrás").length === 0 && textOf(tree).includes("Actualizar"));
     check("Flex: sin nada en la calle, sin «Continuar»", !byLabel(tree, "Continuar ").length);
     setEnviosApi({ [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [] }, [`GET /v2/routes/mine?date=${YESTERDAY}`]: { ok: true, routes: [] } });
     envios.currentDeliveries = [{ id: 41, numero_tracking: "T41", direccion: "Viamonte 41", nombre_fantasia: "Tienda", ops_status: "ASSIGNED_TO_ROUTE", is_turbo: true, updated_at: UPDATED }];
     tree = await mount(screens[1][1]());
-    check("Turbo: un Turbo en recorrido sin el recorrido a la vista también se avisa", textOf(tree).includes("en recorrido y no encontramos el recorrido abierto") && !textOf(tree).includes("No tenés Turbos en curso."));
+    check("Turbo: un Turbo en recorrido sin el recorrido a la vista también se avisa", textOf(tree).includes("en recorrido y no encontramos su recorrido abierto") && !textOf(tree).includes("No tenés Turbos en curso"));
 
     // Sin Turbo habilitado ni Turbos: no aparece la modalidad.
     setEnviosApi({ "POST /driver/availability/get": { ok: true, turbo_enabled: false }, [`GET /v2/routes/mine?date=${TODAY}`]: { ok: true, routes: [ROUTES[0]] } });

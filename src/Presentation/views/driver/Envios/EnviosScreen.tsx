@@ -68,7 +68,7 @@ import {
   useDriverWork,
 } from "../work/workSource";
 import { openOfferInbox, refreshOfferCount, useOfferCounts } from "../offers/offerStore";
-import { RouteSummary, tomorrowIso } from "../routes/routesApi";
+import { RouteSummary, todayIso, tomorrowIso } from "../routes/routesApi";
 import { loadText, loadTotal } from "../turbo/turboGroup";
 import { errorMessage } from "../errorMessage";
 
@@ -317,7 +317,7 @@ export const EnviosScreen = ({ navigation }: any) => {
   const [baul, setBaul] = useState<BaulResult | null>(null);
 
   const w = work.work;
-  const today = w?.today ?? isoOf(new Date());
+  const today = w?.today ?? todayIso();
   const missions = w?.missions ?? [];
 
   useFocusEffect(useCallback(() => { void refreshOfferCount(); }, []));
@@ -575,6 +575,20 @@ export const EnviosScreen = ({ navigation }: any) => {
     const activeOfModality = modality === "flex" ? flexActive : turboActive;
     const rowsOfModality = modality === "flex" ? flexRows : turboRows;
     const missingRoutes = isCurrent && w && activeOfModality.length === 0 ? deliveriesInRoute(rowsOfModality.filter((r) => !isFinalizado(r))) : 0;
+    // En curso es el día operativo de hoy. Un recorrido de un día anterior que
+    // sigue abierto (el cierre de medianoche no corrió) no se esconde: va
+    // aparte y con aviso, para cerrarlo o avisar a coordinación.
+    const itemDate = (it: WorkItem) => (it.kind === "group" ? it.group.scheduled_date : it.route.scheduled_date);
+    const todays = isCurrent ? view.routes.filter((it) => itemDate(it) >= today) : view.routes;
+    const older = isCurrent ? view.routes.filter((it) => itemDate(it) < today) : [];
+    const card = (it: WorkItem) => (
+      <WorkItemCard
+        key={it.kind === "group" ? `g${it.group.id}` : `r${it.route.id}`}
+        item={it}
+        onPress={() => openItem(it)}
+        extra={isCurrent && itemDate(it) < today ? `Abierto desde ${dayLabel(itemDate(it), today)}` : null}
+      />
+    );
 
     return (
       <View style={styles.block}>
@@ -601,9 +615,9 @@ export const EnviosScreen = ({ navigation }: any) => {
         {missingRoutes ? (
           <Notice
             tone="warning"
-            text={`Tenés ${missingRoutes === 1 ? "un envío" : `${missingRoutes} envíos`} en recorrido y no encontramos el recorrido abierto en los días revisados.`}
-            action="Buscar más atrás"
-            onAction={work.searchFurtherBack}
+            text={`Tenés ${missingRoutes === 1 ? "un envío" : `${missingRoutes} envíos`} en recorrido y no encontramos su recorrido abierto. Actualizá y, si sigue igual, avisale a coordinación.`}
+            action="Actualizar"
+            onAction={work.refresh}
           />
         ) : null}
 
@@ -612,32 +626,26 @@ export const EnviosScreen = ({ navigation }: any) => {
             <ActivityIndicator color={theme.text.accent} />
             <Text style={styles.muted}>Cargando recorridos…</Text>
           </View>
-        ) : view.routes.length ? (
-          view.routes.map((it) => (
-            <WorkItemCard
-              key={it.kind === "group" ? `g${it.group.id}` : `r${it.route.id}`}
-              item={it}
-              onPress={() => openItem(it)}
-              extra={it.kind === "route" && isCurrent && it.route.scheduled_date < today ? `Abierto desde ${dayLabel(it.route.scheduled_date, today)}` : null}
-            />
-          ))
+        ) : todays.length ? (
+          todays.map(card)
         ) : !routeError && !missingRoutes ? (
           <Text style={styles.muted}>
             {sub === "tomorrow"
               ? "No tenés Turbos programados para mañana."
               : isCurrent
-              ? modality === "turbo" ? "No tenés Turbos en curso." : "No tenés recorridos de reparto abiertos."
+              ? modality === "turbo" ? "No tenés Turbos en curso hoy." : "No tenés recorridos de reparto abiertos hoy."
               : "No hay recorridos finalizados en este período."}
           </Text>
         ) : null}
 
-        {isCurrent && w?.checkedFrom ? (
-          <View style={styles.lookback}>
-            <Text style={styles.muted}>Revisamos recorridos abiertos desde {dayLabel(w.checkedFrom, today)}.</Text>
-            <Pressable onPress={work.searchFurtherBack} hitSlop={8} accessibilityRole="button">
-              <Text style={styles.link}>Buscar más atrás</Text>
-            </Pressable>
-          </View>
+        {!loadingRoutes && older.length ? (
+          <>
+            <Notice
+              tone="warning"
+              text={`${older.length === 1 ? "Quedó abierto un recorrido" : `Quedaron abiertos ${older.length} recorridos`} de días anteriores. Cerralo si terminaste o avisale a coordinación.`}
+            />
+            {older.map(card)}
+          </>
         ) : null}
 
         {modality === "turbo" && isCurrent && loadTotal(w?.turboLoad) ? (
@@ -662,7 +670,7 @@ export const EnviosScreen = ({ navigation }: any) => {
 
   const periodChips = () => {
     if (!(sub === "finished" || sub === "legacy")) return null;
-    const options: Period[] = sub === "legacy" ? [{ kind: "all" }, { kind: "today" }] : [{ kind: "today" }, { kind: "yesterday" }];
+    const options: Period[] = sub === "legacy" ? [{ kind: "all" }, { kind: "today" }] : [{ kind: "today" }, { kind: "yesterday" }, { kind: "week" }];
     const isRange = period.kind === "range";
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersContent} style={styles.filtersBox}>
@@ -1044,8 +1052,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   blockTitleSpaced: { marginTop: t.spacing.md },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   muted: { color: t.text.secondary, fontSize: 13, lineHeight: 18 },
-  lookback: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
-  link: { color: t.text.accent, fontSize: 13, fontWeight: t.font.weight.black },
   linkRow: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, paddingHorizontal: t.spacing.md, minHeight: 44, borderRadius: t.radius.lg, backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.soft },
   linkRowText: { flex: 1, color: t.text.primary, fontSize: 14, fontWeight: "600" },
   notice: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, padding: t.spacing.md, borderRadius: t.radius.lg, borderWidth: 1 },
