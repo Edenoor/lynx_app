@@ -24,7 +24,7 @@ import OutcomeForm from "./OutcomeForm";
 import { buildDeclaration, cobranzaOf, OutcomeDraft, outcomeNotes, reverseRequestText } from "./outcomeDeclaration";
 import { errorMessage } from "../errorMessage";
 import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from "./pickupConfirmation";
-import { capitalize, COLLECTION_STATUS_LABEL, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
+import { capitalize, COLLECTION_STATUS_LABEL, collectionComposition, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 import DeclaredCountForm from "./DeclaredCountForm";
 import RouteMapModal from "../../../components/driver/RouteMapModal";
@@ -204,7 +204,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
                 <Text style={styles.title}>{name || collectionName(route)}</Text>
                 <Text style={styles.meta}>{capitalize(day)} · {COLLECTION_STATUS_LABEL[route.status] ?? route.status}</Text>
                 <Text style={styles.meta}>
-                  {route.stops.length} {route.stops.length === 1 ? "parada" : "paradas"}{route.departure_time ? ` · sale ${route.departure_time.slice(0, 5)}` : ""}
+                  {collectionComposition(route.stops)}{route.departure_time ? ` · comienza ${route.departure_time.slice(0, 5)}` : ""}
                 </Text>
               </View>
             ) : (

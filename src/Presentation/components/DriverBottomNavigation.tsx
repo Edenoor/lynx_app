@@ -52,12 +52,17 @@ export function DriverBottomNavigation({
   onPress,
 }: DriverBottomNavigationProps) {
   // "Colectas" navega desde acá para no tocar el handler de cada pantalla.
+  // Antes se le avisa a la pantalla (las demás lo ignoran; el escáner cierra
+  // su Modal, que si no quedaba abierto encima de Colectas).
   const navigation = useNavigation<any>();
   const offerCount = useOfferCount();
   const items = offerCount ? tabs.map((t) => (t.key === "activity" ? { ...t, badge: offerCount > 99 ? "99+" : String(offerCount) } : t)) : tabs;
   const handlePress = (tab: DriverTabKey) => {
     if (tab === "collections") {
-      if (activeTab !== "collections") navigation.navigate("CollectionsScreen");
+      if (activeTab !== "collections") {
+        onPress(tab);
+        navigation.navigate("CollectionsScreen");
+      }
       return;
     }
     onPress(tab);

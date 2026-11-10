@@ -3,7 +3,7 @@
 //     src/Presentation/config/pushKind.ts src/Presentation/config/pushKind.test.ts
 //   node /tmp/pushkind/pushKind.test.js
 
-import { isRouteNotice, normalizeKind, routeIdOf } from "./pushKind";
+import { isRouteNotice, normalizeKind, routeIdOf, shownInApp } from "./pushKind";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -30,6 +30,9 @@ eq("desconocido", normalizeKind("ALGO", {}), "INFO");
 
 eq("isRouteNotice", ["PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_UPDATED", "ROUTE_OFFER", "ROUTE_CONFIRMATION", "TURBO_OFFER", "ASIGNACION"].map((k) => isRouteNotice(k as any)), [true, true, true, true, true, false, false]);
 eq("routeIdOf", [routeIdOf({ routeId: 12 }), routeIdOf({ routeId: "12" }), routeIdOf({ route_id: 7 }), routeIdOf({}), routeIdOf({ routeId: "x" }), routeIdOf(null)], [12, 12, 7, null, null, null]);
+
+// Con la app abierta: la confirmación de colecta (17:00) y la asignación no se ven dos veces (banner + diálogo).
+eq("shownInApp", ["ROUTE_CONFIRMATION", "PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_OFFER", "TURBO_OFFER", "ASIGNACION"].map((k) => shownInApp(k as any)), [true, true, false, false, false, false]);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

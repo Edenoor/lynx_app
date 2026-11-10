@@ -3,13 +3,13 @@
 //     src/Presentation/views/driver/routes/collectionLabels.ts src/Presentation/views/driver/routes/collectionLabels.test.ts
 //   node /tmp/labels/collectionLabels.test.js
 
-import { collectionKindLabel, collectionName, collectionStatusKey, confirmationNoticeText, directionsUrl, executionDayLabel } from "./collectionLabels";
+import { collectionComposition, collectionKindLabel, collectionName, collectionStatusKey, confirmationNoticeText, directionsUrl, executionDayLabel } from "./collectionLabels";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
   const ok = JSON.stringify(got) === JSON.stringify(want);
   if (!ok) failed++;
-  console.log(`${ok ? "ok  " : "FALLA"} ${name}${ok ? "" : ` → ${JSON.stringify(got)} (esperaba ${JSON.stringify(want)})`}`);
+console.log(`${ok ? "ok  " : "FALLA"} ${name}${ok ? "" : ` → ${JSON.stringify(got)} (esperaba ${JSON.stringify(want)})`}`);
 };
 
 // Día de la colecta, contra la fecha del teléfono al mostrarlo
@@ -29,7 +29,7 @@ eq("extraordinaria sin nombre", [collectionName({ id: 9, template_name: null }),
 const data = { routeId: 4, scheduled_date: "2026-10-27", departure_time: "09:00:00", template_name: "MAÑANERO 02", stops_count: 3 };
 eq("aviso la noche anterior", confirmationNoticeText(data, "2026-10-26"), {
   title: "Confirmá tu colecta MAÑANERO 02",
-  body: "Mañana, martes 27/10 · sale 09:00 · 3 tiendas. Confirmá desde Colectas si podés hacerla.",
+  body: "Mañana, martes 27/10 · comienza 09:00 · 3 tiendas. Confirmá desde Colectas si podés hacerla.",
 });
 eq("el mismo aviso visto al otro día dice hoy", confirmationNoticeText(data, "2026-10-27").body.startsWith("Hoy, martes 27/10"), true);
 eq("una tienda", confirmationNoticeText({ ...data, stops_count: 1 }, "2026-10-26").body.includes("1 tienda."), true);
@@ -50,6 +50,13 @@ eq("cancelada", collectionStatusKey("CANCELLED", null), "cancelled");
 eq("en curso", collectionStatusKey("IN_PROGRESS", null), "inTransit");
 eq("completada", collectionStatusKey("COMPLETED", null), "confirmed");
 eq("planificada", collectionStatusKey("PLANNED", null), "confirmed");
+
+  // Composición de la colecta (detalle): tiendas y, en las mixtas, puntos Dropoff.
+eq("una tienda", collectionComposition([{ store_id: 1 }]), "1 tienda");
+eq("varias tiendas", collectionComposition([{ store_id: 1 }, { store_id: 2 }, { store_id: 3 }]), "3 tiendas");
+eq("mixta Store/Dropoff", collectionComposition([{ store_id: 1 }, { store_id: 2 }, { warehouse_name: "Dropoff Palermo" }]), "2 tiendas y 1 punto Dropoff");
+eq("solo Dropoff", collectionComposition([{ warehouse_name: "A" }, { warehouse_name: "B" }]), "2 puntos Dropoff");
+eq("sin paradas", collectionComposition([]), "0 tiendas");
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

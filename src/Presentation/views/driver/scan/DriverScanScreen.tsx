@@ -262,7 +262,7 @@ export default function DriverScanScreen({ navigation, route }: Props) {
           </View>
         ) : (
           // Visor oscuro fijo en cualquier apariencia: va sobre la imagen de la
-          // cámara. El cargador y la barra de abajo se ven con el oscuro de siempre.
+          // cámara. La barra de abajo, afuera, sigue el tema del chofer.
           <FixedTheme theme={DEFAULT_THEME}>
             <View style={styles.cameraWrap}>
               <QrScanner active={focused && open && !blocked} onScan={onScan} />
@@ -320,11 +320,10 @@ export default function DriverScanScreen({ navigation, route }: Props) {
               <View pointerEvents="none" style={styles.bottomInfo}>
                 <Text style={styles.modeText}>{title}</Text>
               </View>
-
-              <DriverBottomNavigation activeTab="scan" onPress={handleTabPress} />
             </View>
           </FixedTheme>
         )}
+        <DriverBottomNavigation activeTab="scan" onPress={handleTabPress} />
       </View>
     </Modal>
   );

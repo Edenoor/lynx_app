@@ -70,3 +70,8 @@ export const routeIdOf = (data: any): number | null => {
   const n = Number(data?.routeId ?? data?.route_id);
   return Number.isInteger(n) && n > 0 ? n : null;
 };
+
+// Con la app abierta, estos avisos ya los muestra el Inicio del chofer (un
+// diálogo con «Ver colecta»): el banner del sistema sería el mismo aviso dos
+// veces. Quedan en la bandeja de notificaciones igual.
+export const shownInApp = (kind: NotiKind) => kind === "ROUTE_CONFIRMATION" || kind === "PICKUP_ASSIGNED";

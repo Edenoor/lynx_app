@@ -4,7 +4,7 @@ import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { getJson, postJson, putJson } from "./Api";
 import { rememberPushToken } from "./PushUnregister";
-import { isRouteNotice, normalizeKind, NotiKind, RouteNoticeKind, routeIdOf } from "./pushKind";
+import { isRouteNotice, normalizeKind, NotiKind, RouteNoticeKind, routeIdOf, shownInApp } from "./pushKind";
 
 type MobileRole = "seller" | "driver" | "admin";
 
@@ -16,13 +16,18 @@ let activeReceivedSubscription: Notifications.Subscription | null = null;
 let activeResponseSubscription: Notifications.Subscription | null = null;
 
 Notifications.setNotificationHandler({
-  handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification): Promise<Notifications.NotificationBehavior> => {
+    const content = notification.request.content;
+    const data: any = content.data ?? {};
+    const inApp = shownInApp(normalizeKind(data?.type, data, content.title));
+    return {
+      shouldShowBanner: !inApp,
+      shouldShowList: true,
+      shouldShowAlert: !inApp,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 export async function setupPushAndRegisterDevice(params: {

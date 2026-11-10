@@ -28,6 +28,15 @@ export const collectionKindLabel = (r: { template_id?: number | null }) => (r.te
 
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+// Composición de una colecta según sus paradas: tiendas y, en las mixtas,
+// puntos Dropoff (una parada de retiro tiene store_id o es un Dropoff).
+export function collectionComposition(stops: { store_id?: number | null; warehouse_name?: string | null }[]): string {
+  const dropoffs = stops.filter((s) => !s.store_id && s.warehouse_name).length;
+  const stores = stops.length - dropoffs;
+  return [stores ? plural(stores, "tienda", "tiendas") : "", dropoffs ? plural(dropoffs, "punto Dropoff", "puntos Dropoff") : ""]
+    .filter(Boolean).join(" y ") || plural(0, "tienda", "tiendas");
+}
+
 export const COLLECTION_STATUS_LABEL: Record<string, string> = {
   PLANNED: "Planificada", ASSIGNED: "Asignada", LOADED: "Cargada", IN_PROGRESS: "En curso", COMPLETED: "Completada", CANCELLED: "Cancelada",
 };
@@ -49,7 +58,7 @@ export function collectionStatusKey(status: string, answer: PickupAnswer | null)
 export function confirmationNoticeText(data: any, todayIso: string): { title: string; body: string } {
   const name = data?.template_name ? String(data.template_name) : null;
   const day = data?.scheduled_date ? executionDayLabel(String(data.scheduled_date), todayIso) : "";
-  const time = data?.departure_time ? `sale ${String(data.departure_time).slice(0, 5)}` : "";
+  const time = data?.departure_time ? `comienza ${String(data.departure_time).slice(0, 5)}` : "";
   const stops = Number(data?.stops_count);
   const parts = [capitalize(day), time, Number.isInteger(stops) && stops > 0 ? plural(stops, "tienda", "tiendas") : ""].filter(Boolean);
   return {

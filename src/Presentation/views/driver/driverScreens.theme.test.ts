@@ -1184,7 +1184,7 @@ const setDriverApi = () => {
     const cam = all(tree, (x) => x.type === "CameraView")[0];
     check("Escaneo: la cámara lee QR igual que antes", !!cam && same(cam.props.barcodeScannerSettings, { barcodeTypes: ["qr"] }) && typeof cam.props.onBarcodeScanned === "function");
     const bgs = all(tree, () => true).map((x) => flat(x.props.style).backgroundColor);
-    check("Escaneo: la barra sobre la cámara va con el oscuro de siempre", bgs.includes(DEFAULT_THEME.surfaces.cardElevated) && !bgs.includes(light.surfaces.cardElevated));
+    check("Escaneo: el visor sigue oscuro, pero la barra de abajo sigue el tema del chofer (claro)", bgs.includes(light.surfaces.cardElevated) && !bgs.includes(DEFAULT_THEME.surfaces.cardElevated));
     check("Escaneo: el visor es legible sobre la cámara", legibility(tree, "#000000").bad.length === 0, legibility(tree, "#000000").bad.join(" · "));
     camera.permission = null;
     camera.request = () => new Promise(() => {}); // el permiso todavía se está pidiendo
@@ -1273,6 +1273,22 @@ const setDriverApi = () => {
     check("Asignarme: mismo pedido que antes (rol + self-assign)", same(api.calls, ["GET /v2/users/38/role", "PUT /v2/deliveries/self-assign"]), api.calls.join(", "));
     check("Asignarme: manda el QR completo ({ qr }), sin parsearlo", same(api.bodies.filter(([k]) => k === "PUT /v2/deliveries/self-assign").map(([, b]) => b), [{ qr: ML("47000000101") }]), JSON.stringify(api.bodies));
     check("Asignarme: sin ids internos, patente ni vehículo en pantalla", !/24385|AB123CD|Moto|driver_data|user\.id|Backend|PRODUCCIÓN/.test(textOf(tree)), textOf(tree));
+
+    // Tema claro: el visor sobre la cámara sigue oscuro; la barra de abajo, clara.
+    {
+      const light = createTheme({ scheme: "light" });
+      useTheme(light);
+      let t2 = await open("asignarme");
+      t2 = await scan(t2, ML("47000000101"));
+      check("Escáner en claro: el resultado se sigue viendo sobre el visor oscuro", card(t2) === "Envío asignado. 47000000101");
+      t2 = await press(t2, "Colectas");
+      check("Escáner: «Colectas» de la barra cierra el visor y abre Colectas (el Modal no queda encima)",
+        !all(t2, (x) => x.type === "Modal").length && same(lastNav(), ["navigate", "CollectionsScreen"]), JSON.stringify(nav.calls));
+      useTheme(dark);
+      // Lo que siguen esperando las pruebas de abajo: un escaneo hecho en esta pantalla.
+      tree = await open("asignarme");
+      tree = await scan(tree, ML("47000000101"));
+    }
 
     // Dos códigos distintos seguidos: los dos se procesan; el rol se pide una vez.
     tree = await scan(tree, ML("47000000102"));

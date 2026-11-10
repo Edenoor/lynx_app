@@ -478,7 +478,7 @@ function CollectionCard({
               color={theme.text.secondary}
             />
             <Text style={styles.cardMeta}>
-              {plural(route.stops_count, "parada", "paradas")}
+              {plural(route.stops_count, "tienda", "tiendas")}
             </Text>
           </View>
         </View>
