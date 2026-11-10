@@ -150,6 +150,7 @@ export const DriverScreen = ({ navigation }: Props) => {
   const {
     list,
     loading: loadingLegacy,
+    error: legacyError,
     performanceAnalytics,
   } = useEnviosViewModel();
   const { add } = useNotifications();
@@ -662,6 +663,10 @@ export const DriverScreen = ({ navigation }: Props) => {
             // del chofer. Cuando exista la performance semanal del servidor,
             // va acá con su período.
             periodLabel="Historial completo"
+            // Sin historial, el servidor legacy contesta «No se encontraron…»: no es una falla.
+            noData={legacyError && !/no se encontraron/i.test(legacyError)
+              ? "No pudimos cargar tu historial para medir el rendimiento. Volvé a intentar más tarde."
+              : driverMetrics.total === 0 ? "Todavía no hay envíos en tu historial para medir el rendimiento." : null}
             score={driverMetrics.score}
             effectiveness={driverMetrics.effectiveness}
             totalDeliveries={driverMetrics.total}

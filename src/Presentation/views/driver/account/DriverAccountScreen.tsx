@@ -4,7 +4,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,8 +25,9 @@ import {
 import { fetchMyHome } from "./homeApi";
 import DriverAvatar from "../../../components/driver/DriverAvatar";
 import { loadDriverProfile, useDriverProfile } from "./driverProfileApi";
-import { documentsLabel, DriverDocument, fullName, vehicleLabel } from "./driverProfile";
+import { documentsLabel, fullName, vehicleLabel } from "./driverProfile";
 import { appUpdateLabel } from "../../../config/appUpdates";
+import DriverDocumentsViewer from "../../../components/driver/DriverDocumentsViewer";
 
 const DEFAULT_AVATAR = require("../../../../../assets/user.png");
 
@@ -70,10 +70,10 @@ export default function DriverAccountScreen() {
       return () => { alive = false; };
     }, [userId])
   );
-  // Qué sección está abierta y qué documento se está viendo.
-  const [open, setOpen] = useState<"personal" | "vehicle" | "documents" | null>(null);
-  const [viewing, setViewing] = useState<DriverDocument | null>(null);
-  const toggle = (section: "personal" | "vehicle" | "documents") => setOpen(open === section ? null : section);
+  // Qué sección está abierta y si se está viendo la documentación.
+  const [open, setOpen] = useState<"personal" | "vehicle" | null>(null);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const toggle = (section: "personal" | "vehicle") => setOpen(open === section ? null : section);
 
   const driverName = useMemo(() => getDriverDisplayName(user), [user]);
   const username = (user as any)?.username || user?.email || user?.name || "";
@@ -197,32 +197,19 @@ if (tab === "scan") {
             title="Documentación"
             description={profileLoading && profile === undefined ? "Cargando documentación..." : documentsLabel(profile)}
             loading={profileLoading && profile === undefined}
-            expanded={open === "documents"}
-            onPress={profile ? () => toggle("documents") : undefined}
+            onPress={profile ? () => setDocsOpen(true) : undefined}
           />
-          {open === "documents" && profile ? (
-            <View style={styles.details}>
-              {/* No hay validación de documentos en el sistema: solo si se envió. */}
-              {profile.documents.map((d) => (
-                <Pressable key={d.key} onPress={d.url ? () => setViewing(d) : undefined} disabled={!d.url} style={styles.docRow} accessibilityRole="button" accessibilityLabel={`${d.label}: ${d.url ? "enviado, ver" : "falta"}`}>
-                  <Text style={styles.detailValue}>{d.label}</Text>
-                  <Text style={[styles.docStatus, d.url ? styles.docSent : styles.docMissing]}>{d.url ? "Enviado · ver" : "Falta"}</Text>
-                </Pressable>
-              ))}
-              <Text style={styles.itemDescription}>Para corregir un documento, hablá con tu coordinador.</Text>
-            </View>
-          ) : null}
 
           <AccountItem
             icon="analytics-outline"
             title="Performance"
-            description="SLA y rendimiento semanal"
+            description="Próximamente: SLA y rendimiento semanal"
           />
 
           <AccountItem
             icon="download-outline"
             title="Descargas"
-            description="Detalle semanal"
+            description="Próximamente: detalle semanal"
           />
 
           <AccountItem
@@ -255,18 +242,15 @@ if (tab === "scan") {
       {/* Perfil se abre desde Inicio: la barra lo muestra como parte de Inicio. */}
       <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
 
-      {/* El documento se ve dentro de la app (la dirección viene del pedido autenticado). */}
-      <Modal visible={!!viewing} transparent animationType="fade" onRequestClose={() => setViewing(null)} statusBarTranslucent>
-        <View style={styles.viewer}>
-          <View style={styles.viewerHead}>
-            <Text style={styles.viewerTitle}>{viewing?.label}</Text>
-            <Pressable onPress={() => setViewing(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cerrar">
-              <Ionicons name="close" size={24} color={theme.text.primary} />
-            </Pressable>
-          </View>
-          {viewing?.url ? <Image source={{ uri: viewing.url }} style={styles.viewerImage} resizeMode="contain" accessibilityLabel={viewing.label} /> : null}
-        </View>
-      </Modal>
+      {/* Los documentos se ven dentro de la app (la dirección viene del pedido autenticado). No hay validación: solo si se envió. */}
+      {docsOpen && profile ? (
+        <DriverDocumentsViewer
+          visible
+          documents={profile.documents}
+          initialIndex={Math.max(0, profile.documents.findIndex((d) => d.url))}
+          onClose={() => setDocsOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -474,53 +458,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     color: t.text.primary,
     fontSize: 14,
     fontWeight: t.font.weight.bold,
-  },
-
-  docRow: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: t.spacing.sm,
-  },
-
-  docStatus: {
-    fontSize: 13,
-    fontWeight: t.font.weight.bold,
-  },
-
-  docSent: {
-    color: t.status.confirmed.text,
-  },
-
-  docMissing: {
-    color: t.status.pending.text,
-  },
-
-  viewer: {
-    flex: 1,
-    backgroundColor: t.surfaces.screen,
-    paddingTop: t.layout.headerTopPadding,
-    paddingHorizontal: t.layout.screenPadding,
-    paddingBottom: t.spacing.lg,
-  },
-
-  viewerHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: t.spacing.md,
-  },
-
-  viewerTitle: {
-    color: t.text.primary,
-    fontSize: 18,
-    fontWeight: t.font.weight.bold,
-  },
-
-  viewerImage: {
-    flex: 1,
-    width: "100%",
   },
 
   logoutButton: {

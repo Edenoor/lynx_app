@@ -51,7 +51,7 @@ const at = (o: any, p: string) => p.split(".").reduce((n, k) => n[k], o);
 const reference = JSON.stringify(paths(createTheme({ scheme: "dark" })));
 check("las 18 tienen las mismas claves", COMBOS.every((o) => JSON.stringify(paths(createTheme(o))) === reference));
 
-// Compatibilidad: el estático es el dinámico por defecto (oscuro, Classic, Equilibrado)
+// Compatibilidad: el estático (pantallas que no leen el contexto) sigue siendo oscuro, Classic, Equilibrado
 const def = createTheme({ scheme: "dark", style: "classic", radius: "balanced" });
 check("AppTheme estático = tema por defecto (mismo objeto)", AppTheme === def && createTheme({ scheme: "dark" }) === def);
 check("misma combinación → mismo objeto", createTheme({ scheme: "light", style: "marble", radius: "rounded" }) === createTheme({ scheme: "light", style: "marble", radius: "rounded" }));

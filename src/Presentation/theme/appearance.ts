@@ -21,9 +21,12 @@ export type AppearancePreferences = {
 
 export const APPEARANCE_VERSION = 1;
 
+// Claro por defecto (10-nov): lo usa quien nunca eligió. Lo que el chofer
+// eligió queda guardado en el teléfono (AppearanceStorage) y se respeta,
+// también después de una actualización OTA (no toca AsyncStorage).
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
   version: APPEARANCE_VERSION,
-  colorMode: "dark",
+  colorMode: "light",
   style: "classic",
   radius: "balanced",
 };

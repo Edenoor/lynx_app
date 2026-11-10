@@ -18,6 +18,9 @@ type DriverPerformanceCardProps = {
   loading?: boolean;
   // El período que de verdad cubren las cifras (p. ej. «Historial completo»).
   periodLabel: string;
+  // Sin datos para medir (no cargó o no hay envíos): se dice en vez de
+  // mostrar ceros como si fueran una medición.
+  noData?: string | null;
   score: number;
   effectiveness: number;
   totalDeliveries: number;
@@ -66,6 +69,7 @@ const getStatusIcon = (effectiveness: number) => {
 export function DriverPerformanceCard({
   loading = false,
   periodLabel,
+  noData = null,
   score,
   effectiveness,
   totalDeliveries,
@@ -85,6 +89,18 @@ export function DriverPerformanceCard({
   const GOLD = theme.colors.highlightGold;
   const GREEN = theme.colors.highlightGreen;
   const [detailVisible, setDetailVisible] = useState(false);
+
+  if (!loading && noData) {
+    return (
+      <View style={styles.card} accessibilityRole="summary">
+        <Text style={styles.periodLabel}>{periodLabel}</Text>
+        <View style={styles.emptyRow}>
+          <Ionicons name="stats-chart-outline" size={22} color={theme.text.muted} />
+          <Text style={styles.emptyText}>{noData}</Text>
+        </View>
+      </View>
+    );
+  }
 
   const safeScore = clamp(score, 0, 10);
   const safeEffectiveness = clamp(effectiveness, 0, 100);
@@ -388,6 +404,20 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     fontSize: 11,
     fontWeight: t.font.weight.medium,
     paddingTop: t.spacing.xs,
+  },
+
+  emptyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: t.spacing.sm,
+    paddingVertical: t.spacing.md,
+  },
+
+  emptyText: {
+    flex: 1,
+    color: t.text.secondary,
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   mainRow: {

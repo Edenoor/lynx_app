@@ -29,12 +29,16 @@ export const RESUME_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const isRecent = (c: HelpConversation | null, now = Date.now()) =>
   !!c && c.messages.length > 0 && now - Date.parse(c.updated_at) < RESUME_WINDOW_MS;
 
-// Preguntas frecuentes para arrancar sin escribir.
+// Preguntas frecuentes para arrancar sin escribir. Solo la pregunta: la
+// respuesta la arma el asistente del servidor (/v2/assistant/messages).
 export const SUGGESTIONS = [
-  "¿Cómo acepto un Turbo?",
-  "¿Por qué no me llegan Turbos?",
-  "¿Cómo cierro una parada de colecta?",
-  "«Salir a la calle» no aparece en mi reparto",
+  "¿Cómo acepto una oferta de Turbo o de reparto?",
+  "¿Cómo me asigno un envío escaneándolo?",
+  "¿Cómo comienzo un recorrido?",
+  "¿Cómo organizo el orden de mi recorrido?",
+  "¿Qué es el Baúl y cómo lo consulto?",
+  "¿Cómo confirmo una colecta?",
+  "El escáner no lee la etiqueta: ¿qué hago?",
 ];
 
 // El error conserva el código del servidor (DAILY_LIMIT, DISABLED, …).

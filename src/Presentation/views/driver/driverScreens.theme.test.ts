@@ -170,6 +170,7 @@ const RN = {
   Alert: { alert: (...a: any[]) => alerts.push(a) },
   Platform: { OS: "android", select: (o: any) => o.android ?? o.default },
   Dimensions: { get: () => ({ width: 360, height: 800 }) },
+  useWindowDimensions: () => ({ width: 360, height: 800 }),
   StatusBar: { currentHeight: 24 },
 };
 const envios: any = { list: [], currentDeliveries: [], loading: false, error: null, currentError: null, reload: () => {}, username: "driver1" };
@@ -1072,6 +1073,14 @@ const setDriverApi = () => {
     check("Inicio: sin tarjeta de ofertas; el contador va en «Alertas» de la barra", !byLabel(tree, "Ofertas").length && byLabel(tree, "Alertas: 3").length === 1);
     check("Inicio: Turbo compacto, sin los contadores «Llevás…»", !txt.includes("Llevás") && !txt.includes("de 10 a la mañana"));
     check("Inicio: el historial de rendimiento a la vista, con su período", txt.includes("Historial completo"));
+    check("Inicio: sin envíos en el historial no se muestran ceros como medición («Atención», 0%)",
+      txt.includes("Todavía no hay envíos en tu historial para medir el rendimiento.") && !txt.includes("Atención") && !txt.includes("0%"), txt.slice(-300));
+    envios.error = "Network Error";
+    check("Inicio: si el historial no carga, lo dice (sin ceros)", textOf(await mount(homeEl())).includes("No pudimos cargar tu historial"));
+    envios.error = "No se encontraron envíos Flex para: driver1";
+    check("Inicio: «No se encontraron…» del legacy es historial vacío, no una falla", textOf(await mount(homeEl())).includes("Todavía no hay envíos en tu historial"));
+    envios.error = null;
+    tree = await mount(homeEl());
     tree = await press(tree, "Continuar recorrido");
     check("Inicio: «Continuar recorrido» abre el recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 8 }]));
     const [second] = byLabel(tree, "Continuar Turbo #12");
@@ -2264,12 +2273,19 @@ const setDriverApi = () => {
       tree = await press(tree, "Datos personales");
       acc = textOf(tree);
       check("Mi cuenta: datos personales (nombre, correo, DNI, CUIL)", acc.includes("ana@lynx.test") && acc.includes("30111222") && acc.includes("20301112223") && acc.includes("Ana María"));
+      check("Mi cuenta: Documentación abre un visor (no una sección desplegable)", !all(tree, (x) => x.type === "Modal").length);
       tree = await press(tree, "Documentación");
-      acc = textOf(tree);
-      check("Mi cuenta: cada documento dice si se envió (sin inventar una validación)", acc.includes("DNI · frenteEnviado · ver") && acc.includes("Registro · frenteFalta") && !/aprobad|validad|rechazad/i.test(acc));
-      tree = await press(tree, "DNI · frente");
       const viewer = all(tree, (x) => x.type === "Modal").pop();
-      check("Mi cuenta: el documento se ve dentro de la app", !!viewer && all(viewer, (x) => x.type === "Image" && x.props.source?.uri === EXTRA.extra.dni_frente).length === 1);
+      const vtext = viewer ? textOf(viewer) : "";
+      check("Mi cuenta: el visor muestra los documentos enviados dentro de la app", !!viewer && all(viewer, (x) => x.type === "Image" && x.props.source?.uri === EXTRA.extra.dni_frente).length === 1);
+      check("Mi cuenta: cada documento dice si se envió o falta (sin inventar una validación)",
+        byLabel(viewer, "DNI · frente: enviado").length === 1 && byLabel(viewer, "Registro · frente: falta").length === 1 && !/aprobad|validad|rechazad/i.test(vtext), vtext);
+      check("Mi cuenta: un documento que falta se dice en su página, sin romper el visor", vtext.includes("Registro · frente: no enviado") && vtext.includes("Para cargarlo, hablá con tu coordinador."));
+      check("Mi cuenta: arranca en el primer documento enviado, con Anterior deshabilitado", vtext.includes("1 de 6") && !!byLabel(viewer, "Documento anterior")[0]?.props.disabled);
+      byLabel(viewer, "Registro · frente: falta")[0].props.onPress(); tree = await settle();
+      check("Mi cuenta: tocar un documento de arriba lo muestra", textOf(all(tree, (x) => x.type === "Modal").pop()).includes("3 de 6"));
+      byLabel(tree, "Cerrar documentación")[0].props.onPress(); tree = await settle();
+      check("Mi cuenta: cerrar el visor", !all(tree, (x) => x.type === "Modal").length);
       for (const scheme of ["dark", "light"]) {
         const th = createTheme({ scheme });
         useTheme(th);

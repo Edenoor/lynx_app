@@ -12,9 +12,12 @@ const eq = (name: string, got: unknown, want: unknown) => {
   console.log(`${ok ? "ok  " : "FALLA"} ${name}${ok ? "" : ` → ${JSON.stringify(got)} (esperaba ${JSON.stringify(want)})`}`);
 };
 
-// Por defecto: la apariencia de siempre
+// Por defecto: claro + Classic + Equilibrado. D es una preferencia guardada en oscuro.
 const D = { version: 1, colorMode: "dark", style: "classic", radius: "balanced" };
-eq("predeterminado: oscuro + Classic + Equilibrado", DEFAULT_APPEARANCE, D);
+const DEF = { ...D, colorMode: "light" };
+eq("predeterminado: claro + Classic + Equilibrado", DEFAULT_APPEARANCE, DEF);
+eq("nada guardado (instalación nueva) → claro", normalizeAppearance(null).colorMode, "light");
+eq("oscuro guardado se respeta (no se fuerza el claro)", normalizeAppearance({ version: 1, colorMode: "dark", style: "classic", radius: "balanced" }).colorMode, "dark");
 
 // Valores válidos
 for (const mode of ["light", "dark", "system"]) {
@@ -54,7 +57,7 @@ eq("versión vieja", normalizeAppearance({ version: 0, colorMode: "system" }), {
 eq("versión futura con campos nuevos", normalizeAppearance({ version: 2, colorMode: "light", style: "marble", accent: "pink" }), { ...D, colorMode: "light", style: "marble" });
 
 // Restablecer = valores por defecto (lo que guarda resetAppearance)
-eq("restablecer vuelve a oscuro + Classic + Equilibrado", normalizeAppearance(DEFAULT_APPEARANCE), D);
+eq("restablecer vuelve a claro + Classic + Equilibrado", normalizeAppearance(DEFAULT_APPEARANCE), DEF);
 
 // Esquema resuelto
 eq("claro fijo ignora el sistema", resolveScheme("light", "dark"), "light");

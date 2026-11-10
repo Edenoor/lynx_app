@@ -144,8 +144,10 @@ const provide = (prefs: any) => {
   check("hidrata con lo guardado y completa lo que falta", hydrated.length === 1 && JSON.stringify(hydrated[0]) === JSON.stringify({ version: 1, colorMode: "light", style: "marble", radius: "balanced" }), JSON.stringify(hydrated));
 
   // Tema según preferencias
-  const dark = provide(DEFAULT_APPEARANCE);
-  check("por defecto: tema oscuro Classic Equilibrado (mismo objeto que AppTheme)", dark.value.theme === createTheme({ scheme: "dark" }));
+  const def = provide(DEFAULT_APPEARANCE);
+  check("por defecto: tema claro Classic Equilibrado", def.value.theme === createTheme({ scheme: "light" }));
+  const dark = provide({ ...DEFAULT_APPEARANCE, colorMode: "dark" });
+  check("oscuro guardado: tema oscuro (mismo objeto que AppTheme)", dark.value.theme === createTheme({ scheme: "dark" }));
   check("dibuja los hijos con el tema", hasText(dark.tree, "contenido"));
 
   const marble = provide({ version: 1, colorMode: "dark", style: "marble", radius: "rounded" });
@@ -183,7 +185,7 @@ const provide = (prefs: any) => {
   v.setAppearance({ radius: "square", colorMode: "light" });
   check("cambios combinados conservan lo demás", JSON.stringify(last(saved)) === JSON.stringify({ ...current, radius: "square", colorMode: "light" }));
   provide({ version: 1, colorMode: "light", style: "marble", radius: "rounded" }).value.resetAppearance();
-  check("restablecer vuelve a oscuro + Classic + Equilibrado y lo guarda", JSON.stringify(last(saved)) === JSON.stringify(DEFAULT_APPEARANCE) && JSON.stringify(last(sets)?.[1]) === JSON.stringify(DEFAULT_APPEARANCE));
+  check("restablecer vuelve a claro + Classic + Equilibrado y lo guarda", JSON.stringify(last(saved)) === JSON.stringify(DEFAULT_APPEARANCE) && JSON.stringify(last(sets)?.[1]) === JSON.stringify(DEFAULT_APPEARANCE));
 
   // Primitivas: reaccionan al tema del contexto
   const withTheme = (theme: any, el: any) => { contextValue = { theme }; const t = render(el); contextValue = undefined; return t; };
