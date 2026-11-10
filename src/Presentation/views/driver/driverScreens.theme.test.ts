@@ -204,6 +204,7 @@ const MOCKS: Record<string, any> = {
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker", Polyline: "Polyline" },
   "react-native-svg": { __esModule: true, default: "Svg", Circle: "Circle" },
   "expo-constants": { __esModule: true, default: { expoConfig: { version: "1.0.0" } } },
+  "expo-updates": { isEnabled: true, channel: "preview", updateId: "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d", isEmbeddedLaunch: false, isEmergencyLaunch: false, runtimeVersion: "0ffd0b43565ee42cd72d1aeaec6be1a6c4f2a6e8" },
 };
 const alertsParams: { current: any } = { current: {} };
 const stackScreens = new Set<string>();
@@ -2259,6 +2260,7 @@ const setDriverApi = () => {
       let acc = textOf(tree);
       check("Mi cuenta: vehículo y documentos enviados", acc.includes("moto · Honda · Wave · Patente AB123CD") && acc.includes("2 de 6 enviados"));
       check("Mi cuenta: los datos de pago no se muestran", !acc.includes("ana.mp") && !acc.includes("0000003100000000000001"));
+      check("Mi cuenta: versión, canal y actualización en curso, para soporte", acc.includes("Lynx 1.0.0 · preview · actualización 1a2b3c4d · runtime 0ffd0b43"), acc.slice(-120));
       tree = await press(tree, "Datos personales");
       acc = textOf(tree);
       check("Mi cuenta: datos personales (nombre, correo, DNI, CUIL)", acc.includes("ana@lynx.test") && acc.includes("30111222") && acc.includes("20301112223") && acc.includes("Ana María"));

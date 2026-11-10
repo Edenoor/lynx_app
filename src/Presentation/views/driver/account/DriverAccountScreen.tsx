@@ -27,6 +27,7 @@ import { fetchMyHome } from "./homeApi";
 import DriverAvatar from "../../../components/driver/DriverAvatar";
 import { loadDriverProfile, useDriverProfile } from "./driverProfileApi";
 import { documentsLabel, DriverDocument, fullName, vehicleLabel } from "./driverProfile";
+import { appUpdateLabel } from "../../../config/appUpdates";
 
 const DEFAULT_AVATAR = require("../../../../../assets/user.png");
 
@@ -247,6 +248,8 @@ if (tab === "scan") {
           />
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </Pressable>
+
+        <Text style={styles.appVersion}>{appUpdateLabel()}</Text>
       </ScrollView>
 
       {/* Perfil se abre desde Inicio: la barra lo muestra como parte de Inicio. */}
@@ -537,5 +540,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     color: t.status.rejected.text,
     fontSize: 15,
     fontWeight: t.font.weight.black,
+  },
+  appVersion: {
+    marginTop: t.spacing.md,
+    textAlign: "center",
+    color: t.text.secondary,
+    fontSize: 12,
   },
 });
