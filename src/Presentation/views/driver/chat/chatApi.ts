@@ -1,19 +1,19 @@
 // src/Presentation/views/driver/chat/chatApi.ts
-// Cliente de /v2/chat: el chat interno del chofer (sus charlas con
-// coordinación o administración y las novedades que le mandan). El servidor
-// decide qué ve y dónde puede escribir a partir de sus grupos; acá solo se
-// muestra. Una charla que no puede ver responde 404, igual que una inexistente.
+// Cliente de /v2/chat: el chat interno del chofer, que es su charla fija con
+// el equipo de Lynx («Lynx»). El servidor decide qué ve; acá solo se muestra.
+// Una charla que no puede ver responde 404, igual que una inexistente.
 
 import { getJsonWithTimeout, postJson } from "../../../config/Api";
 
-export type ChatChannel = { id: number; name: string; kind: "direct" | "news"; assistant_line: boolean };
+// driver: la charla fija de un chofer; store y direct son del panel (tiendas y de a uno).
+export type ChatKind = "driver" | "store" | "direct";
 
-// «subject»: el chofer es la persona atendida; «audience»: lee unas novedades.
-export type ChatRole = "team" | "subject" | "audience";
+// «member»: el chofer es parte de la charla; «team»: es del equipo interno (no pasa en la app).
+export type ChatRole = "team" | "member";
 
 export type ChatConversation = {
   id: number;
-  channel: ChatChannel;
+  kind: ChatKind;
   role: ChatRole;
   title: string;
   can_write: boolean;
@@ -23,8 +23,6 @@ export type ChatConversation = {
 
 export type ChatInbox = {
   conversations: ChatConversation[];
-  // Canales donde el chofer puede abrir una charla y todavía no tiene ninguna.
-  startable: { id: number; name: string }[];
   unread_total: number;
 };
 
@@ -40,7 +38,7 @@ export type ChatMessage = {
 };
 
 export type ChatThread = {
-  conversation: { id: number; role: ChatRole; can_write: boolean; channel: ChatChannel; title: string };
+  conversation: { id: number; kind: ChatKind; role: ChatRole; can_write: boolean; title: string };
   messages: ChatMessage[];
   has_more: boolean;
 };
@@ -52,7 +50,7 @@ export const MAX_MESSAGE_LENGTH = 2000;
 // una colgada no deja la pantalla sin refrescar.
 const GET_TIMEOUT_MS = 15_000;
 
-// El error conserva el código del servidor (NO_FIRST_LINE, READ_ONLY, …).
+// El error conserva el código del servidor (EMPTY, TOO_LONG, …).
 const unwrap = <T,>(res: any): T => {
   if (!res || res.ok === false) {
     const e = new Error(res?.error || res?.message || "Error del servidor") as Error & { code?: string; status?: number };
@@ -81,14 +79,9 @@ export const markRead = async (conversationId: number, messageId: number) => {
   unwrap(await postJson(`/v2/chat/conversations/${conversationId}/read`, { message_id: messageId }));
 };
 
-// Abre la charla del chofer en un canal donde puede iniciarla (o devuelve la que ya tiene).
-export const startConversation = async (channelId: number) =>
-  unwrap<{ conversation_id: number }>(await postJson(`/v2/chat/channels/${channelId}/conversations`, {})).conversation_id;
-
-// «Consultalo con coordinación»: abre (o reusa) la charla con el grupo de
-// primera línea, con la pregunta y la respuesta del asistente como primer
-// mensaje. 409 NO_FIRST_LINE si todavía no se eligió ese grupo.
+// «Consultalo con coordinación»: deja en la charla del chofer con Lynx la
+// pregunta y la respuesta del asistente, y le avisa al equipo.
 export const handoff = async (assistantMessageId: number) =>
-  unwrap<{ conversation_id: number; channel: { id: number; name: string } }>(
+  unwrap<{ conversation_id: number; title: string }>(
     await postJson("/v2/chat/handoff", { assistant_message_id: assistantMessageId })
   );

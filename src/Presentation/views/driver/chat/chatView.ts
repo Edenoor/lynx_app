@@ -4,25 +4,20 @@
 
 import type { ChatConversation, ChatInbox, ChatMessage } from "./chatApi";
 
-// Lista de chats: arriba el asistente, después las charlas propias (y los
-// canales donde el chofer puede abrir una) y al final las novedades.
+// Lista de chats: arriba el asistente y después su charla con Lynx (el
+// servidor la manda siempre, aunque todavía no tenga mensajes).
 export type ChatRow =
   | { kind: "assistant"; key: string }
-  | { kind: "conversation"; key: string; conversation: ChatConversation }
-  | { kind: "start"; key: string; channel: { id: number; name: string } };
+  | { kind: "conversation"; key: string; conversation: ChatConversation };
 
 export function chatRows(inbox: ChatInbox | null): ChatRow[] {
   const rows: ChatRow[] = [{ kind: "assistant", key: "assistant" }];
   if (!inbox) return rows;
-  const conv = (c: ChatConversation): ChatRow => ({ kind: "conversation", key: `c${c.id}`, conversation: c });
-  rows.push(...inbox.conversations.filter((c) => c.channel.kind !== "news").map(conv));
-  rows.push(...inbox.startable.map((ch): ChatRow => ({ kind: "start", key: `s${ch.id}`, channel: ch })));
-  rows.push(...inbox.conversations.filter((c) => c.channel.kind === "news").map(conv));
+  rows.push(...inbox.conversations.map((c): ChatRow => ({ kind: "conversation", key: `c${c.id}`, conversation: c })));
   return rows;
 }
 
-export const previewOf = (c: ChatConversation) =>
-  c.last_message?.body ?? (c.channel.kind === "news" ? "Sin novedades todavía" : "Sin mensajes todavía");
+export const previewOf = (c: ChatConversation) => c.last_message?.body ?? "Escribile al equipo de Lynx";
 
 export const countLabel = (n: number) => (n > 99 ? "99+" : String(n));
 
@@ -61,7 +56,5 @@ export function mergeMessages(prev: ChatMessage[], incoming: ChatMessage[]): Cha
 
 export const newestId = (list: ChatMessage[]): number | null => (list.length ? list[list.length - 1].id : null);
 
-// El nombre arriba del mensaje: en una charla de a uno, el de quien escribió
-// del equipo (atienden varios); en novedades, el de todos menos el propio.
-export const showAuthor = (m: ChatMessage, channelKind: "direct" | "news") =>
-  !m.mine && !!m.author && (channelKind === "news" || m.from_team);
+// El nombre arriba del mensaje: el de quien escribió del equipo (atienden varios).
+export const showAuthor = (m: ChatMessage) => !m.mine && !!m.author && m.from_team;

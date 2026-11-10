@@ -13,12 +13,12 @@ const eq = (name: string, got: unknown, want: unknown) => {
   console.log(`${ok ? "ok  " : "FALLA"} ${name}${ok ? "" : ` → ${JSON.stringify(got)} (esperaba ${JSON.stringify(want)})`}`);
 };
 
-const conv = (id: number, kind: "direct" | "news", last?: string): ChatConversation => ({
+const conv = (id: number, last?: string): ChatConversation => ({
   id,
-  channel: { id: id * 10, name: `Canal ${id}`, kind, assistant_line: false },
-  role: kind === "news" ? "audience" : "subject",
-  title: `Canal ${id}`,
-  can_write: kind !== "news",
+  kind: "driver",
+  role: "member",
+  title: "Lynx",
+  can_write: true,
   last_message: last ? { id: 1, body: last, author_name: "Ana", created_at: "2026-11-07T12:00:00Z" } : null,
   unread: 0,
 });
@@ -27,18 +27,10 @@ const msg = (id: number, extra: Partial<ChatMessage> = {}): ChatMessage => ({
   id, kind: "text", body: `m${id}`, created_at: "2026-11-07T12:00:00Z", author: { id: 5, name: "Ana" }, mine: false, from_team: true, ...extra,
 });
 
-// Lista: asistente, charlas propias, canales para iniciar, novedades
+// Lista: el asistente y después la charla con Lynx
 eq("sin datos: solo el asistente", chatRows(null).map((r) => r.key), ["assistant"]);
-eq(
-  "orden de la lista",
-  chatRows({
-    conversations: [conv(1, "news", "hola"), conv(2, "direct", "che"), conv(3, "direct")],
-    startable: [{ id: 7, name: "Administración" }],
-    unread_total: 0,
-  }).map((r) => r.key),
-  ["assistant", "c2", "c3", "s7", "c1"],
-);
-eq("vista previa", [previewOf(conv(1, "direct", "che")), previewOf(conv(2, "direct")), previewOf(conv(3, "news"))], ["che", "Sin mensajes todavía", "Sin novedades todavía"]);
+eq("orden de la lista", chatRows({ conversations: [conv(2, "che")], unread_total: 0 }).map((r) => r.key), ["assistant", "c2"]);
+eq("vista previa", [previewOf(conv(1, "che")), previewOf(conv(2))], ["che", "Escribile al equipo de Lynx"]);
 eq("contador", [countLabel(3), countLabel(99), countLabel(150)], ["3", "99", "99+"]);
 
 // Horas, con fechas locales (no dependen de la zona del equipo que corre la prueba)
@@ -54,10 +46,10 @@ eq("merge", mergeMessages([msg(1), msg(3)], [msg(3, { body: "nuevo" }), msg(2), 
 eq("newestId", [newestId([msg(1), msg(9)]), newestId([])], [9, null]);
 
 // Autor visible
-eq("autor: del equipo en charla de a uno", showAuthor(msg(1), "direct"), true);
-eq("autor: lo propio no", showAuthor(msg(1, { mine: true }), "news"), false);
-eq("autor: novedades, cualquiera", showAuthor(msg(1, { from_team: false }), "news"), true);
-eq("autor: sin autor (sistema)", showAuthor(msg(1, { author: null }), "direct"), false);
+eq("autor: el del equipo", showAuthor(msg(1)), true);
+eq("autor: lo propio no", showAuthor(msg(1, { mine: true })), false);
+eq("autor: el del chofer no (es él)", showAuthor(msg(1, { from_team: false })), false);
+eq("autor: sin autor (sistema)", showAuthor(msg(1, { author: null })), false);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");
