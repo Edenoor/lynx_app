@@ -11,7 +11,10 @@
 import { getJson } from "../../../config/Api";
 
 type BaulRow = { delivery_id: number; tracking: string | null; lynx_code: string | null; store: string | null; receiver: string | null };
-export type BaulCash = BaulRow & { expected_amount: number; declared_amount: number | null; declared_method: "CASH" | "TRANSFER" | null };
+// provider_closed (B1): la entrega la cerró Mercado Libre o LightData, no el chofer.
+export type BaulCash = BaulRow & {
+  expected_amount: number; declared_amount: number | null; declared_method: "CASH" | "TRANSFER" | null; provider_closed?: boolean;
+};
 // kind CANCELLED: cancelado que sigue con el chofer. attempted: hubo intento
 // de entrega (si no, quedó con él sin intentarlo).
 export type BaulParcel = BaulRow & { kind?: "NOT_DELIVERED" | "CANCELLED"; attempted?: boolean };
@@ -19,7 +22,12 @@ export type BaulItem = BaulRow & { closure: string; return_item: string | null }
 // Coordinación pidió traer algo y lo entregaste sin declarar que lo retiraste:
 // no está en tu Baúl, es para verificar.
 export type BaulToVerify = BaulRow & { reverse_kind: string; reverse_note: string | null };
-export type BaulTotals = { cash_count: number; cash_amount: number; transfer_count: number; transfer_amount: number; parcels: number; items: number };
+// cash_amount y transfer_amount son lo esperado. expected_amount,
+// declared_amount y undeclared_count los manda el servidor desde B1 (9-nov).
+export type BaulTotals = {
+  cash_count: number; cash_amount: number; transfer_count: number; transfer_amount: number; parcels: number; items: number;
+  expected_amount?: number; declared_amount?: number; undeclared_count?: number;
+};
 export type MyBaul = { totals: BaulTotals; cash: BaulCash[]; parcels: BaulParcel[]; items: BaulItem[]; toVerify: BaulToVerify[] };
 
 export type BaulResult =

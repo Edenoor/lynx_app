@@ -1,6 +1,7 @@
 // src/Presentation/views/picker/PickerHomeScreen.tsx
 // Inicio del Picker (ADMIN con perfil PICKER): en qué Warehouse opera,
-// Estanterías y Descolocados. La recepción se abre desde el QR central.
+// Baúl de choferes, Estanterías y Descolocados. La recepción se abre desde el
+// QR central.
 
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -85,6 +86,12 @@ export default function PickerHomeScreen({ navigation }: Props) {
             )}
           </View>
 
+          <DriverActionCard
+            icon="briefcase-outline"
+            title="Baúl de choferes"
+            subtitle="Recibir paquetes, cambios y cobranzas"
+            onPress={() => navigation.navigate("PickerBaulScreen")}
+          />
           <DriverActionCard
             icon="file-tray-stacked-outline"
             title="Estanterías"

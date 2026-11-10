@@ -73,6 +73,8 @@ import { loadText, loadTotal } from "../turbo/turboGroup";
 import { errorMessage } from "../errorMessage";
 
 type ModalityKey = "turbo" | "flex" | "baul" | "tradicional";
+// Cada cuánto se vuelve a pedir el Baúl mientras está a la vista.
+const BAUL_REFRESH_MS = 20_000;
 type SubKey = "current" | "finished" | "tomorrow" | "legacy";
 
 const SUBS: Record<"turbo" | "flex", { key: SubKey; label: string; icon: keyof typeof Ionicons.glyphMap }[]> = {
@@ -385,9 +387,19 @@ export const EnviosScreen = ({ navigation }: any) => {
     setBaulRefreshing(false);
   }, []);
 
-  useEffect(() => {
-    if (modality === "baul" && !baul) void fetchMyBaul().then(setBaul);
-  }, [modality, baul]);
+  // El picker confirma lo recibido en su teléfono: mientras el Baúl está a la
+  // vista (esta pestaña y la pantalla enfocada) se vuelve a pedir al entrar y
+  // cada 20 s, así lo recibido sale solo de la lista. Un error de red no borra
+  // lo que ya se veía.
+  useFocusEffect(useCallback(() => {
+    if (modality !== "baul") return undefined;
+    const load = () => {
+      void fetchMyBaul().then((r) => setBaul((prev) => (r.status === "error" && prev?.status === "ok" ? prev : r)));
+    };
+    load();
+    const timer = setInterval(load, BAUL_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [modality]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -756,8 +768,8 @@ export const EnviosScreen = ({ navigation }: any) => {
           })}
         </View>
 
-        {/* Las ofertas se contestan en Alertas: acá solo el aviso. */}
-        {offerCount ? (
+        {/* Las ofertas se contestan en Alertas: acá solo el aviso (no en el Baúl). */}
+        {offerCount && modality !== "baul" ? (
           <Pressable onPress={() => openOfferInbox(navigation)} style={styles.offersHint} accessibilityRole="button" hitSlop={6}>
             <Ionicons name="pricetags-outline" size={14} color={theme.text.accent} />
             <Text style={styles.offersHintText}>

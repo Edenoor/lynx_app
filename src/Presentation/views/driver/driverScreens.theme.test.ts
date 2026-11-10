@@ -680,14 +680,14 @@ const setDriverApi = () => {
     tree = await press(tree, "Baúl");
     const baulTxt = textOf(tree);
     check("Baúl: un solo pedido, el propio (/v2/baul/me)", js(api.calls) === js(["GET /v2/baul/me"]), api.calls.join(", "));
-    check("Baúl: totales y cada sección", ["Tu Baúl", "Efectivo por rendir: $1.500 (1)", "Paquetes para devolver: 3", "Cambios y retiros: 1", "Cambio: zapatillas"].every((x) => baulTxt.includes(x)), baulTxt.slice(0, 400));
+    check("Baúl: totales y cada sección", ["Tu Baúl", "Efectivo por rendir: $1.500 (1)", "Paquetes para devolver: 3", "Cambios, retiros y remitos: 1", "Cambio: zapatillas"].every((x) => baulTxt.includes(x)), baulTxt.slice(0, 400));
     check("Baúl: el cancelado no se vuelve a entregar; la custodia sin intento no es «No entregado»",
       byLabel(tree, "P-CANC: Cancelado: devolvelo en planta, no se vuelve a entregar").length === 1
       && byLabel(tree, "P-INT: No entregado").length === 1
       && byLabel(tree, "P-CUST: Sin entregar (quedó con vos, sin intento)").length === 1);
     check("Baúl: no mezcla los envíos de Flex", !baulTxt.includes("San Martín 10"));
     check("Baúl: lo pedido y no declarado va aparte, «a verificar», sin sumar a los totales",
-      byLabel(tree, "V1: Pidieron traer Otro: control remoto y no lo declaraste. Si lo tenés, entregalo en planta.").length === 1 && baulTxt.includes("A verificar con coordinación") && baulTxt.includes("Cambios y retiros: 1"));
+      byLabel(tree, "V1: Pidieron traer Otro: control remoto y no lo declaraste. Si lo tenés, entregalo en planta.").length === 1 && baulTxt.includes("A verificar con coordinación") && baulTxt.includes("Cambios, retiros y remitos: 1"));
     const baulRefresh = async (r: any) => {
       api.replies["GET /v2/baul/me"] = r;
       const sv = all(tree, (x) => x.type === "ScrollView" && !!x.props.refreshControl)[0];

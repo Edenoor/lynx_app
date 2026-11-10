@@ -12,6 +12,9 @@ import PickerShelfScanScreen from "../views/picker/PickerShelfScanScreen";
 import PickerBulkyMockScreen from "../views/picker/PickerBulkyMockScreen";
 import PickerReportMockScreen from "../views/picker/PickerReportMockScreen";
 import PickerMoveShelfScreen from "../views/picker/PickerMoveShelfScreen";
+import PickerBaulScreen from "../views/picker/PickerBaulScreen";
+import PickerBaulDriverScreen from "../views/picker/PickerBaulDriverScreen";
+import PickerBaulScanScreen from "../views/picker/PickerBaulScanScreen";
 
 export type PickerStackParamList = {
   PickerHomeScreen: undefined;
@@ -38,6 +41,11 @@ export type PickerStackParamList = {
     fromShelf: { id: number; code: string; name: string | null };
     warehouseId: number | null;
   };
+  // Baúl de los choferes (lo que entregan en el depósito del Picker).
+  PickerBaulScreen: undefined;
+  PickerBaulDriverScreen: { driverId: number; name: string };
+  // driverId: abierto desde un chofer, solo se confirma lo suyo.
+  PickerBaulScanScreen: { driverId?: number; name?: string };
 };
 
 const Stack = createNativeStackNavigator<PickerStackParamList>();
@@ -55,5 +63,8 @@ export const PickerStackNavigator = () => (
     <Stack.Screen name="PickerShelfDetailScreen" component={PickerShelfDetailScreen} />
     <Stack.Screen name="PickerMisplacedScreen" component={PickerMisplacedScreen} />
     <Stack.Screen name="PickerMoveShelfScreen" component={PickerMoveShelfScreen} />
+    <Stack.Screen name="PickerBaulScreen" component={PickerBaulScreen} />
+    <Stack.Screen name="PickerBaulDriverScreen" component={PickerBaulDriverScreen} />
+    <Stack.Screen name="PickerBaulScanScreen" component={PickerBaulScanScreen} />
   </Stack.Navigator>
 );

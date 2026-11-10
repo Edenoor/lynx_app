@@ -49,6 +49,13 @@ export default function PickerScanOptionsScreen({ navigation, route }: Props) {
                 onPress: () => navigation.navigate("PickerScanScreen", { warehouseId }),
               },
               {
+                // Etiqueta original de un envío que trae un chofer: paquete, cambio o cobranza.
+                key: "baul",
+                icon: "briefcase-outline",
+                label: "Baúl del chofer",
+                onPress: () => navigation.navigate("PickerBaulScanScreen", {}),
+              },
+              {
                 // Se escanea la estantería de origen y se elige el paquete:
                 // sin consulta por QR del paquete, no se recepciona para mover.
                 key: "move",
