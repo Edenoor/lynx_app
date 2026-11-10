@@ -53,13 +53,13 @@ type Props = StackScreenProps<DriverStackParamList, "DriverScanScreen">;
 const TITLES: Record<DriverScanMode, string> = {
   colecta: "Ingresar envío",
   planta: "Recepción en planta",
-  asignarme: "Asignarme envío",
+  asignarme: "Asignar envío",
 };
 
 const HINTS: Record<DriverScanMode, string> = {
   colecta: "Escaneá el QR del envío para ingresarlo",
   planta: "Escaneá el bulto. Si lo movés, escaneá después la estantería",
-  asignarme: "Escaneá el QR del envío para asignártelo",
+  asignarme: "Escaneá el QR del envío para asignártelo o retomarlo de tu Baúl",
 };
 
 const PROCESSING: Record<DriverScanMode, string> = {

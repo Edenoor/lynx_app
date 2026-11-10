@@ -23,7 +23,7 @@ export function DriverQrActionGrid({
     <QrActionGrid
       actions={[
         { key: "collect", icon: "cube-outline", label: "Colectar", onPress: onCollect },
-        { key: "assign", icon: "person-add-outline", label: "Asignar", onPress: onAssign },
+        { key: "assign", icon: "person-add-outline", label: "Asignar envío", onPress: onAssign },
         { key: "plant", icon: "business-outline", label: "Planta", onPress: onPlant },
         { key: "pending", icon: "car-outline", label: "Pendientes", badge: pendingCount, onPress: onPending },
       ]}

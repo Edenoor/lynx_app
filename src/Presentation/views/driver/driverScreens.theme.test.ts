@@ -1156,7 +1156,7 @@ const setDriverApi = () => {
     useTheme(createTheme({ scheme: "dark", style: "minimal" }));
     nav.calls = []; alerts.length = 0;
     let tree = await mount(screens[6][1]());
-    for (const [label, call] of [["Asignar", ["navigate", "DriverScanScreen", { mode: "asignarme" }]], ["Planta", ["navigate", "DriverScanScreen", { mode: "planta" }]], ["Pendientes", ["navigate", "EnviosScreen"]]] as const) {
+    for (const [label, call] of [["Asignar envío", ["navigate", "DriverScanScreen", { mode: "asignarme" }]], ["Planta", ["navigate", "DriverScanScreen", { mode: "planta" }]], ["Pendientes", ["navigate", "EnviosScreen"]]] as const) {
       tree = await press(tree, label);
       check(`QR: ${label}`, same(lastNav(), call));
     }
@@ -1360,7 +1360,7 @@ const setDriverApi = () => {
     tree = await scan(tree, ML("47444444444"));
     rootEl = RealReact.createElement(Scan, { navigation: nav, route: { params: { mode: "asignarme" } } });
     tree = await settle();
-    check("Cambio de modo: título y resumen nuevos", textOf(tree).includes("Asignarme envío") && !summary(tree) && !card(tree), `${summary(tree)} | ${card(tree)}`);
+    check("Cambio de modo: título y resumen nuevos", textOf(tree).includes("Asignar envío") && !summary(tree) && !card(tree), `${summary(tree)} | ${card(tree)}`);
     const soundsBefore = sounds.length;
     late({ ok: true, status: 200, success: true });
     tree = await settle();

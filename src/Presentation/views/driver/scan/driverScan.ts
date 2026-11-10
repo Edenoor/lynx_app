@@ -177,14 +177,19 @@ export function roleProblem(res: any): ScanFeedback | null {
 
 const ASSIGN_RESULT: Record<string, string> = {
   claimed: "Envío asignado",
+  resumed: "Entrega retomada",
   loaded: "Envío retirado",
   already: "Ya lo tenías cargado",
 };
 
-// PUT /v2/deliveries/self-assign { qr } (claimByScan): result claimed | loaded | already.
+// PUT /v2/deliveries/self-assign { qr } (claimByScan): result claimed | resumed | loaded | already.
+// El servidor decide: 'resumed' es un no entregado de su propio Baúl, que
+// vuelve a un reparto suyo de hoy sin pasar por el depósito.
 export function assignFeedback(res: any, tracking: string): ScanFeedback {
   if (!res?.ok) return rejection("asignarme", res);
-  return { tone: "success", title: ASSIGN_RESULT[String(res?.result)] ?? "Envío asignado", detail: tracking || null };
+  const routeId = res?.result === "resumed" ? res?.route?.id : null;
+  const detail = [tracking || null, routeId ? `agregado a tu recorrido #${routeId}` : null].filter(Boolean).join(" · ");
+  return { tone: "success", title: ASSIGN_RESULT[String(res?.result)] ?? "Envío asignado", detail: detail || null };
 }
 
 // POST /v2/deliveries/scan { qr }: { success } o { success: false, error }.

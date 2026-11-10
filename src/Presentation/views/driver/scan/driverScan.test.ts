@@ -62,6 +62,8 @@ eq("etiqueta: texto raro", scanLabel(parseScanPayload("https://ejemplo.test/x?to
 
 // 4) Asignarme (self-assign → claimByScan).
 eq("asignado", assignFeedback({ ok: true, status: 200, result: "claimed", delivery_id: 24385, route: { id: 9 } }, "47000000101"), { tone: "success", title: "Envío asignado", detail: "47000000101" });
+eq("retomado del Baúl: el recorrido al que fue", assignFeedback({ ok: true, result: "resumed", delivery_id: 5, route: { id: 12 } }, "47000000101"), { tone: "success", title: "Entrega retomada", detail: "47000000101 · agregado a tu recorrido #12" });
+eq("retomado sin recorrido en la respuesta: sin número inventado", assignFeedback({ ok: true, result: "resumed" }, "1").detail, "1");
 eq("ya era suyo, ahora retirado", short(assignFeedback({ ok: true, result: "loaded" }, "1")), "success: Envío retirado");
 eq("lectura repetida del servidor (already) es éxito, no error", short(assignFeedback({ ok: true, result: "already" }, "1")), "success: Ya lo tenías cargado");
 {
