@@ -2,11 +2,15 @@
 // El recorrido completo en un mapa: las paradas numeradas en su orden de
 // visita (las cerradas, atenuadas). Solo muestra: no reordena ni cambia nada.
 // Para ir a una parada está «Cómo llegar» en cada una.
-// Con `streets` (un reparto en su orden guardado) pide el trazado por calles
-// al abrirse, o si cambia el orden que se muestra, y lo dibuja; nunca por
-// intervalo. Si no llega o no coincide con lo que se ve, quedan los marcadores.
+// Con `streets` (un reparto) pide el trazado por calles al abrirse, o si
+// cambia el orden que se muestra, y lo dibuja; nunca por intervalo. Con
+// `unsaved` (el organizador, antes de confirmar) lo pide para ESE orden
+// (shape-preview); volver a abrirlo sin cambiar el orden ni las ubicaciones
+// reusa ese trazado. El orden guardado se pide en cada apertura (lo puede
+// haber cambiado el coordinador). Si no llega, llega tarde (otro orden)
+// o no coincide con lo que se ve, quedan solo los marcadores.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAppTheme, useThemedStyles } from "../../theme/ThemeContext";
 import type { Theme } from "../../theme/createTheme";
-import { fetchRouteShape, Stop } from "../../views/driver/routes/routesApi";
+import { fetchRouteShape, fetchRouteShapePreview, Stop } from "../../views/driver/routes/routesApi";
 import { routeMapPoints } from "../../views/driver/routes/stopView";
 import { LatLng, shapeLines } from "../../views/driver/routes/routeShape";
 
@@ -22,11 +26,13 @@ type Props = {
   visible: boolean; title: string; stops: Stop[]; onClose: () => void;
   // Recorrido cuyo trazado por calles se pide (solo si `streets`).
   routeId?: number; streets?: boolean;
+  // El orden que se muestra todavía no está guardado.
+  unsaved?: boolean;
   // Aviso al pie (p. ej. que el trazado sigue el orden guardado).
   note?: string | null;
 };
 
-export function RouteMapModal({ visible, title, stops, onClose, routeId, streets = false, note = null }: Props) {
+export function RouteMapModal({ visible, title, stops, onClose, routeId, streets = false, unsaved = false, note = null }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -34,22 +40,38 @@ export function RouteMapModal({ visible, title, stops, onClose, routeId, streets
   const order = stops.map((s) => s.id).join(",");
   const [lines, setLines] = useState<LatLng[][] | null>(null);
   const [streetNote, setStreetNote] = useState<string | null>(null);
+  // El trazado depende del orden y de dónde está cada parada.
+  const shapeKey = `${routeId}|${unsaved}|${order}|${points.map((p) => `${p.stopId}:${p.latitude},${p.longitude}`).join(";")}`;
+  const last = useRef<{ key: string; lines: LatLng[][] } | null>(null);
 
   useEffect(() => {
     setLines(null);
     setStreetNote(null);
     if (!visible || !streets || !routeId) return undefined;
+    if (unsaved && last.current?.key === shapeKey) {
+      setLines(last.current.lines);
+      return undefined;
+    }
     let alive = true;
-    fetchRouteShape(routeId)
+    const ids = order.split(",").map(Number);
+    (unsaved ? fetchRouteShapePreview(routeId, ids) : fetchRouteShape(routeId))
       .then((shape) => {
         if (!alive) return;
-        const drawn = shapeLines(shape, order.split(",").map(Number));
+        const drawn = shapeLines(shape, ids);
         setLines(drawn);
+        if (drawn && unsaved) last.current = { key: shapeKey, lines: drawn };
         if (!drawn) setStreetNote("El trazado por calles no coincide con este orden: se ven solo las paradas.");
       })
-      .catch(() => { if (alive) setStreetNote("No pudimos dibujar el recorrido por calles: se ven solo las paradas."); });
+      .catch((e) => {
+        if (!alive) return;
+        setStreetNote(e?.code === "ROUTE_CHANGED"
+          ? "El recorrido cambió mientras lo organizabas: volvé a entrar para ver el orden nuevo."
+          : "No pudimos dibujar el recorrido por calles: se ven solo las paradas.");
+      });
     return () => { alive = false; };
-  }, [visible, streets, routeId, order]);
+    // shapeKey ya incluye routeId, unsaved y order.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, streets, shapeKey]);
 
   // Encuadre de todas las paradas, con un margen.
   const region = useMemo(() => {
@@ -100,7 +122,7 @@ export function RouteMapModal({ visible, title, stops, onClose, routeId, streets
           <Text style={styles.footerText}>
             {points.length} {points.length === 1 ? "parada" : "paradas"} en el mapa, en orden de visita.
             {missing ? ` ${missing} sin ubicación: no se muestran.` : ""}
-            {lines?.length ? " La línea sigue las calles en el orden guardado." : ""}
+            {lines?.length ? ` La línea sigue las calles en el orden ${unsaved ? "sin confirmar" : "guardado"}.` : ""}
           </Text>
           {streetNote || note ? <Text style={styles.footerText}>{streetNote ?? note}</Text> : null}
         </View>

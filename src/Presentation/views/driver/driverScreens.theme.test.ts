@@ -2118,16 +2118,65 @@ const setDriverApi = () => {
       byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
       check("Ruteador: a mano vuelve al orden original → nada que confirmar", js(addresses(tree)) === js(["Lavalle 300", "Mitre 10", "Paso 5"]) && textOf(tree).includes("Cambiaste el orden a mano") && !!pressable(tree, "Confirmar orden").props.disabled);
       byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
+      const SHAPE13 = { ok: true, route_id: 158, stop_ids: [1, 3], missing_stop_ids: [2], shapes: ["_p~iF~ps|U_ulLnnqC"], precision: 6, km: 2.1, seconds: 300 };
+      api.replies["POST /v2/routes/158/plan/shape-preview"] = SHAPE13;
       tree = await press(tree, "Ver en el mapa");
       const orgMap = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("Recorrido completo"));
       check("Ruteador: el mapa muestra el orden sin confirmar", !!orgMap && textOf(orgMap).includes("sin confirmar") && js(all(orgMap, (x) => x.type === "Marker").map(textOf)) === js(["2", "3"]));
-      check("Ruteador: con un orden sin confirmar no pide ni dibuja el trazado (es del orden guardado) y lo explica",
-        !api.calls.some((c) => c.includes("/plan/shape")) && all(orgMap, (x) => x.type === "Polyline").length === 0 && textOf(orgMap).includes("confirmá el orden nuevo para verlo"), js(api.calls));
+      check("Ruteador: con un orden sin confirmar pide el trazado de ESE orden (solo ids) y lo dibuja",
+        js(api.bodies.filter((b) => b[0].includes("shape-preview"))) === js([["POST /v2/routes/158/plan/shape-preview", { stop_ids: [2, 1, 3] }]])
+          && all(orgMap, (x) => x.type === "Polyline").length === 1 && textOf(orgMap).includes("en el orden sin confirmar") && !api.calls.some((c) => c.startsWith("PUT")), js(api.bodies));
+      byLabel(tree, "Cerrar mapa")[0].props.onPress(); tree = await settle();
       nav.calls = []; api.bodies = [];
       api.replies["PUT /v2/routes/158/stops/driver-order"] = { ok: true, route: loaded158 };
       tree = await press(tree, "Confirmar orden");
       check("Ruteador: confirmar guarda el orden con el que estaba viendo y vuelve",
         js(api.bodies) === js([["PUT /v2/routes/158/stops/driver-order", { stop_ids: [2, 1, 3], expected_stop_ids: [1, 2, 3] }]]) && same(lastNav(), ["goBack"]), js(api.bodies));
+
+      // Vista previa del trazado: solo cuando cambia el orden; una respuesta
+      // que llega tarde (de un orden que ya no se ve) no se dibuja; 409 y 503 avisan.
+      {
+        const SAVED = { ok: true, route_id: 158, stop_ids: [1, 3], missing_stop_ids: [2], shapes: ["_p~iF~ps|U_ulLnnqC"], precision: 6, km: 2.1, seconds: 300 };
+        const mapOf = (t: any) => all(t, (x) => x.type === "Modal").find((x) => textOf(x).includes("Recorrido completo"));
+        const linesOf = (t: any) => (mapOf(t) ? all(mapOf(t), (x) => x.type === "Polyline").length : 0);
+        const toggle = async () => { byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle(); };
+        const openMap = async () => { tree = await press(tree, "Ver en el mapa"); };
+        const closeMap = async () => { byLabel(tree, "Cerrar mapa")[0].props.onPress(); tree = await settle(); };
+        const previews = () => api.calls.filter((c) => c.includes("/plan/shape-preview")).length;
+        let late: (v: any) => void = () => {};
+        api.calls = []; api.bodies = [];
+        api.replies = { "GET /v2/routes/158/plan/places": PLACES, "GET /v2/routes/158/plan/shape": SAVED, "GET /v2/routes/158": { ok: true, route: loaded158 },
+          "POST /v2/routes/158/plan/shape-preview": new Promise((ok) => (late = ok)) };
+        tree = await mount(organizeEl());
+        await toggle();
+        await openMap();
+        check("Vista previa: mientras no llega, sin línea", previews() === 1 && linesOf(tree) === 0);
+        await closeMap();
+        await toggle();
+        await openMap();
+        check("Vista previa: el orden guardado vuelve a pedir su trazado y lo dibuja", linesOf(tree) === 1 && api.calls.filter((c) => c === "GET /v2/routes/158/plan/shape").length === 1, js(api.calls));
+        late({ ...SAVED, shapes: ["_p~iF~ps|U_ulLnnqC", "_p~iF~ps|U_ulLnnqC"] });
+        tree = await settle();
+        check("Vista previa: la respuesta que llegó tarde (otro orden) no se dibuja", linesOf(tree) === 1 && textOf(mapOf(tree)).includes("en el orden guardado"));
+        await closeMap();
+        api.replies["POST /v2/routes/158/plan/shape-preview"] = { ok: false, status: 409, code: "ROUTE_CHANGED", error: "El recorrido cambió mientras lo organizabas: revisá el orden nuevo" };
+        await toggle();
+        await openMap();
+        check("Vista previa 409: avisa que el recorrido cambió, sin línea", linesOf(tree) === 0 && textOf(mapOf(tree)).includes("El recorrido cambió mientras lo organizabas") && previews() === 2);
+        await closeMap();
+        api.replies["POST /v2/routes/158/plan/shape-preview"] = { ok: false, status: 503, code: "ROUTING_UNAVAILABLE", error: "No pudimos dibujar el recorrido por calles" };
+        await openMap();
+        check("Vista previa sin Valhalla: marcadores y aviso, sin línea", linesOf(tree) === 0 && textOf(mapOf(tree)).includes("No pudimos dibujar el recorrido por calles")
+          && js(all(mapOf(tree), (x) => x.type === "Marker").map(textOf)) === js(["2", "3"]) && previews() === 3);
+        await closeMap();
+        api.replies["POST /v2/routes/158/plan/shape-preview"] = SAVED;
+        await openMap();
+        check("Vista previa: después de una falla se vuelve a pedir y se dibuja", linesOf(tree) === 1 && previews() === 4);
+        await closeMap();
+        await openMap();
+        check("Vista previa: reabrir con el mismo orden no la vuelve a pedir", linesOf(tree) === 1 && previews() === 4, js(api.calls));
+        await closeMap();
+      }
 
       // Sin Valhalla no hay propuesta (nunca línea recta): se dice, el orden queda y se puede seguir a mano.
       api.calls = []; api.bodies = [];
