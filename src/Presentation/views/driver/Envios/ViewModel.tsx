@@ -307,7 +307,9 @@ const resolveDriverDataIdFromRole = async (
   }
 };
 
-const useEnviosViewModel = () => {
+// `legacy: false`: sin el historial legacy (/v1/data/driver/me). Envíos solo
+// muestra recorridos; el Inicio lo sigue usando para el rendimiento.
+const useEnviosViewModel = ({ legacy = true }: { legacy?: boolean } = {}) => {
   const { user, getUserSession } = useContext(UserContext);
 
   const [loading, setLoading] = useState(false);
@@ -481,7 +483,7 @@ const useEnviosViewModel = () => {
 
     try {
       const [legacyMessage, currentMessage] = await Promise.all([
-        loadLegacy(sessionUser).catch((e: any) => {
+        (legacy ? loadLegacy(sessionUser) : Promise.resolve()).catch((e: any) => {
           const message =
             e?.response?.data?.message ||
             e?.response?.data?.error ||

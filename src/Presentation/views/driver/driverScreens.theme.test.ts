@@ -527,18 +527,20 @@ const setDriverApi = () => {
     useTheme(t);
     screens[1][2]();
     const env = await press(await mount(screens[1][1]()), "Flex");
-    const card = flat(pressable(env, "Av. Corrientes 1234").props.style);
+    // Envíos muestra solo recorridos: la tarjeta es la del recorrido.
+    const card = flat(pressable(env, "Reparto #11").props.style);
+    check(`Envíos ${style}: solo recorridos, sin tarjetas de envíos sueltos`, !textOf(env).includes("Av. Corrientes 1234"));
     setRoutesApi();
     const rt = await mount(screens[2][1]());
     const routeRow = flat(pressable(rt, "Reparto #11").props.style);
     if (style === "minimal") {
-      check("Minimal: envío como fila plana con separador", card.backgroundColor === "transparent" && card.borderBottomWidth === t.separator.width && card.marginBottom === 0);
+      check("Minimal: recorrido de Envíos como fila plana con separador", card.backgroundColor === "transparent" && card.borderBottomWidth === t.separator.width);
       check("Minimal: recorrido como fila plana con separador", routeRow.backgroundColor === "transparent" && routeRow.borderBottomWidth === t.separator.width);
     } else {
-      check(`${style}: envío como tarjeta del tema`, card.backgroundColor === t.surfaces.card && card.borderWidth === 1 && card.marginBottom === t.list.gap);
+      check(`${style}: recorrido de Envíos como tarjeta del tema`, card.backgroundColor === t.surfaces.card && card.borderRadius === t.radius.lg);
       check(`${style}: recorrido como tarjeta del tema`, routeRow.backgroundColor === t.surfaces.card && routeRow.borderRadius === t.radius.lg);
     }
-    if (style === "marble") check("Marble: tarjeta con sombra suave", card.elevation === 2 && card.shadowRadius >= 12);
+    if (style === "marble") check("Marble: tarjeta de recorrido igual a la de Recorridos", card.backgroundColor === routeRow.backgroundColor && card.borderRadius === routeRow.borderRadius);
   }
 
   // 3) Cambio en vivo: otro tema sin remontar; el estado de la pantalla se conserva.
@@ -550,14 +552,14 @@ const setDriverApi = () => {
     screens[1][2]();
     let tree = await press(await mount(screens[1][1]()), "Flex");
     tree = await press(tree, "Finalizados");
-    check("Envíos: «Finalizados» muestra los cerrados", textOf(tree).includes("Belgrano 900") && !textOf(tree).includes("Av. Corrientes 1234"));
+    check("Envíos: «Finalizados» muestra los recorridos cerrados, sin envíos sueltos", textOf(tree).includes("Reparto #14") && !textOf(tree).includes("Belgrano 900") && !textOf(tree).includes("Av. Corrientes 1234"));
     useTheme(marble);
     tree = await settle();
-    check("en vivo: Marble + Redondeado se aplica sin remontar", flat(tree.props.style).backgroundColor === marble.surfaces.screen && flat(pressable(tree, "Belgrano 900").props.style).borderRadius === marble.radius.lg);
-    check("en vivo: la modalidad y la pestaña elegidas se conservan", textOf(tree).includes("Recorridos finalizados") && !textOf(tree).includes("Av. Corrientes 1234"));
+    check("en vivo: Marble + Redondeado se aplica sin remontar", flat(tree.props.style).backgroundColor === marble.surfaces.screen && flat(pressable(tree, "Reparto #14").props.style).borderRadius === marble.radius.lg);
+    check("en vivo: la modalidad y la pestaña elegidas se conservan", textOf(tree).includes("Recorridos finalizados") && !textOf(tree).includes("Reparto #11"));
     useTheme(light);
     tree = await settle();
-    check("en vivo: Claro + Minimal + Recto", flat(tree.props.style).backgroundColor === light.surfaces.screen && flat(pressable(tree, "Belgrano 900").props.style).backgroundColor === "transparent");
+    check("en vivo: Claro + Minimal + Recto", flat(tree.props.style).backgroundColor === light.surfaces.screen && flat(pressable(tree, "Reparto #14").props.style).backgroundColor === "transparent");
     check("en vivo: legible en claro", legibility(tree, light.surfaces.screen).bad.length === 0, legibility(tree, light.surfaces.screen).bad.join(" · "));
   }
 
@@ -631,29 +633,24 @@ const setDriverApi = () => {
     check("Envíos › Flex: el aviso cuenta solo el recorrido ofrecido, no los Turbos", textOf(tree).includes("Tenés un recorrido ofrecido sin contestar") && !textOf(tree).includes("ofertas Turbo"));
     const txt = textOf(tree);
     check("Flex › En curso: el reparto de ayer (lo dice) y el de hoy; sin Turbos", txt.includes("Reparto #8") && txt.includes("Abierto desde ayer") && txt.includes("Reparto #11") && !txt.includes("Turbo #12"), txt.slice(0, 300));
-    check("Flex › En curso: envíos abiertos, sin el Turbo ni los cerrados", ["Av. Corrientes 1234", "San Martín 10"].every((x) => txt.includes(x)) && !txt.includes("Mitre 55") && !txt.includes("Belgrano 900") && !txt.includes("Lavalle 300"));
+    // Solo recorridos (10-nov): ni envíos sueltos ni su vacío; cada envío se ve dentro de su recorrido.
+    check("Flex › En curso: solo recorridos, sin envíos sueltos ni «No hay envíos…»",
+      !["Av. Corrientes 1234", "San Martín 10", "Mitre 55", "Belgrano 900", "Lavalle 300"].some((x) => txt.includes(x)) && !/No hay envíos/.test(txt));
     const chips = byLabel(tree, "Estado: ").map((x) => x.props.accessibilityLabel);
-    check("Flex › En curso: estados de los recorridos y de los envíos; el no entregado sigue abierto", js(chips) === js(["Estado: Asignado", "Estado: En curso", "Estado: En camino", "Estado: No entregado"]), chips.join(", "));
-    const chipBg = (label: string) => flat(byLabel(tree, `Estado: ${label}`)[0].props.style).backgroundColor;
-    check("Flex: «No entregado» con el color de incidencia (no verde)", chipBg("No entregado") === dark.status.incident.background);
+    check("Flex › En curso: solo los estados de los recorridos", js(chips) === js(["Estado: Asignado", "Estado: En curso"]), chips.join(", "));
+    check("Flex › En curso: sin la tarjeta de totales de envíos sueltos", !txt.includes("Neto") && !txt.includes("Pendientes"));
     check("Flex › En curso: primero lo de hoy; el abierto de un día anterior va aparte, con aviso (no se esconde)",
       txt.indexOf("Reparto #11") < txt.indexOf("Quedó abierto un recorrido de días anteriores") && txt.indexOf("Quedó abierto un recorrido de días anteriores") < txt.indexOf("Reparto #8"), txt.slice(0, 400));
     check("Flex › En curso: sin controles para buscar días anteriores", !txt.includes("Buscar más atrás") && !txt.includes("Revisamos recorridos abiertos"));
     tree = await press(tree, "Reparto #11");
     check("Flex: tocar un reparto abre su detalle", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 11 }]));
-    tree = await press(tree, "Av. Corrientes 1234");
-    check("Flex: tocar un envío abre su detalle", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("DETALLE") && textOf(m).includes("T1")));
-    tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cerrar");
-    tree = await press(tree, "Neto");
-    check("Flex: el neto suma solo los envíos Flex visibles", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Totales visibles") && textOf(m).includes("$1.400")));
-    tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cerrar");
 
     // Flex finalizados: hoy por defecto, ayer y rango.
     api.calls = [];
     tree = await press(tree, "Finalizados");
     let fin = textOf(tree);
-    check("Flex › Finalizados: el reparto completado de hoy y los envíos entregados (también el de status_ml «delivered»)",
-      fin.includes("Reparto #14") && fin.includes("Belgrano 900") && fin.includes("Lavalle 300") && !fin.includes("San Martín 10") && !fin.includes("Reparto #11"), fin.slice(0, 300));
+    check("Flex › Finalizados: el reparto completado de hoy, sin envíos sueltos ni «No hay envíos finalizados»",
+      fin.includes("Reparto #14") && !fin.includes("Belgrano 900") && !fin.includes("Lavalle 300") && !fin.includes("Reparto #11") && !fin.includes("No hay envíos finalizados"), fin.slice(0, 300));
     check("Flex › Finalizados: pide los recorridos del día", api.calls.includes(`GET /v2/routes/mine?date=${TODAY}`), api.calls.join(", "));
     api.calls = [];
     tree = await press(tree, "Ayer");
@@ -666,12 +663,9 @@ const setDriverApi = () => {
     check("Flex › Finalizados: «Rango» abre el selector de fechas", all(tree, (x) => x.type === "Modal").some((m) => textOf(m).includes("Seleccionar rango")));
     tree = await press(all(tree, (x) => x.type === "Modal")[0], "Cancelar");
 
-    // Historial legacy (/v1): se conserva, con la descarga del Excel.
-    envios.list = [{ id: 1, numero_tracking: "L1", direccion: "Viejo 1", nombre_fantasia: "Legacy", estado: "Entregado", precio_chofer: "0", porcentaje_chofer: "0" }];
-    tree = await settle();
-    tree = await press(tree, "Historial");
-    check("Flex › Historial: la información legacy sigue a mano, con el Excel", textOf(tree).includes("Viejo 1") && byLabel(tree, "Descargar Excel semanal").length === 1);
-    envios.list = [];
+    // Sin «Historial» de envíos sueltos (legacy /v1) ni sección alternativa.
+    check("Flex: solo «En curso» y «Finalizados» (sin «Historial» ni Excel de envíos sueltos)",
+      !all(tree, (x) => typeof x.props?.onPress === "function" && textOf(x) === "Historial").length && !byLabel(tree, "Descargar Excel semanal").length);
 
     // Baúl: lo propio del chofer (GET /v2/baul/me); la app no deduce nada de los envíos.
     api.calls = [];
@@ -1743,9 +1737,8 @@ const setDriverApi = () => {
     check("Alertas del chofer: con su barra y sin flecha", textOf(tree).includes("LYNX DRIVER") && textOf(tree).includes("Colectas") && !byLabel(tree, "Volver").length);
   }
 
-  // 20c) Envíos: un Turbo lleva su etiqueta. El servidor manda las filas de
-  // deliveries tal cual (tipo_envio "flex" también en los Turbo; lo que los
-  // marca es is_turbo), y la tarjeta y el detalle dicen «Turbo».
+  // 20c) Envíos sin envíos sueltos (10-nov): las filas de deliveries (Turbo o
+  // Flex) no se listan en ninguna pestaña; se ven dentro de su recorrido.
   {
     useTheme(createTheme({ scheme: "dark" }));
     envios.currentDeliveries = [
@@ -1754,17 +1747,12 @@ const setDriverApi = () => {
     ];
     setEnviosApi();
     let tree = await press(await mount(screens[1][1]()), "Flex");
-    const flex = textOf(pressable(tree, "Thames 800"));
-    check("Envíos: un Turbo no aparece en Flex", !textOf(tree).includes("Gurruchaga 1500"));
+    check("Envíos › Flex: sin envíos sueltos", !textOf(tree).includes("Thames 800") && !textOf(tree).includes("Gurruchaga 1500"));
     envios.currentDeliveries = envios.currentDeliveries.map((r: any) => ({ ...r, status: "Entregado", updated_at: UPDATED }));
     tree = await press(await mount(screens[1][1]()), "Turbo");
     tree = await press(tree, "Finalizados");
-    const turbo = textOf(pressable(tree, "Gurruchaga 1500"));
-    check("Envíos: el Turbo dice «Turbo» en la tarjeta", turbo.includes("Turbo") && !turbo.includes("Flex"), turbo);
-    check("Envíos: el resto sigue diciendo «Flex»", flex.includes("Flex") && !flex.includes("Turbo"), flex);
-    tree = await press(tree, "Gurruchaga 1500");
-    const detalle = all(tree, (x) => x.type === "Modal").find((m) => textOf(m).includes("DETALLE"));
-    check("Envíos: el detalle del Turbo dice Método «Turbo»", !!detalle && textOf(detalle).includes("Turbo"));
+    check("Envíos › Turbo › Finalizados: sin envíos sueltos ni «No hay envíos finalizados»",
+      !textOf(tree).includes("Gurruchaga 1500") && !textOf(tree).includes("No hay envíos finalizados") && textOf(tree).includes("Recorridos finalizados"));
     envios.currentDeliveries = DELIVERIES;
   }
 

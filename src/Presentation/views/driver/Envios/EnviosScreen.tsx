@@ -2,21 +2,21 @@
 // Envíos del chofer por modalidad logística:
 //   Turbo (si está habilitado o tiene Turbos): en curso, finalizados y
 //     programados para mañana.
-//   Flex: recorridos de reparto abiertos (también de días anteriores) y sus
-//     envíos; finalizados por día o rango; el historial legacy (/v1).
+//   Flex: recorridos de reparto en curso y finalizados (por día o rango).
+//   Solo recorridos (10-nov, decisión de producto): todo envío asignado va en
+//   un recorrido y se ve dentro de él; no hay listas de envíos sueltos.
 //   Baúl: lo que el chofer tiene que rendir o devolver (GET /v2/baul/me).
 //   Envíos tradicionales: próximamente.
 // Arriba, la bandeja de ofertas con su contador; abajo, «Continuar» si hay un
 // recorrido en la calle. Los recorridos se leen de workSource (compartido con
-// Inicio); los envíos, del ViewModel de siempre.
+// Inicio). Los envíos del ViewModel solo se usan para no esconder trabajo:
+// mostrar Turbo si hay Turbos y avisar de envíos en recorrido sin su recorrido.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   View,
   Text,
-  FlatList,
   RefreshControl,
   StyleSheet,
   Modal,
@@ -27,21 +27,16 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { File, Paths } from "expo-file-system/next";
 
 import useEnviosViewModel from "./ViewModel";
-import { classifyDelivery, deliveryKey } from "./deliveryState";
+import { classifyDelivery } from "./deliveryState";
 import { fetchMyBaul, BaulResult } from "./baulSource";
 import BaulPanel from "./BaulPanel";
-import { ApiDelivery } from "../../../../Data/sources/remote/api/ApiDelivery";
 import global from "../../../theme/global";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
-import { DriverDeliveryStatCard } from "../../../components/driver/DriverDeliveryStatCard";
-import { DriverDeliveryCard } from "../../../components/driver/DriverDeliveryCard";
-import { DriverDeliveryDetailModal } from "../../../components/driver/DriverDeliveryDetailModal";
 import WorkItemCard from "../../../components/driver/WorkItemCard";
 import ContinueBar, { CONTINUE_BAR_SPACE } from "../../../components/driver/ContinueBar";
 import {
@@ -75,7 +70,7 @@ import { errorMessage } from "../errorMessage";
 type ModalityKey = "turbo" | "flex" | "baul" | "tradicional";
 // Cada cuánto se vuelve a pedir el Baúl mientras está a la vista.
 const BAUL_REFRESH_MS = 20_000;
-type SubKey = "current" | "finished" | "tomorrow" | "legacy";
+type SubKey = "current" | "finished" | "tomorrow";
 
 const SUBS: Record<"turbo" | "flex", { key: SubKey; label: string; icon: keyof typeof Ionicons.glyphMap }[]> = {
   turbo: [
@@ -86,7 +81,6 @@ const SUBS: Record<"turbo" | "flex", { key: SubKey; label: string; icon: keyof t
   flex: [
     { key: "current", label: "En curso", icon: "flash-outline" },
     { key: "finished", label: "Finalizados", icon: "checkmark-circle-outline" },
-    { key: "legacy", label: "Historial", icon: "archive-outline" },
   ],
 };
 
@@ -123,41 +117,6 @@ type Envio = {
   [key: string]: any;
 };
 
-const n = (v: any) => {
-  const x = Number(v ?? 0);
-  return Number.isNaN(x) ? 0 : x;
-};
-
-const fmtMoney = (v: any) => `$${n(v).toLocaleString("es-AR")}`;
-
-const buildExcelFileName = (username?: string | null) => {
-  const cleanName = String(username || "driver")
-    .replace(/[^a-zA-Z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  return `envios_${cleanName || "driver"}.xlsx`;
-};
-
-const tryParseDate = (s?: string | null): Date | null => {
-  if (!s) return null;
-
-  const trimmed = String(s).trim();
-  const iso = new Date(trimmed);
-  if (!isNaN(iso.getTime())) return iso;
-
-  const m = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-
-  if (m) {
-    const d = Number(m[1]);
-    const mo = Number(m[2]) - 1;
-    const y = Number(m[3]!.length === 2 ? `20${m[3]}` : m[3]);
-    const dt = new Date(y, mo, d);
-    if (!isNaN(dt.getTime())) return dt;
-  }
-
-  return null;
-};
-
 // Fecha local (YYYY-MM-DD) de un Date: la del teléfono, no la de UTC.
 const isoOf = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -177,26 +136,6 @@ const getDateValue = (item: Envio): string | null => {
     item.created_at ||
     null
   );
-};
-
-const inDays = (item: Envio, days: string[] | null) => {
-  if (!days) return true;
-  const d = tryParseDate(getDateValue(item));
-  return !!d && days.includes(isoOf(d));
-};
-
-const netoChofer = (it?: Envio | null) => {
-  if (!it) return 0;
-
-  if (it.neto_chofer !== undefined && it.neto_chofer !== null) {
-    return n(it.neto_chofer);
-  }
-
-  const precio = n(it.precio_chofer);
-  const pRaw = n(it.porcentaje_chofer);
-  const factor = pRaw > 1 ? 1 - pRaw / 100 : 1 - pRaw;
-
-  return Math.round(precio * factor * 100) / 100;
 };
 
 const normalizeCurrentDelivery = (item: any): Envio => {
@@ -268,24 +207,11 @@ type History = { key: string; loading: boolean; routes: RouteSummary[]; failedDa
 type Scheduled = { loading: boolean; items: WorkItem[]; groupsState: SourceState; groupsError: string | null; error: string | null };
 
 export const EnviosScreen = ({ navigation }: any) => {
-  const {
-    list,
-    currentDeliveries,
-    loading,
-    error,
-    currentError,
-    reload,
-    username,
-  } = useEnviosViewModel();
+  const { currentDeliveries, loading, reload } = useEnviosViewModel({ legacy: false });
   const work = useDriverWork();
   const offerCounts = useOfferCounts();
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
-
-  const legacyRows = useMemo(
-    () => ((list || []).filter(Boolean) as Envio[]),
-    [list]
-  );
 
   const currentRows = useMemo(
     () =>
@@ -303,14 +229,9 @@ export const EnviosScreen = ({ navigation }: any) => {
   const [picked, setPicked] = useState(false);
   const [sub, setSub] = useState<SubKey>("current");
   const [finishedPeriod, setFinishedPeriod] = useState<Period>({ kind: "today" });
-  const [legacyPeriod, setLegacyPeriod] = useState<Period>({ kind: "all" });
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [draft, setDraft] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
   const [picker, setPicker] = useState<null | "FROM" | "TO">(null);
-
-  const [selected, setSelected] = useState<Envio | null>(null);
-  const [showTotals, setShowTotals] = useState(false);
-  const [downloadingExcel, setDownloadingExcel] = useState(false);
 
   const [history, setHistory] = useState<History | null>(null);
   const [scheduled, setScheduled] = useState<Scheduled | null>(null);
@@ -344,8 +265,8 @@ export const EnviosScreen = ({ navigation }: any) => {
     setSub("current");
   };
 
-  const period = sub === "legacy" ? legacyPeriod : finishedPeriod;
-  const setPeriod = sub === "legacy" ? setLegacyPeriod : setFinishedPeriod;
+  const period = finishedPeriod;
+  const setPeriod = setFinishedPeriod;
   const days = useMemo(() => periodDays(period, today), [period, today]);
 
   // Finalizados: los recorridos cerrados de esos días (un pedido por día, con tope).
@@ -416,69 +337,6 @@ export const EnviosScreen = ({ navigation }: any) => {
     setRefreshing(false);
   }, [reload, work, sub, modality, loadHistory, loadScheduled]);
 
-  const handleDownloadWeeklyExcel = useCallback(async () => {
-    if (!username) {
-      Alert.alert(
-        "No se puede descargar",
-        "No encontramos el nombre legacy del chofer en la sesión."
-      );
-      return;
-    }
-
-    if (downloadingExcel) return;
-
-    try {
-      setDownloadingExcel(true);
-
-      const Sharing = await import("expo-sharing");
-
-      const response = await ApiDelivery.post(
-        "/v1/data/driver/print",
-        { username },
-        {
-          responseType: "arraybuffer",
-          headers: {
-            Accept:
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          },
-        }
-      );
-
-      const fileName = buildExcelFileName(username);
-      const file = new File(Paths.cache, fileName);
-      const bytes = new Uint8Array(response.data);
-
-      await file.write(bytes);
-
-      const canShare = await Sharing.isAvailableAsync();
-
-      if (!canShare) {
-        Alert.alert(
-          "Excel generado",
-          "El archivo se generó correctamente, pero este dispositivo no permite compartirlo desde la app."
-        );
-        return;
-      }
-
-      await Sharing.shareAsync(file.uri, {
-        mimeType:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        dialogTitle: "Descargar Excel semanal",
-        UTI: "com.microsoft.excel.xlsx",
-      });
-    } catch (e: any) {
-      const message =
-        e?.response?.data?.error ||
-        e?.response?.data?.message ||
-        e?.message ||
-        "No se pudo descargar el Excel semanal.";
-
-      Alert.alert("Error descargando Excel", message);
-    } finally {
-      setDownloadingExcel(false);
-    }
-  }, [downloadingExcel, username]);
-
   const handleTabPress = useCallback(
     (tabKey: DriverTabKey) => {
       if (tabKey === "deliveries") return;
@@ -509,41 +367,16 @@ export const EnviosScreen = ({ navigation }: any) => {
   // ---------- Lo que muestra la vista elegida ----------
 
   const view = useMemo(() => {
-    const deliveriesView = modality === "flex" || (modality === "turbo" && sub === "finished");
-    let rows: Envio[] = [];
     let routes: WorkItem[] = [];
-    if (modality === "flex" && sub === "current") {
-      rows = flexRows.filter((r) => !isFinalizado(r));
-      routes = flexActive;
-    } else if (modality === "flex" && sub === "finished") {
-      rows = flexRows.filter(isFinalizado).filter((r) => inDays(r, days));
-      routes = closedOf(history?.key === historyKey ? history.routes : [], "flex").map((route) => ({ kind: "route", route }));
-    } else if (modality === "flex" && sub === "legacy") {
-      rows = legacyRows.filter((r) => inDays(r, days));
-    } else if (modality === "turbo" && sub === "current") {
-      routes = turboActive;
-    } else if (modality === "turbo" && sub === "finished") {
-      rows = turboRows.filter(isFinalizado).filter((r) => inDays(r, days));
-      routes = closedOf(history?.key === historyKey ? history.routes : [], "turbo").map((route) => ({ kind: "route", route }));
-    } else if (modality === "turbo" && sub === "tomorrow") {
-      routes = scheduled?.items ?? [];
-    }
-    return { rows, routes, showStats: deliveriesView && rows.length > 0 };
-  }, [modality, sub, flexRows, flexActive, legacyRows, turboActive, turboRows, days, history, historyKey, scheduled]);
+    if (modality === "flex" && sub === "current") routes = flexActive;
+    else if (modality === "flex" && sub === "finished") routes = closedOf(history?.key === historyKey ? history.routes : [], "flex").map((route) => ({ kind: "route", route }));
+    else if (modality === "turbo" && sub === "current") routes = turboActive;
+    else if (modality === "turbo" && sub === "finished") routes = closedOf(history?.key === historyKey ? history.routes : [], "turbo").map((route) => ({ kind: "route", route }));
+    else if (modality === "turbo" && sub === "tomorrow") routes = scheduled?.items ?? [];
+    return { routes };
+  }, [modality, sub, flexActive, turboActive, history, historyKey, scheduled]);
 
-  const visibleTotals = useMemo(() => {
-    const states = view.rows.map(classifyDelivery);
-    return {
-      totalEnvios: view.rows.length,
-      entregados: states.filter((s) => s.phase === "delivered").length,
-      pendientes: states.filter((s) => !s.finished).length,
-      atencion: states.filter((s) => s.attention).length,
-      montoBruto: view.rows.reduce((acc, it) => acc + n(it.precio_chofer), 0),
-      netoFinal: view.rows.reduce((acc, it) => acc + netoChofer(it), 0),
-    };
-  }, [view.rows]);
-
-  if (loading && legacyRows.length === 0 && currentRows.length === 0 && !w) {
+  if (loading && currentRows.length === 0 && !w) {
     return (
       <View style={styles.center}>
         <ThemedStatusBar />
@@ -561,7 +394,7 @@ export const EnviosScreen = ({ navigation }: any) => {
 
   const routesBlock = () => {
     const isCurrent = sub === "current";
-    const showsRoutes = (modality === "flex" || modality === "turbo") && sub !== "legacy";
+    const showsRoutes = modality === "flex" || modality === "turbo";
     if (!showsRoutes) return null;
     const title =
       sub === "tomorrow" ? "Programados para mañana" : isCurrent ? "Recorridos abiertos" : "Recorridos finalizados";
@@ -661,16 +494,13 @@ export const EnviosScreen = ({ navigation }: any) => {
           </Pressable>
         ) : null}
 
-        {modality === "flex" || sub === "finished" ? (
-          <Text style={[styles.blockTitle, styles.blockTitleSpaced]}>Envíos</Text>
-        ) : null}
       </View>
     );
   };
 
   const periodChips = () => {
-    if (!(sub === "finished" || sub === "legacy")) return null;
-    const options: Period[] = sub === "legacy" ? [{ kind: "all" }, { kind: "today" }] : [{ kind: "today" }, { kind: "yesterday" }, { kind: "week" }];
+    if (sub !== "finished") return null;
+    const options: Period[] = [{ kind: "today" }, { kind: "yesterday" }, { kind: "week" }];
     const isRange = period.kind === "range";
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersContent} style={styles.filtersBox}>
@@ -696,40 +526,6 @@ export const EnviosScreen = ({ navigation }: any) => {
     );
   };
 
-  const listHeader = (
-    <View>
-      {routesBlock()}
-      {view.showStats ? (
-        <View style={styles.statsGrid}>
-          <DriverDeliveryStatCard
-            neto={fmtMoney(visibleTotals.netoFinal)}
-            entregados={visibleTotals.entregados}
-            pendientes={visibleTotals.pendientes}
-            atencion={visibleTotals.atencion}
-            onPressNeto={() => setShowTotals(true)}
-          />
-        </View>
-      ) : null}
-      {(modality === "flex" && sub !== "legacy" && currentError) || (modality === "turbo" && sub === "finished" && currentError) ? (
-        <Notice tone="error" text={currentError} />
-      ) : null}
-      {modality === "flex" && sub === "legacy" && error ? <Notice tone="error" text={error} /> : null}
-    </View>
-  );
-
-  const deliveriesEmpty =
-    modality === "flex" || (modality === "turbo" && sub === "finished") ? (
-      <View style={styles.emptyBox}>
-        <Ionicons name="file-tray-outline" size={30} color={theme.text.muted} />
-        <Text style={styles.emptyTitle}>
-          {sub === "current" ? "No hay envíos en curso" : sub === "legacy" ? "No hay envíos en el historial" : "No hay envíos finalizados"}
-        </Text>
-        <Text style={styles.emptyText}>
-          {sub === "current" ? "Cuando te asignen envíos, aparecen acá." : "Probá con otro período o actualizá la pantalla."}
-        </Text>
-      </View>
-    ) : null;
-
   const bottomSpace = missions.length ? CONTINUE_BAR_SPACE : 0;
 
   return (
@@ -742,18 +538,6 @@ export const EnviosScreen = ({ navigation }: any) => {
             <Text style={styles.title}>Envíos</Text>
           </View>
 
-          <View style={styles.headerActions}>
-            {modality === "flex" && sub === "legacy" ? (
-              <Pressable
-                style={[styles.iconButton, styles.downloadButton, downloadingExcel && styles.iconButtonDisabled]}
-                onPress={handleDownloadWeeklyExcel}
-                disabled={downloadingExcel}
-                accessibilityLabel="Descargar Excel semanal"
-              >
-                <Ionicons name={downloadingExcel ? "hourglass-outline" : "download-outline"} size={19} color={theme.text.onPrimary} />
-              </Pressable>
-            ) : null}
-          </View>
         </View>
 
         {/* Las modalidades en una fila de anchos iguales: todas a la vista, sin
@@ -831,46 +615,18 @@ export const EnviosScreen = ({ navigation }: any) => {
           />
         </ScrollView>
       ) : (
-        <FlatList
-          data={view.rows}
-          keyExtractor={deliveryKey}
+        // Solo recorridos: cada envío se ve dentro del suyo (al tocar el recorrido).
+        <ScrollView
           contentContainerStyle={[styles.listContent, { paddingBottom: 124 + bottomSpace }]}
-          ListHeaderComponent={listHeader}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
-          renderItem={({ item }) => {
-            if (!item) return null;
-            return <DriverDeliveryCard delivery={item} onPress={() => setSelected(item)} />;
-          }}
-          ListEmptyComponent={deliveriesEmpty}
-        />
+        >
+          {routesBlock()}
+        </ScrollView>
       )}
 
       <ContinueBar missions={missions} onOpen={openMission} onSeeAll={() => navigation.navigate("DriverScreen")} />
 
       <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
-
-      <DriverDeliveryDetailModal visible={!!selected} delivery={selected} onClose={() => setSelected(null)} />
-
-      <Modal visible={showTotals} transparent animationType="fade" onRequestClose={() => setShowTotals(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowTotals(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <ModalHeader title="Totales visibles" onClose={() => setShowTotals(false)} />
-
-            <View style={styles.modalBody}>
-              <Row label="Envíos" value={String(visibleTotals.totalEnvios)} />
-              <Row label="Entregados" value={String(visibleTotals.entregados)} />
-              <Row label="Pendientes" value={String(visibleTotals.pendientes)} />
-              <Row label="Atención" value={String(visibleTotals.atencion)} />
-              <Row label="Bruto chofer" value={fmtMoney(visibleTotals.montoBruto)} />
-              <Row label="Neto chofer" value={fmtMoney(visibleTotals.netoFinal)} />
-            </View>
-
-            <Pressable style={styles.primaryBtn} onPress={() => setShowTotals(false)}>
-              <Text style={styles.primaryBtnText}>Cerrar</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       <Modal visible={calendarOpen} transparent animationType="fade" onRequestClose={() => setCalendarOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setCalendarOpen(false)}>
@@ -1011,18 +767,6 @@ const ModalHeader = ({ title, onClose }: { title: string; onClose: () => void })
   );
 };
 
-const Row = ({ label, value }: { label: string; value?: string | null }) => {
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View style={styles.rowLine}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={3}>
-        {value ?? "—"}
-      </Text>
-    </View>
-  );
-};
-
 const makeStyles = (t: Theme) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: t.surfaces.screen },
   flex: { flex: 1 },
@@ -1031,9 +775,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   topLine: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: t.spacing.md },
   kicker: { ...t.typography.kicker, marginBottom: 4 },
   title: { color: t.text.primary, fontSize: 30, lineHeight: 34, fontWeight: t.font.weight.black, letterSpacing: -1 },
-  headerActions: { flexDirection: "row", gap: t.spacing.sm, alignItems: "center" },
-  iconButton: { width: 42, height: 42, borderRadius: t.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: t.surfaces.card, borderWidth: 1, borderColor: t.borders.default },
-  downloadButton: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
   iconButtonDisabled: { opacity: 0.58 },
   offersHint: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 28, marginTop: -4, marginBottom: t.spacing.sm },
   offersHintText: { color: t.text.accent, fontSize: 13, fontWeight: t.font.weight.bold },
@@ -1049,7 +790,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   segmentTextActive: { color: t.text.onPrimary },
   block: { marginBottom: t.spacing.sm, gap: 8 },
   blockTitle: { ...t.typography.kicker, marginTop: t.spacing.sm },
-  blockTitleSpaced: { marginTop: t.spacing.md },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   muted: { color: t.text.secondary, fontSize: 13, lineHeight: 18 },
   linkRow: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, paddingHorizontal: t.spacing.md, minHeight: 44, borderRadius: t.radius.lg, backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.soft },
@@ -1057,7 +797,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   notice: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, padding: t.spacing.md, borderRadius: t.radius.lg, borderWidth: 1 },
   noticeText: { flex: 1, color: t.text.primary, fontSize: 12, lineHeight: 17, fontWeight: t.font.weight.bold },
   noticeAction: { color: t.text.accent, fontSize: 12, fontWeight: t.font.weight.black },
-  statsGrid: { marginVertical: t.spacing.sm },
   filtersBox: { flexGrow: 0, marginTop: 2 },
   filtersContent: { gap: t.spacing.sm, paddingRight: t.spacing.lg },
   filterChip: { height: 38, paddingHorizontal: 13, borderRadius: t.radius.full, backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.soft, flexDirection: "row", alignItems: "center", gap: 6 },
@@ -1065,9 +804,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   filterChipText: { color: t.text.muted, fontSize: 12, fontWeight: t.font.weight.black },
   filterChipTextActive: { color: t.text.onPrimary },
   listContent: { paddingHorizontal: t.spacing.lg, paddingBottom: 124 },
-  emptyBox: { paddingTop: 28, alignItems: "center" },
-  emptyTitle: { color: t.text.primary, fontSize: 16, fontWeight: t.font.weight.black, marginTop: t.spacing.md },
-  emptyText: { color: t.text.muted, fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 6, paddingHorizontal: 26 },
   info: { alignItems: "center", gap: 10, padding: t.spacing.xl, marginTop: t.spacing.md },
   infoTitle: { color: t.text.primary, fontSize: 20, fontWeight: t.font.weight.black },
   infoTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: t.status.pending.border, backgroundColor: t.status.pending.background },
@@ -1079,9 +815,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   modalTitle: { color: t.text.primary, fontSize: 18, fontWeight: t.font.weight.black, letterSpacing: -0.4 },
   closeBtn: { width: 34, height: 34, borderRadius: t.radius.full, alignItems: "center", justifyContent: "center", backgroundColor: t.surfaces.card, borderWidth: 1, borderColor: t.borders.soft },
   modalBody: { gap: t.spacing.sm, marginBottom: t.spacing.md },
-  rowLine: { flexDirection: "row", alignItems: "flex-start", gap: t.spacing.md },
-  rowLabel: { width: 112, color: t.text.muted, fontSize: 11, fontWeight: t.font.weight.black, textTransform: "uppercase" },
-  rowValue: { flex: 1, color: t.text.primary, fontSize: 13, lineHeight: 18, fontWeight: t.font.weight.bold },
   primaryBtn: { backgroundColor: t.colors.primary, borderRadius: t.radius.lg, paddingVertical: 14, alignItems: "center" },
   primaryBtnText: { color: t.text.onPrimary, fontWeight: t.font.weight.black },
   secondaryBtn: { borderRadius: t.radius.lg, paddingVertical: 14, alignItems: "center", backgroundColor: t.surfaces.muted, borderWidth: 1, borderColor: t.borders.default },

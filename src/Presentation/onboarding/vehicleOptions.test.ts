@@ -4,7 +4,7 @@
 //   node /tmp/vehicle-options/vehicleOptions.test.js
 
 import { VEHICLE_CATALOG } from "./VehicleCatalog";
-import { aMano, filtrar, limpiarTexto, marcasDe, MAX_MARCA, MAX_MODELO, modelosDe, vehiculoCompleto } from "./vehicleOptions";
+import { aMano, filtrar, limpiarTexto, marcasDe, MAX_MARCA, MAX_MODELO, MAX_VEHICULO, modelosDe, vehiculoCompleto } from "./vehicleOptions";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -29,7 +29,7 @@ eq("modelos en orden alfabético con números", modelosDe("moto", "Honda").slice
 eq("sin tipo o sin marca no hay opciones", [marcasDe(""), modelosDe("moto", null), modelosDe("moto", "Inventada")], [[], [], []]);
 
 eq("buscar sin mayúsculas ni acentos", filtrar(marcasDe("auto"), "citroen"), ["Citroën"]);
-eq("buscar por parte del nombre", filtrar(modelosDe("moto", "Honda"), "xr"), ["XR 150L", "XR 190L", "XRE 300"]);
+eq("buscar por parte del nombre", filtrar(modelosDe("moto", "Honda"), "xr"), ["XR 150L", "XR 190L", "XR 250 Tornado", "XRE 300"]);
 eq("buscador vacío: todas", filtrar(["A", "B"], "  "), ["A", "B"]);
 
 eq("lo escrito a mano: sin espacios de más, «·» ni < >", limpiarTexto("  Royal  Enfield · <Classic> ", 40), "Royal Enfield Classic");
@@ -42,6 +42,15 @@ eq("sin cargar: nada a mano", aMano("", null, null), { marca: false, modelo: fal
 
 eq("completo con marca y modelo", vehiculoCompleto("Honda", "Wave 110"), true);
 eq("incompleto sin modelo o con marca de una letra", [vehiculoCompleto("Honda", " "), vehiculoCompleto("H", "Wave")], [false, false]);
+
+// Lo que se guarda («tipo · marca · modelo») entra en los 60 del servidor aun en el peor caso (utilitario, ambos a mano al máximo).
+const peor = ["utilitario", "x".repeat(MAX_MARCA), "y".repeat(MAX_MODELO)].join(" · ");
+eq("el más largo posible entra en el límite del servidor", peor.length <= MAX_VEHICULO, true);
+// Catálogo ampliado (10-nov): motos de reparto, autos y utilitarios actuales.
+eq("motos: Guerrero, Hero y la Tornado", [marcasDe("moto").includes("Guerrero"), marcasDe("moto").includes("Hero"), modelosDe("moto", "Honda").includes("XR 250 Tornado")], [true, true, true]);
+eq("autos actuales", [modelosDe("auto", "Volkswagen").includes("Nivus"), modelosDe("auto", "Renault").includes("Kardian"), modelosDe("auto", "Fiat").includes("Fastback")], [true, true, true]);
+eq("utilitarios: RAM 1000 y Mitsubishi L200", [modelosDe("utilitario", "RAM"), modelosDe("utilitario", "Mitsubishi")], [["1000", "Rampage"], ["L200"]]);
+eq("lo guardado antes sigue en la lista (compatibilidad)", aMano("auto", "Volkswagen", "Gol Trend"), { marca: false, modelo: false });
 
 if (failed) { console.log(`${failed} fallas`); process.exit(1); }
 console.log("todo ok");

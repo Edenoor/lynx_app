@@ -7,9 +7,11 @@ import { VEHICLE_CATALOG } from "./VehicleCatalog";
 
 // Con más opciones que esto, la lista lleva buscador.
 export const BUSCADOR_DESDE = 8;
-// El servidor guarda «tipo · marca · modelo» en hasta 60 caracteres.
+// El servidor guarda «tipo · marca · modelo» en hasta 60 caracteres (400 si
+// se pasa): con el tipo más largo («utilitario · ») y los dos al máximo, 60.
 export const MAX_MARCA = 20;
-export const MAX_MODELO = 25;
+export const MAX_MODELO = 24;
+export const MAX_VEHICULO = 60;
 
 // Sin String.normalize: no está garantizado en todos los motores de la app.
 const SIN_ACENTO: Record<string, string> = { á: "a", à: "a", ä: "a", â: "a", é: "e", è: "e", ë: "e", ê: "e", í: "i", ì: "i", ï: "i", î: "i", ó: "o", ò: "o", ö: "o", ô: "o", ú: "u", ù: "u", ü: "u", û: "u", ñ: "n" };
