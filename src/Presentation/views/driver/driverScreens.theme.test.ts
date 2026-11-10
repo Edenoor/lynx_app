@@ -2265,12 +2265,12 @@ const setDriverApi = () => {
     const Chat = L("src/Presentation/views/driver/chat/ChatScreen.tsx").default;
     const Help = L("src/Presentation/views/driver/help/DriverHelpScreen.tsx").default;
     const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
-    const conv = (id: number, name: string, kind: "direct" | "news", unread: number, last: string) => ({
-      id, channel: { id: id * 10, name, kind, assistant_line: false }, role: kind === "news" ? "audience" : "subject", title: name,
-      can_write: kind !== "news", last_message: { id: 100 + id, body: last, author_name: "Ana", created_at: ago(5) }, unread,
-    });
-    const INBOX = { ok: true, conversations: [conv(1, "Avisos", "news", 1, "Mañana no hay colectas"), conv(2, "Coordinación", "direct", 2, "¿Llegaste a la tienda?")], startable: [{ id: 7, name: "Administración" }], team_channels: [], unread_total: 3 };
-    const CONV = { id: 2, role: "subject", can_write: true, channel: { id: 20, name: "Coordinación", kind: "direct", assistant_line: false }, title: "Coordinación" };
+    // El chofer tiene una sola charla: la fija con el equipo de Lynx.
+    const INBOX = { ok: true, unread_total: 3, conversations: [{
+      id: 2, kind: "driver", role: "member", title: "Lynx", can_write: true,
+      last_message: { id: 102, body: "¿Llegaste a la tienda?", author_name: "Ana", created_at: ago(5) }, unread: 3,
+    }] };
+    const CONV = { id: 2, kind: "driver", role: "member", can_write: true, title: "Lynx" };
     const msg = (id: number, body: string, extra: any = {}) => ({ id, kind: "text", body, created_at: ago(5), author: { id: 401, name: "Ana Coordinadora" }, mine: false, from_team: true, ...extra });
     // Sin ofertas: el número de Alertas en la barra es solo el del chat.
     const setChatApi = (over: Record<string, any> = {}) => {
@@ -2281,7 +2281,7 @@ const setDriverApi = () => {
     const body = (key: string) => api.bodies.filter(([k]) => k === key).map(([, b]) => b);
     const tab = (tree: any, label: string) => all(tree, (x) => x.props?.accessibilityRole === "tab" && textOf(x).startsWith(label))[0];
 
-    // Lista de chats: asistente, charlas propias, «Escribile a…», novedades.
+    // Lista de chats: el asistente y la charla con Lynx.
     const dark = createTheme({ scheme: "dark" });
     useTheme(dark);
     setChatApi(); nav.calls = [];
@@ -2291,9 +2291,9 @@ const setDriverApi = () => {
     check("Chat: Alertas tiene Notificaciones · Ofertas · Mensajes, y abre en Mensajes", ["Notificaciones", "Ofertas", "Mensajes"].every((l) => !!tab(tree, l)) && tab(tree, "Mensajes").props.accessibilityState.selected);
     check("Chat: la pestaña y la barra cuentan los mensajes sin leer", tab(tree, "Mensajes").props.accessibilityLabel === "Mensajes: 3" && byLabel(tree, "Alertas: 3").length === 1, byLabel(tree, "Alertas").map((x) => x.props.accessibilityLabel).join(", "));
     check("Chat: lista desde /v2/chat/inbox", api.calls.includes("GET /v2/chat/inbox"));
-    check("Chat: arriba el asistente, después las charlas, «Escribile a…» y al final las novedades",
-      txt.indexOf("Asistente") < txt.indexOf("Coordinación") && txt.indexOf("Coordinación") < txt.indexOf("Escribile a Administración") && txt.indexOf("Escribile a Administración") < txt.indexOf("Avisos"), txt.slice(0, 300));
-    check("Chat: cada charla con su último mensaje y sus no leídos", txt.includes("¿Llegaste a la tienda?") && byLabel(tree, "Coordinación: 2 sin leer").length === 1 && byLabel(tree, "Avisos: 1 sin leer").length === 1);
+    check("Chat: arriba el asistente y después la charla con Lynx (sin canales ni «Escribile a…»)",
+      txt.indexOf("Asistente") >= 0 && txt.indexOf("Asistente") < txt.indexOf("Lynx") && !txt.includes("Escribile a"), txt.slice(0, 300));
+    check("Chat: la charla con su último mensaje y sus no leídos", txt.includes("¿Llegaste a la tienda?") && byLabel(tree, "Lynx: 3 sin leer").length === 1);
     for (const scheme of ["dark", "light"]) {
       const th = createTheme({ scheme });
       useTheme(th);
@@ -2302,14 +2302,11 @@ const setDriverApi = () => {
       check(`Chat ${scheme}: la lista es legible y usa los colores del tema`, lg.bad.length === 0 && foreignColors(tree, th).length === 0, [...lg.bad, ...foreignColors(tree, th)].slice(0, 4).join(" · "));
     }
     useTheme(dark);
-    byLabel(tree, "Coordinación: 2 sin leer")[0].props.onPress();
-    check("Chat: tocar una charla la abre", js(lastNav()) === js(["navigate", "ChatScreen", { conversationId: 2, title: "Coordinación" }]));
+    byLabel(tree, "Lynx: 3 sin leer")[0].props.onPress();
+    check("Chat: tocar la charla la abre", js(lastNav()) === js(["navigate", "ChatScreen", { conversationId: 2, title: "Lynx" }]));
     // La fila (el botón flotante se llama igual).
     pressable(tree, "Dudas de uso de la app").props.onPress();
     check("Chat: el asistente es el primer chat", js(lastNav()) === js(["navigate", "DriverHelpScreen"]));
-    api.replies["POST /v2/chat/channels/7/conversations"] = { ok: true, conversation_id: 9 };
-    tree = await press(tree, "Escribile a Administración");
-    check("Chat: «Escribile a…» abre la charla en ese canal", api.calls.includes("POST /v2/chat/channels/7/conversations") && js(lastNav()) === js(["navigate", "ChatScreen", { conversationId: 9, title: "Administración" }]));
     setChatApi({ "GET /v2/chat/inbox": { ok: false, error: "No autorizado" } });
     tree = await mount(RealReact.createElement(Alerts));
     check("Chat: si la lista no carga, se dice por qué (y el asistente sigue a mano)", textOf(tree).includes("No autorizado") && textOf(tree).includes("Dudas de uso de la app"), textOf(tree).slice(0, 300));
@@ -2326,10 +2323,10 @@ const setDriverApi = () => {
       "POST /v2/chat/conversations/2/messages": { ok: true, message: msg(7, "Sí, ya estoy", { author: { id: 403, name: "Chofer" }, mine: true, from_team: false, created_at: new Date().toISOString() }) },
     });
     nav.calls = []; openChats.length = 0;
-    alertsParams.current = { conversationId: 2, title: "Coordinación" };
+    alertsParams.current = { conversationId: 2, title: "Lynx" };
     tree = await mount(RealReact.createElement(Chat));
     txt = textOf(tree);
-    check("Charla: título, mensajes y quién del equipo escribió", txt.includes("Coordinación") && txt.includes("¿Llegaste a la tienda?") && txt.includes("Ana Coordinadora"));
+    check("Charla: título, mensajes y quién del equipo escribió", txt.includes("Lynx") && txt.includes("¿Llegaste a la tienda?") && txt.includes("Ana Coordinadora"));
     check("Charla: la consulta derivada del asistente se distingue", txt.includes("Consulta derivada desde el asistente"));
     check("Charla: marca leído hasta el último mensaje y lo informa al aviso de push", js(body("POST /v2/chat/conversations/2/read")) === js([{ message_id: 6 }]) && js(openChats) === js([2]), js(body("POST /v2/chat/conversations/2/read")) + " " + js(openChats));
     for (const scheme of ["dark", "light"]) {
@@ -2362,11 +2359,11 @@ const setDriverApi = () => {
     tree = await press(tree, "Chats");
     check("Charla: «<<» sin la lista atrás (vino de un push): la lista toma su lugar", js(lastNav()) === js(["replace", "NotificationsScreen", { tab: "messages" }]));
     nav.routes = [];
-    setChatApi({ "GET /v2/chat/conversations/1/messages": { ok: true, has_more: false, conversation: { ...CONV, id: 1, role: "audience", can_write: false, channel: { id: 10, name: "Avisos", kind: "news", assistant_line: false }, title: "Avisos" }, messages: [msg(8, "Mañana no hay colectas")] } });
+    setChatApi({ "GET /v2/chat/conversations/1/messages": { ok: true, has_more: false, conversation: { ...CONV, id: 1, can_write: false }, messages: [msg(8, "Mañana no hay colectas")] } });
     alertsParams.current = { conversationId: 1 };
     tree = await mount(RealReact.createElement(Chat));
     check("Charla: al salir de una charla se deja de silenciar su push", openChats[openChats.length - 2] === null, js(openChats));
-    check("Novedades: solo escribe el equipo (sin campo para escribir)", textOf(tree).includes("En este canal solo escribe el equipo.") && !all(tree, (x) => x.type === "TextInput").length && textOf(tree).includes("Ana Coordinadora"));
+    check("Charla: si el servidor no deja escribir, no hay campo para escribir", textOf(tree).includes("En esta charla no podés escribir.") && !all(tree, (x) => x.type === "TextInput").length && textOf(tree).includes("Ana Coordinadora"));
 
     // Asistente: «Consultalo con coordinación» deriva la respuesta.
     const LATEST = { ok: true, conversation: { id: 4, updated_at: new Date().toISOString(), messages: [
@@ -2376,7 +2373,7 @@ const setDriverApi = () => {
     setChatApi({
       "GET /v2/assistant/status": { ok: true, enabled: true, daily_limit: 30, remaining_today: 30 },
       "GET /v2/assistant/conversations/latest": LATEST,
-      "POST /v2/chat/handoff": { ok: true, conversation_id: 12, channel: { id: 3, name: "QA Coordinación" } },
+      "POST /v2/chat/handoff": { ok: true, conversation_id: 12, title: "Lynx" },
     });
     nav.calls = [];
     tree = await mount(RealReact.createElement(Help));
@@ -2390,12 +2387,12 @@ const setDriverApi = () => {
     }
     useTheme(dark);
     tree = await press(tree, "Consultalo con coordinación");
-    check("Asistente: derivar manda esa respuesta y abre la charla con la primera línea",
-      js(body("POST /v2/chat/handoff")) === js([{ assistant_message_id: 55 }]) && js(lastNav()) === js(["navigate", "ChatScreen", { conversationId: 12, title: "QA Coordinación" }]), js(nav.calls));
-    api.replies["POST /v2/chat/handoff"] = { ok: false, code: "NO_FIRST_LINE", error: "todavía no hay un grupo de primera línea para el asistente" };
+    check("Asistente: derivar manda esa respuesta y abre la charla con Lynx",
+      js(body("POST /v2/chat/handoff")) === js([{ assistant_message_id: 55 }]) && js(lastNav()) === js(["navigate", "ChatScreen", { conversationId: 12, title: "Lynx" }]), js(nav.calls));
+    api.replies["POST /v2/chat/handoff"] = { ok: false, error: "Sin conexión con el servidor" };
     nav.calls = [];
     tree = await press(tree, "Consultalo con coordinación");
-    check("Asistente: sin primera línea elegida, lo dice y no navega", !nav.calls.length && textOf(tree).includes("Todavía no hay un equipo que reciba estas consultas"));
+    check("Asistente: si no se pudo derivar, lo dice y no navega", !nav.calls.length && textOf(tree).includes("Sin conexión con el servidor"));
     tree = await press(tree, "Chats");
     check("Asistente: «<<» lleva a la lista de chats", js(lastNav()) === js(["replace", "NotificationsScreen", { tab: "messages" }]));
 

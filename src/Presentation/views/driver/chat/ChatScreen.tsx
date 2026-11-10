@@ -3,8 +3,8 @@
 // escribir y «<<» para volver a la lista de chats (en el encabezado fijo, a
 // mano aunque la charla sea larga). Mientras está a la vista se
 // pone al día cada pocos segundos (y al llegar un push de esta charla, que no
-// muestra el aviso del sistema) y marca leído lo nuevo. En las novedades donde
-// solo escribe el equipo no hay campo para escribir.
+// muestra el aviso del sistema) y marca leído lo nuevo. Si el servidor dice que
+// no se puede escribir, no hay campo para escribir.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -155,7 +155,6 @@ export default function ChatScreen() {
   };
 
   const title = conversation?.title ?? route.params?.title ?? "Chat";
-  const kind = conversation?.channel.kind ?? "direct";
   const canWrite = !!conversation?.can_write;
 
   const footer = conversation && !loadError ? (
@@ -184,7 +183,7 @@ export default function ChatScreen() {
           </Pressable>
         </View>
       ) : (
-        <Text style={styles.hint}>En este canal solo escribe el equipo.</Text>
+        <Text style={styles.hint}>En esta charla no podés escribir.</Text>
       )}
     </View>
   ) : null;
@@ -198,7 +197,6 @@ export default function ChatScreen() {
           <Text style={styles.backText}>Chats</Text>
         </Pressable>
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
-        {kind === "news" ? <Text style={styles.kicker}>Novedades</Text> : null}
       </View>
       <KeyboardScreen
         contentContainerStyle={styles.content}
@@ -223,10 +221,10 @@ export default function ChatScreen() {
               </Pressable>
             ) : null}
             {messages.length === 0 && sending === null ? (
-              <Text style={styles.empty}>{canWrite ? "Todavía no hay mensajes. Escribí el primero." : "Todavía no hay novedades."}</Text>
+              <Text style={styles.empty}>{canWrite ? "Todavía no hay mensajes. Escribí el primero." : "Todavía no hay mensajes."}</Text>
             ) : null}
             {messages.map((m) => (
-              <Bubble key={m.id} message={m} channelKind={kind} />
+              <Bubble key={m.id} message={m} />
             ))}
             {sending !== null ? (
               <View style={[styles.bubble, styles.bubbleMine, styles.bubblePending]}>
@@ -241,11 +239,11 @@ export default function ChatScreen() {
   );
 }
 
-function Bubble({ message: m, channelKind }: { message: ChatMessage; channelKind: "direct" | "news" }) {
+function Bubble({ message: m }: { message: ChatMessage }) {
   const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.bubble, m.mine ? styles.bubbleMine : styles.bubbleOther]}>
-      {showAuthor(m, channelKind) ? <Text style={styles.author}>{m.author!.name}</Text> : null}
+      {showAuthor(m) ? <Text style={styles.author}>{m.author!.name}</Text> : null}
       {m.kind === "handoff" ? (
         <Text style={m.mine ? styles.handoffMine : styles.handoff}>Consulta derivada desde el asistente</Text>
       ) : null}
@@ -279,7 +277,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     fontWeight: t.font.weight.black,
     letterSpacing: -0.5,
   },
-  kicker: { color: t.text.accent, fontSize: 13, fontWeight: t.font.weight.black },
   card: {
     borderRadius: t.radius.xxl,
     backgroundColor: t.surfaces.cardElevated,

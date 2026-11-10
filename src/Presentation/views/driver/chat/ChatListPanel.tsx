@@ -1,8 +1,7 @@
 // src/Presentation/views/driver/chat/ChatListPanel.tsx
 // Lista de chats del chofer: la pestaña «Mensajes» de Alertas. Arriba el
-// asistente; después sus charlas (con coordinación, administración o el
-// equipo al que derivó una consulta), los canales donde puede abrir una y las
-// novedades. Se refresca sola mientras está a la vista, y al llegar un push.
+// asistente; después su charla fija con el equipo de Lynx («Lynx»). Se
+// refresca sola mientras está a la vista, y al llegar un push.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -12,7 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { errorMessage } from "../errorMessage";
-import { ChatConversation, ChatInbox, fetchInbox, startConversation } from "./chatApi";
+import { ChatConversation, ChatInbox, fetchInbox } from "./chatApi";
 import { chatRows, countLabel, listTime, previewOf } from "./chatView";
 import { publishChatUnread, useChatArrivals } from "./chatStore";
 
@@ -28,8 +27,6 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
   const [inbox, setInbox] = useState<ChatInbox | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // El canal que se está abriendo («Escribile a …»).
-  const [starting, setStarting] = useState<number | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -74,20 +71,6 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
   const openConversation = (c: ChatConversation) =>
     navigation.navigate("ChatScreen", { conversationId: c.id, title: c.title });
 
-  const onStart = async (channel: { id: number; name: string }) => {
-    if (starting !== null) return;
-    setStarting(channel.id);
-    setError(null);
-    try {
-      const conversationId = await startConversation(channel.id);
-      navigation.navigate("ChatScreen", { conversationId, title: channel.name });
-    } catch (e) {
-      setError(errorMessage(e, "No se pudo abrir la charla. Probá de nuevo."));
-    } finally {
-      if (mounted.current) setStarting(null);
-    }
-  };
-
   const rows = chatRows(inbox);
   const empty = !!inbox && rows.length === 1;
 
@@ -102,7 +85,7 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
         refreshControl={<RefreshControl refreshing={loading && !!inbox} onRefresh={() => load()} tintColor={theme.text.accent} />}
         ListFooterComponent={
           loading && !inbox ? <ActivityIndicator color={theme.text.accent} style={{ marginTop: 24 }} />
-          : empty ? <Text style={styles.emptyText}>Todavía no tenés chats. Cuando coordinación te escriba, la charla aparece acá.</Text>
+          : empty ? <Text style={styles.emptyText}>Todavía no tenés chats.</Text>
           : null
         }
         renderItem={({ item: row }) => {
@@ -120,29 +103,7 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
               </Pressable>
             );
           }
-          if (row.kind === "start") {
-            const busy = starting === row.channel.id;
-            return (
-              <Pressable
-                style={[theme.card, styles.row]}
-                onPress={() => onStart(row.channel)}
-                disabled={starting !== null}
-                accessibilityRole="button"
-                accessibilityLabel={`Escribile a ${row.channel.name}`}
-              >
-                <View style={styles.avatar}>
-                  <Ionicons name="create-outline" size={22} color={theme.text.accent} />
-                </View>
-                <View style={styles.body}>
-                  <Text style={styles.title} numberOfLines={1}>{row.channel.name}</Text>
-                  <Text style={styles.preview} numberOfLines={1}>Escribile a {row.channel.name}</Text>
-                </View>
-                {busy ? <ActivityIndicator color={theme.text.accent} /> : <Ionicons name="chevron-forward" size={18} color={theme.text.muted} />}
-              </Pressable>
-            );
-          }
           const c = row.conversation;
-          const news = c.channel.kind === "news";
           return (
             <Pressable
               style={[theme.card, styles.row]}
@@ -151,7 +112,7 @@ export default function ChatListPanel({ navigation, bottomSpace }: Props) {
               accessibilityLabel={c.unread ? `${c.title}: ${c.unread} sin leer` : c.title}
             >
               <View style={styles.avatar}>
-                <Ionicons name={news ? "megaphone-outline" : "chatbubbles-outline"} size={22} color={theme.text.accent} />
+                <Ionicons name="chatbubbles-outline" size={22} color={theme.text.accent} />
               </View>
               <View style={styles.body}>
                 <View style={styles.top}>

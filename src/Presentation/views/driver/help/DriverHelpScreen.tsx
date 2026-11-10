@@ -4,7 +4,7 @@
 // anterior. Al abrir se retoma la charla si es reciente; si no, arranca vacía
 // con preguntas sugeridas. Es el primer chat de la lista: «<<» vuelve a ella.
 // Cuando la respuesta dice que eso lo resuelve coordinación, el botón abre la
-// charla con el equipo de primera línea, con la pregunta y la respuesta ya
+// charla del chofer con el equipo de Lynx, con la pregunta y la respuesta ya
 // cargadas (POST /v2/chat/handoff).
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -104,11 +104,9 @@ export default function DriverHelpScreen() {
     setSendError("");
     try {
       const res = await handoff(m.id);
-      navigation.navigate("ChatScreen", { conversationId: res.conversation_id, title: res.channel.name });
+      navigation.navigate("ChatScreen", { conversationId: res.conversation_id, title: res.title });
     } catch (e: any) {
-      setSendError(e?.code === "NO_FIRST_LINE"
-        ? "Todavía no hay un equipo que reciba estas consultas. Consultalo con coordinación por el medio de siempre."
-        : errorMessage(e, "No se pudo pasar la consulta. Probá de nuevo."));
+      setSendError(errorMessage(e, "No se pudo pasar la consulta. Probá de nuevo."));
     } finally {
       setHandingOff(null);
     }
