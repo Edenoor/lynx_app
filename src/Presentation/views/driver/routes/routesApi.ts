@@ -17,6 +17,10 @@ export type RouteSummary = {
   // (solo en la lista; el detalle no trae el nombre), a qué hora sale y qué
   // contestó el chofer. driver_confirmation viene en toda colecta.
   template_id?: number | null; template_name?: string | null; departure_time?: string | null;
+  // El horario de la plantilla y sus días (0 = domingo … 6 = sábado): la
+  // pantalla de Colectas junta las ejecuciones de un mismo horario en una
+  // tarjeta. Desde el 10-nov; un servidor anterior no los manda.
+  template_departure_id?: number | null; template_weekdays?: number[] | null;
   driver_confirmation?: "ACCEPTED" | "DECLINED" | null; confirmation_state?: ConfirmationState | null;
   // Turbo: el grupo en el que corre (varios Turbos de una tienda con un solo
   // retiro). Un servidor anterior no lo manda.

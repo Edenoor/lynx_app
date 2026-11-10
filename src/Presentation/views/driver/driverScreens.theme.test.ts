@@ -2253,6 +2253,48 @@ const setDriverApi = () => {
     stackScreens.clear();
   }
 
+  // Colectas habituales (10-nov): una tarjeta por horario, la asistencia de
+  // mañana y la ejecución de hoy a mano desde la misma tarjeta.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    const Collections = L("src/Presentation/views/driver/routes/CollectionsScreen.tsx").default;
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const day = (n: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + n); return iso(d); };
+    const col = (id: number, n: number, extra: any = {}) => ({
+      id, type: "PICKUP", status: "ASSIGNED", scheduled_date: day(n), stops_count: 3, deliveries_count: 0, load_expected_count: null, load_confirmed_count: null,
+      template_id: 9, template_name: "MAÑANERO 02", departure_time: "09:00:00", template_departure_id: 41, template_weekdays: [0, 1, 2, 3, 4, 5, 6],
+      driver_confirmation: null, confirmation_state: "PENDING", ...extra,
+    });
+    const week = (tomorrowAnswer: string | null) => [
+      col(501, 0), col(502, 1, { driver_confirmation: tomorrowAnswer }), col(503, 2), col(504, 3),
+      col(511, 1, { template_departure_id: 42, departure_time: "15:00:00", template_weekdays: [1, 3] }),
+      col(521, 1, { template_id: null, template_name: null, template_departure_id: null, template_weekdays: null, departure_time: null }),
+    ];
+    const focusCbs: any[] = [];
+    const prevListen = nav.addListener;
+    (nav as any).addListener = (ev: string, cb: any) => { if (ev === "focus") focusCbs.push(cb); return () => {}; };
+    api.calls = []; api.bodies = []; nav.calls = [];
+    api.replies = { "GET /v2/routes/mine": { ok: true, routes: week(null) } };
+    let ct = await mount(RealReact.createElement(Collections, { navigation: nav }));
+    focusCbs.at(-1)(); ct = await settle();
+    const ctext = textOf(ct);
+    const names = all(ct, (x) => x.type === "Text" && textOf(x) === "MAÑANERO 02").length;
+    check("Colectas: un horario de lunes a domingo es UNA tarjeta (no una por fecha)", names === 2, `${names} tarjetas MAÑANERO 02`);
+    check("Colectas: la tarjeta dice días, hora y tiendas", ctext.includes("Todos los días") && ctext.includes("Comienza a las 09:00") && ctext.includes("3 tiendas") && ctext.includes("Lun y Mié"));
+    check("Colectas: pregunta solo por mañana", ctext.includes("¿Confirmás tu asistencia para mañana?") && !ctext.includes("¿Podés realizarla?Lunes"));
+    check("Colectas: la extraordinaria va aparte, con su propia tarjeta", ctext.includes("Extraordinarias") && ctext.includes("Colecta #521"));
+    check("Colectas: la de hoy se ve en la tarjeta para operarla", ctext.includes("Hoy: pendiente de confirmar"));
+    api.replies["PUT /v2/routes/502/confirmation"] = { ok: true, route: col(502, 1, { driver_confirmation: "ACCEPTED" }) };
+    api.replies["GET /v2/routes/mine"] = { ok: true, routes: week("ACCEPTED") };
+    byLabel(ct, "Confirmar asistencia para mañana")[0].props.onPress(); ct = await settle();
+    check("Colectas: confirmar manda la respuesta de la ejecución de MAÑANA, y solo esa",
+      js(api.bodies.filter(([k]) => k.startsWith("PUT"))) === js([["PUT /v2/routes/502/confirmation", { response: "ACCEPTED" }]]), js(api.bodies));
+    check("Colectas: después de confirmar dice «Asistencia confirmada para mañana.»", textOf(ct).includes("Asistencia confirmada para mañana."));
+    byLabel(ct, "Ver colecta MAÑANERO 02")[0].props.onPress(); await settle();
+    check("Colectas: tocar la tarjeta abre la ejecución de hoy", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 501, name: "MAÑANERO 02" }]), js(lastNav()));
+    (nav as any).addListener = prevListen;
+  }
+
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
   console.log("\nTodas las pruebas pasaron");
   process.exit(0);

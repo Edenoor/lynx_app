@@ -32,6 +32,7 @@ import {
   todayIso,
 } from "./routesApi";
 import { pickupAnswer } from "./pickupConfirmation";
+import { collectionCards, HabitualCard, tomorrowPrompt } from "./collectionCards";
 import {
   COLLECTION_STATUS_LABEL,
   collectionKindLabel,
@@ -45,11 +46,6 @@ type Props = NativeStackScreenProps<
   DriverStackParamList,
   "CollectionsScreen"
 >;
-
-type CollectionGroup = {
-  title: string;
-  routes: RouteSummary[];
-};
 
 const WEEKDAYS = [
   "Domingo",
@@ -83,33 +79,12 @@ const dateLabel = (route: RouteSummary): string => {
   return `${WEEKDAYS[date.getDay()]} ${date.getDate()}/${date.getMonth() + 1}`;
 };
 
-const isWeekday = (route: RouteSummary): boolean => {
-  const day = routeDate(route).getDay();
-  return day >= 1 && day <= 5;
-};
-
-const groupRoutes = (routes: RouteSummary[]): CollectionGroup[] => {
-  const ordered = [...routes].sort((a, b) => {
-    const dateCompare = a.scheduled_date.localeCompare(b.scheduled_date);
-    if (dateCompare !== 0) return dateCompare;
-
-    return (a.departure_time ?? "").localeCompare(b.departure_time ?? "");
-  });
-
-  const weekdays = ordered.filter(isWeekday);
-  const weekends = ordered.filter((route) => !isWeekday(route));
-
-  return [
-    { title: "Lunes a viernes", routes: weekdays },
-    { title: "Fin de semana", routes: weekends },
-  ].filter((group) => group.routes.length > 0);
-};
-
 export default function CollectionsScreen({ navigation }: Props) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [routes, setRoutes] = useState<RouteSummary[] | null>(null);
   const [today, setToday] = useState(todayIso());
+  const [tomorrow, setTomorrow] = useState(nextSevenDates()[1]);
   const [loading, setLoading] = useState(true);
   const [respondiendo, setRespondiendo] = useState<number | null>(null);
   // Recorridos en la calle: la barra «Continuar» vuelve al que está en curso.
@@ -135,6 +110,7 @@ export default function CollectionsScreen({ navigation }: Props) {
       );
 
       setToday(dates[0]);
+      setTomorrow(dates[1]);
       setRoutes(unique);
     } catch (e: any) {
       setError(errorMessage(e, "No se pudieron cargar las colectas"));
@@ -200,7 +176,10 @@ export default function CollectionsScreen({ navigation }: Props) {
     }
   };
 
-  const groups = groupRoutes(routes ?? []);
+  // Una tarjeta por horario de colecta habitual; las extraordinarias, una por recorrido.
+  const cards = collectionCards(routes ?? [], today, tomorrow);
+  const habituales = cards.filter((c): c is HabitualCard => c.kind === "habitual");
+  const extraordinarias = cards.flatMap((c) => (c.kind === "eventual" ? [c.route] : []));
 
   return (
     <ImageBackground
@@ -246,11 +225,31 @@ export default function CollectionsScreen({ navigation }: Props) {
             </View>
           ) : null}
 
-          {groups.map((group) => (
-            <View key={group.title} style={styles.section}>
-              <Text style={styles.sectionTitle}>{group.title}</Text>
+          {habituales.length ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Habituales</Text>
+              {habituales.map((card) => (
+                <HabitualCollectionCard
+                  key={card.key}
+                  card={card}
+                  busy={respondiendo !== null}
+                  onOpen={(route) =>
+                    navigation.navigate("RouteDetailScreen", {
+                      routeId: route.id,
+                      name: collectionName(route),
+                    })
+                  }
+                  onAccept={(route) => responder(route, "ACCEPTED")}
+                  onReject={(route) => confirmarRechazo(route)}
+                />
+              ))}
+            </View>
+          ) : null}
 
-              {group.routes.map((route) => (
+          {extraordinarias.length ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Extraordinarias</Text>
+              {extraordinarias.map((route) => (
                 <CollectionCard
                   key={route.id}
                   route={route}
@@ -267,7 +266,7 @@ export default function CollectionsScreen({ navigation }: Props) {
                 />
               ))}
             </View>
-          ))}
+          ) : null}
         </ScrollView>
 
         <ContinueBar
@@ -282,6 +281,113 @@ export default function CollectionsScreen({ navigation }: Props) {
         />
       </SafeAreaView>
     </ImageBackground>
+  );
+}
+
+// Colecta habitual: una sola tarjeta para todas sus fechas. Tocarla abre la
+// ejecución de hoy (ahí se confirma y se comienza) o, si hoy no hay, la
+// próxima. Abajo, solo la asistencia de mañana.
+function HabitualCollectionCard({
+  card,
+  busy,
+  onOpen,
+  onAccept,
+  onReject,
+}: {
+  card: HabitualCard;
+  busy: boolean;
+  onOpen: (route: RouteSummary) => void;
+  onAccept: (route: RouteSummary) => void;
+  onReject: (route: RouteSummary) => void;
+}) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const prompt = tomorrowPrompt(card);
+  const todayAnswer = card.today ? pickupAnswer(card.today) : null;
+  const todayLabel = card.today
+    ? todayAnswer === "PENDING"
+      ? "pendiente de confirmar: abrila para confirmarla y comenzar"
+      : todayAnswer === "DECLINED"
+        ? "avisaste que no podés"
+        : (COLLECTION_STATUS_LABEL[card.today.status] ?? card.today.status).toLowerCase()
+    : null;
+
+  return (
+    <ThemedCard variant="row" style={styles.card}>
+      <Pressable
+        onPress={() => onOpen(card.open)}
+        accessibilityRole="button"
+        accessibilityLabel={`Ver colecta ${card.name}`}
+      >
+        <View style={styles.cardTop}>
+          <View style={styles.cardIdentity}>
+            <Text style={styles.cardName} numberOfLines={2}>
+              {card.name}
+            </Text>
+            <Text style={styles.kindLabel}>Habitual</Text>
+          </View>
+          {card.today ? (
+            <StatusChip
+              status={collectionStatusKey(card.today.status, todayAnswer)}
+              label="Hoy"
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.cardDetails}>
+          {card.days ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={14} color={theme.text.secondary} />
+              <Text style={styles.cardMeta}>{card.days}</Text>
+            </View>
+          ) : null}
+          {card.time ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={14} color={theme.text.secondary} />
+              <Text style={styles.cardMeta}>Comienza a las {card.time}</Text>
+            </View>
+          ) : null}
+          <View style={styles.metaItem}>
+            <Ionicons name="storefront-outline" size={14} color={theme.text.secondary} />
+            <Text style={styles.cardMeta}>{plural(card.stores, "tienda", "tiendas")}</Text>
+          </View>
+        </View>
+
+        {todayLabel ? <Text style={styles.cardHint}>Hoy: {todayLabel}</Text> : null}
+      </Pressable>
+
+      {prompt ? (
+        prompt.canAccept ? (
+          <View style={styles.cardActions}>
+            <Text style={styles.actionHint}>{prompt.text}</Text>
+            <View style={styles.actionButtons}>
+              {prompt.canDecline ? (
+                <Pressable
+                  style={[styles.iconButton, styles.rejectButton]}
+                  onPress={() => card.tomorrow && onReject(card.tomorrow)}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="No puedo mañana"
+                >
+                  <Ionicons name="close" size={22} color={theme.status.rejected.icon} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                style={[styles.iconButton, styles.acceptButton]}
+                onPress={() => card.tomorrow && onAccept(card.tomorrow)}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Confirmar asistencia para mañana"
+              >
+                <Ionicons name="checkmark" size={23} color={theme.status.confirmed.icon} />
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.cardConfirmed}>{prompt.text}</Text>
+        )
+      ) : null}
+    </ThemedCard>
   );
 }
 
@@ -552,6 +658,14 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   cardWarn: {
     color: t.status.pending.text,
     fontSize: 11,
+  },
+  cardConfirmed: {
+    color: t.status.confirmed.text,
+    fontSize: 12,
+    fontWeight: "600",
+    borderTopWidth: t.separator.width,
+    borderTopColor: t.separator.color,
+    paddingTop: 10,
   },
   emptyContainer: {
     alignItems: "center",
