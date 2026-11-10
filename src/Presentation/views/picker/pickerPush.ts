@@ -18,7 +18,7 @@ import { useContext, useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 
 import { UserContext } from "../../context/UserContext";
-import { setupPushAndRegisterDevice } from "../../config/Push";
+import { claimNotificationResponse, setupPushAndRegisterDevice } from "../../config/Push";
 import { refreshUnreadCount } from "./notificationsApi";
 import { conversationIdOf, isChatMessage } from "../../config/pushKind";
 import { chatMessageArrived } from "../driver/chat/chatStore";
@@ -36,8 +36,8 @@ export const pickerPushEnabledFor = (
 };
 
 // Una misma notificación tocada puede llegar por el listener y por
-// getLastNotificationResponseAsync: se abre la bandeja una sola vez.
-const opened = new Set<string>();
+// getLastNotificationResponseAsync: se abre una sola vez. La cuenta de toques
+// atendidos es la misma que la del chofer (claimNotificationResponse).
 
 // openChat: con la charla del push, o null si no vino (abre la lista de chats).
 export function usePickerPush(openInbox: () => void, openChat: (conversationId: number | null) => void) {
@@ -56,8 +56,7 @@ export function usePickerPush(openInbox: () => void, openChat: (conversationId: 
 
     const open = (response: Notifications.NotificationResponse | null) => {
       const id = response?.notification?.request?.identifier;
-      if (!alive || !id || opened.has(id)) return;
-      opened.add(id);
+      if (!alive || !claimNotificationResponse(id)) return;
       const data: any = response?.notification?.request?.content?.data ?? {};
       if (isChatMessage(data)) {
         chatMessageArrived();
