@@ -8,18 +8,18 @@
 import React from "react";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
 import { QrActionGrid } from "../../components/QrActionGrid";
-import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
+import type { PickerTabScreenProps } from "../../navigator/PickerStackNavigator";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
+import { BackButton } from "../../components/BackButton";
 
-type Props = NativeStackScreenProps<PickerStackParamList, "PickerScanOptionsScreen">;
+type Props = PickerTabScreenProps<"PickerScanOptionsScreen">;
 
 export default function PickerScanOptionsScreen({ navigation, route }: Props) {
-  const { warehouseId } = route.params;
+  const warehouseId = route.params?.warehouseId ?? null;
   const bottomSpace = usePickerBottomSpace();
 
   return (
@@ -30,9 +30,7 @@ export default function PickerScanOptionsScreen({ navigation, route }: Props) {
     >
       <SafeScreen edges={["top", "left", "right"]} style={styles.safeArea}>
         <ScrollView contentContainerStyle={[styles.page, { paddingBottom: bottomSpace }]}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.back}>
-            <Ionicons name="arrow-back" size={26} color={AppTheme.text.primary} />
-          </Pressable>
+          <BackButton onPress={() => navigation.goBack()} color={AppTheme.text.primary} />
 
           <View style={styles.header}>
             <Text style={styles.eyebrow}>Escaneo QR</Text>
@@ -95,7 +93,6 @@ const styles = StyleSheet.create({
   backgroundImage: { opacity: 0.18 },
   safeArea: { backgroundColor: "transparent" },
   page: { flexGrow: 1, paddingHorizontal: AppTheme.layout.screenPadding, paddingTop: AppTheme.spacing.md },
-  back: { alignSelf: "flex-start", paddingVertical: AppTheme.spacing.xs },
   header: { gap: AppTheme.spacing.xs, marginBottom: AppTheme.spacing.xl, paddingTop: AppTheme.spacing.md },
   eyebrow: {
     color: AppTheme.text.accent,

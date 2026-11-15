@@ -12,7 +12,6 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
@@ -24,7 +23,7 @@ import DriverBottomNavigation, {
 } from "../../../components/DriverBottomNavigation";
 import ContinueBar, { CONTINUE_BAR_SPACE } from "../../../components/driver/ContinueBar";
 import { useDriverWork } from "../work/workSource";
-import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
+import type { DriverTabScreenProps } from "../../../navigator/DriverStackNavigator";
 import {
   fetchMyRoutes,
   respondConfirmation,
@@ -40,11 +39,9 @@ import {
   plural,
 } from "./collectionLabels";
 import { errorMessage } from "../errorMessage";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
 
-type Props = NativeStackScreenProps<
-  DriverStackParamList,
-  "CollectionsScreen"
->;
+type Props = DriverTabScreenProps<"CollectionsScreen">;
 
 type CollectionGroup = {
   title: string;
@@ -184,16 +181,16 @@ export default function CollectionsScreen({ navigation }: Props) {
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
       case "home":
-        navigation.navigate("DriverScreen");
+        goToDriverTab(navigation, "DriverScreen");
         break;
       case "deliveries":
-        navigation.navigate("EnviosScreen");
+        goToDriverTab(navigation, "EnviosScreen");
         break;
       case "scan":
-        navigation.navigate("DriverScanOptionsScreen");
+        goToDriverTab(navigation, "DriverScanOptionsScreen");
         break;
       case "activity":
-        navigation.navigate("NotificationsScreen");
+        goToDriverTab(navigation, "NotificationsScreen");
         break;
       default:
         break;
@@ -273,7 +270,7 @@ export default function CollectionsScreen({ navigation }: Props) {
         <ContinueBar
           missions={missions}
           onOpen={(m) => (navigation as any).navigate(m.target.screen, m.target.params)}
-          onSeeAll={() => navigation.navigate("DriverScreen")}
+          onSeeAll={() => goToDriverTab(navigation, "DriverScreen")}
         />
 
         <DriverBottomNavigation

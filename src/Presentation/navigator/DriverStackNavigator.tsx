@@ -1,5 +1,7 @@
 import React, { useEffect } from "react";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createNativeStackNavigator, type NativeStackScreenProps } from "@react-navigation/native-stack";
+import { createBottomTabNavigator, type BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type { CompositeScreenProps, NavigatorScreenParams } from "@react-navigation/native";
 
 import { DriverScreen } from "../views/driver/landing/Driver";
 import { EnviosScreen } from "../views/driver/Envios/EnviosScreen";
@@ -31,21 +33,28 @@ import { resetDriverProfile } from "../views/driver/account/driverProfileApi";
 
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
-export type DriverStackParamList = {
-  Onboarding: undefined;
+// Las cinco pestañas de la barra inferior. Cada una queda montada y recuerda
+// su estado; para ir a una desde cualquier pantalla: goToDriverTab (tabNavigation).
+export type DriverTabParamList = {
   DriverScreen: undefined;
   EnviosScreen: undefined;
+  DriverScanOptionsScreen: undefined;
+  // Colectas (PICKUP).
+  CollectionsScreen: undefined;
   // tab: la pestaña que se abre («offers»: la bandeja de ofertas; «messages»: los chats).
   NotificationsScreen: { tab?: "notifications" | "offers" | "messages" } | undefined;
+};
+
+export type DriverStackParamList = {
+  Onboarding: undefined;
+  // El navegador de pestañas; lo demás se apila encima.
+  DriverTabs: NavigatorScreenParams<DriverTabParamList> | undefined;
   DriverAccountScreen: undefined;
   DriverHomeScreen: undefined;
   AppearanceScreen: undefined;
-  DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
   // Recorridos de reparto y Turbo por día (se entra desde Envíos).
   RoutesScreen: undefined;
-  // Colectas (PICKUP): pestaña de la barra.
-  CollectionsScreen: undefined;
   // name: el de la colecta, cuando se conoce (el detalle no lo trae).
   // fromGroup: se abrió desde su grupo Turbo (si no, un Turbo agrupado abre el grupo).
   RouteDetailScreen: { routeId: number; name?: string; fromGroup?: boolean };
@@ -61,7 +70,29 @@ export type DriverStackParamList = {
   ChatScreen: { conversationId: number; title?: string };
 };
 
+// Props de una pantalla-pestaña: navega entre pestañas y también apila
+// pantallas del stack (un detalle, el escáner).
+export type DriverTabScreenProps<K extends keyof DriverTabParamList> = CompositeScreenProps<
+  BottomTabScreenProps<DriverTabParamList, K>,
+  NativeStackScreenProps<DriverStackParamList>
+>;
+
 const Stack = createNativeStackNavigator<DriverStackParamList>();
+const Tab = createBottomTabNavigator<DriverTabParamList>();
+
+// La barra la dibuja cada pantalla (DriverBottomNavigation), también las de
+// detalle: acá no hay otra. Atrás desde una pestaña vuelve a Inicio y desde
+// Inicio sale de la app.
+const noTabBar = () => null;
+const DriverTabs = () => (
+  <Tab.Navigator initialRouteName="DriverScreen" backBehavior="firstRoute" tabBar={noTabBar} screenOptions={{ headerShown: false }}>
+    <Tab.Screen name="DriverScreen" component={DriverScreen} />
+    <Tab.Screen name="EnviosScreen" component={EnviosScreen} />
+    <Tab.Screen name="DriverScanOptionsScreen" component={DriverScanOptionsScreen} />
+    <Tab.Screen name="CollectionsScreen" component={CollectionsScreen} />
+    <Tab.Screen name="NotificationsScreen" component={NotificationsScreen} />
+  </Tab.Navigator>
+);
 
 export const DriverStackNavigator = () => {
   const { state } = useOnboarding();
@@ -80,25 +111,15 @@ export const DriverStackNavigator = () => {
         <Stack.Screen name="Onboarding" component={OnboardingStackNavigator} />
       ) : (
         <>
-          <Stack.Screen name="DriverScreen" component={DriverScreen} />
-          <Stack.Screen name="EnviosScreen" component={EnviosScreen} />
-          <Stack.Screen
-            name="NotificationsScreen"
-            component={NotificationsScreen}
-          />
+          <Stack.Screen name="DriverTabs" component={DriverTabs} />
           <Stack.Screen
             name="DriverAccountScreen"
             component={DriverAccountScreen}
           />
           <Stack.Screen name="DriverHomeScreen" component={DriverHomeScreen} />
           <Stack.Screen name="AppearanceScreen" component={AppearanceScreen} />
-          <Stack.Screen
-            name="DriverScanOptionsScreen"
-            component={DriverScanOptionsScreen}
-          />
           <Stack.Screen name="DriverScanScreen" component={DriverScanScreen} />
           <Stack.Screen name="RoutesScreen" component={RoutesScreen} />
-          <Stack.Screen name="CollectionsScreen" component={CollectionsScreen} />
           <Stack.Screen name="RouteDetailScreen" component={RouteDetailScreen} />
           <Stack.Screen name="RouteOrganizeScreen" component={RouteOrganizeScreen} />
           <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />

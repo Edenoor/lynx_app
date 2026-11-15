@@ -22,6 +22,7 @@ import { errorMessage } from "../errorMessage";
 import { claimScheduled, fetchScheduledAvailable, hhmm, ScheduledTurbo } from "./turboApi";
 import { NO_RETIRAR_ANTES } from "./turboOffer";
 import { filterScheduled, hasMine, promiseText, ScheduledSort, sortScheduled, StoreFilter, storeName, storesOf } from "./scheduledList";
+import { BackButton } from "../../../components/BackButton";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboTomorrowScreen">;
 
@@ -83,7 +84,7 @@ export default function TurboTomorrowScreen({ navigation }: Props) {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.page}>
           <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
+            <BackButton onPress={() => navigation.goBack()} style={styles.back} />
             <View style={{ flex: 1 }}>
               <Text style={styles.eyebrow}>Turbo</Text>
               <Text style={styles.title}>Turbos de mañana</Text>
@@ -155,7 +156,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   safeArea: { flex: 1 },
   page: { flex: 1, paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 24 },
   header: { flexDirection: "row", gap: 4, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
-  back: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -11, marginTop: -8 },
+  back: { marginTop: -8 },
   eyebrow: { ...t.typography.kicker },
   title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
   meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },

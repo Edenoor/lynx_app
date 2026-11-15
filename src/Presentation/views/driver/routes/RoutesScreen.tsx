@@ -19,6 +19,8 @@ import { loadText, loadTotal, routesWithGroups } from "../turbo/turboGroup";
 import { capitalize } from "./collectionLabels";
 import WorkItemCard from "../../../components/driver/WorkItemCard";
 import { openOfferInbox, refreshOfferCount, useOfferCount } from "../offers/offerStore";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
+import { BackButton } from "../../../components/BackButton";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RoutesScreen">;
 
@@ -60,10 +62,10 @@ export default function RoutesScreen({ navigation }: Props) {
 
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
+      case "home": goToDriverTab(navigation, "DriverScreen"); break;
+      case "deliveries": goToDriverTab(navigation, "EnviosScreen"); break;
+      case "scan": goToDriverTab(navigation, "DriverScanOptionsScreen"); break;
+      case "activity": goToDriverTab(navigation, "NotificationsScreen"); break;
       default: break;
     }
   };
@@ -75,7 +77,7 @@ export default function RoutesScreen({ navigation }: Props) {
         <View style={styles.page}>
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Volver"><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
+              <BackButton onPress={() => navigation.goBack()} />
               <Text style={styles.eyebrow}>Recorridos de reparto</Text>
             </View>
             {/* Navegación por días: bloque aparte del «volver», con botones de 44 px. */}
@@ -134,7 +136,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   header: { marginBottom: t.spacing.lg, paddingTop: t.spacing.lg, gap: t.spacing.md },
   // Volver: 44 px de área táctil; el ícono queda alineado con el contenido.
   headerTop: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: -11 },
-  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: t.radius.full },
   eyebrow: { ...t.typography.kicker },
   dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: t.spacing.xs, paddingVertical: t.spacing.xs },
   dateBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: t.radius.full },

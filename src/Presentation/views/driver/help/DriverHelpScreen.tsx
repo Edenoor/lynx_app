@@ -30,6 +30,7 @@ import {
 } from "./helpApi";
 import { handoff } from "../chat/chatApi";
 import { backToChatList } from "../chat/chatStore";
+import { BackButton } from "../../../components/BackButton";
 
 const INTRO =
   "Hola. Preguntame cómo usar Lynx: colectas, repartos, Turbos, el ingreso o los permisos. No veo tus envíos ni tus pagos: eso lo resuelve coordinación.";
@@ -164,10 +165,7 @@ export default function DriverHelpScreen() {
       {/* Fijo arriba: «<<» y «Nueva consulta» a mano aunque la charla sea larga. */}
       <View style={styles.header}>
         <View style={styles.topRow}>
-          <Pressable style={styles.back} onPress={() => backToChatList(navigation)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Volver a los chats">
-            <MaterialCommunityIcons name="chevron-double-left" size={22} color={theme.text.secondary} />
-            <Text style={styles.backText}>Chats</Text>
-          </Pressable>
+          <BackButton onPress={() => backToChatList(navigation)} label="Volver a los chats" />
           {messages.length > 0 && !sending ? (
             <Pressable onPress={newConversation} hitSlop={10} accessibilityRole="button">
               <Text style={styles.link}>Nueva consulta</Text>
@@ -290,8 +288,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     gap: t.spacing.sm,
   },
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  back: { flexDirection: "row", alignItems: "center", gap: 2 },
-  backText: { color: t.text.secondary, fontSize: 14, fontWeight: t.font.weight.bold },
   link: { color: t.text.accent, fontSize: 14, fontWeight: t.font.weight.bold },
   title: {
     color: t.text.primary,

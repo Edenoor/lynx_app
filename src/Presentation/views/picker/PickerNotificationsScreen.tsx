@@ -7,12 +7,11 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
-import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
+import type { PickerTabScreenProps } from "../../navigator/PickerStackNavigator";
 import { fetchMyNotifications, InboxNotification, INBOX_LIMIT, markNotificationsSeen, setUnreadCount } from "./notificationsApi";
 import { loadErrorMessage } from "./warehouseApi";
 import { ListMessage, listStyles, shortDate } from "./pickerUi";
@@ -22,14 +21,14 @@ import { refreshChatUnread, useChatUnread } from "../driver/chat/chatStore";
 
 type AlertsTab = "notifications" | "messages";
 
-type Props = NativeStackScreenProps<PickerStackParamList, "PickerNotificationsScreen">;
+type Props = PickerTabScreenProps<"PickerNotificationsScreen">;
 
 export default function PickerNotificationsScreen({ route, navigation }: Props) {
-  const { warehouseId } = route.params;
-  const [tab, setTab] = useState<AlertsTab>(route.params.tab === "messages" ? "messages" : "notifications");
+  const warehouseId = route.params?.warehouseId ?? null;
+  const [tab, setTab] = useState<AlertsTab>(route.params?.tab === "messages" ? "messages" : "notifications");
   // Volver desde una charla (o un push) con la pantalla ya abierta pide la pestaña Mensajes.
   useEffect(() => {
-    if (route.params.tab) setTab(route.params.tab);
+    if (route.params?.tab) setTab(route.params.tab);
   }, [route.params]);
   const chatUnread = useChatUnread();
   const bottomSpace = usePickerBottomSpace();

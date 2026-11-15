@@ -22,6 +22,7 @@ import { errorMessage } from "../errorMessage";
 import { ChatMessage, ChatThread, MAX_MESSAGE_LENGTH, fetchMessages, markRead, sendMessage } from "./chatApi";
 import { mergeMessages, messageTime, newestId, showAuthor } from "./chatView";
 import { backToChatList, refreshChatUnread, useChatArrivals } from "./chatStore";
+import { BackButton } from "../../../components/BackButton";
 
 const REFRESH_MS = 5_000;
 
@@ -195,10 +196,7 @@ export default function ChatScreen({ onBack = backToChatList }: Props = {}) {
     <SafeScreen>
       <ThemedStatusBar />
       <View style={styles.header}>
-        <Pressable style={styles.back} onPress={() => onBack(navigation)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Volver a los chats">
-          <MaterialCommunityIcons name="chevron-double-left" size={22} color={theme.text.secondary} />
-          <Text style={styles.backText}>Chats</Text>
-        </Pressable>
+        <BackButton onPress={() => onBack(navigation)} label="Volver a los chats" />
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
       </View>
       <KeyboardScreen
@@ -271,8 +269,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     paddingBottom: t.spacing.md,
     gap: t.spacing.sm,
   },
-  back: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
-  backText: { color: t.text.secondary, fontSize: 14, fontWeight: t.font.weight.bold },
   title: {
     color: t.text.primary,
     fontSize: 26,

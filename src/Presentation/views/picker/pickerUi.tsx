@@ -9,6 +9,7 @@ import { useFocusEffect } from "@react-navigation/native";
 
 import AppTheme from "../../theme/AppTheme";
 import { loadErrorMessage } from "./warehouseApi";
+import { BackButton } from "../../components/BackButton";
 
 // "Warehouse #12" o, si no se pudo ver el ID, el asignado (el servidor opera
 // igual sobre ese).
@@ -28,9 +29,7 @@ type HeaderProps = {
 export function PickerHeader({ title, subtitle, onBack, onScan }: HeaderProps) {
   return (
     <View style={styles.header}>
-      <Pressable onPress={onBack} hitSlop={12}>
-        <Ionicons name="arrow-back" size={26} color={AppTheme.text.primary} />
-      </Pressable>
+      <BackButton onPress={onBack} color={AppTheme.text.primary} />
       <View style={styles.titles}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}

@@ -124,7 +124,11 @@ async function settle() {
 // ---------- Simulaciones ----------
 // routes: lo que hay en el stack (getState), para «<<» del chat.
 const nav = { calls: [] as any[], routes: [] as { name: string }[], navigate: (...a: any[]) => nav.calls.push(["navigate", ...a]), goBack: () => nav.calls.push(["goBack"]), addListener: () => () => {}, getParent: () => ({ reset: (a: any) => nav.calls.push(["reset", a]) }),
-  popTo: (...a: any[]) => nav.calls.push(["popTo", ...a]), replace: (...a: any[]) => nav.calls.push(["replace", ...a]), getState: () => ({ routes: nav.routes }) };
+  popTo: (...a: any[]) => nav.calls.push(["popTo", ...a]), replace: (...a: any[]) => nav.calls.push(["replace", ...a]), getState: () => ({ routes: nav.routes }),
+  // Ir a una pestaña de la barra (goToTab): volver al navegador de tabs y elegirla. Queda como ["tab", pantalla, parámetros].
+  dispatch: (a: any) => nav.calls.push(a?.type === "POP_TO" && /Tabs$/.test(a.payload.name) && a.payload.params.merge === true
+    ? ["tab", a.payload.params.screen, ...(a.payload.params.params ? [a.payload.params.params] : [])]
+    : ["dispatch", a]) };
 const alerts: any[] = [];
 // Sonidos de resultado del escáner, en orden.
 const sounds: string[] = [];
@@ -185,15 +189,23 @@ const MOCKS: Record<string, any> = {
     useRoute: () => ({ params: alertsParams.current }),
     useFocusEffect: (cb: any) => FakeReact.useEffect(cb, [cb]),
     useIsFocused: () => true,
+    StackActions: { popTo: (name: string, params?: any) => ({ type: "POP_TO", payload: { name, params } }) },
     DarkTheme: { dark: true, colors: {} },
     DefaultTheme: { dark: false, colors: {} },
     NavigationContainer: ({ theme, children }: any) => RealReact.createElement("NavigationContainer", { navTheme: theme }, children),
   },
   // Stack: dibuja solo las pantallas pedidas en stackScreens.
+  // Tabs: sus pantallas se dibujan con la misma regla que las del stack.
+  "@react-navigation/bottom-tabs": {
+    createBottomTabNavigator: () => ({
+      Navigator: ({ children }: any) => RealReact.createElement("Navigator", {}, children),
+      Screen: ({ name, component }: any) => (registeredScreens.add(name), stackScreens.has(name) ? RealReact.createElement(component, { navigation: nav, route: { params: stackParams[name] ?? {} } }) : null),
+    }),
+  },
   "@react-navigation/native-stack": {
     createNativeStackNavigator: () => ({
       Navigator: ({ screenOptions, children }: any) => RealReact.createElement("Navigator", { style: screenOptions?.contentStyle }, children),
-      Screen: ({ name, component }: any) => (registeredScreens.add(name), stackScreens.has(name) ? RealReact.createElement(component, { navigation: nav, route: { params: stackParams[name] ?? {} } }) : null),
+      Screen: ({ name, component }: any) => (registeredScreens.add(name), stackScreens.has(name) || /Tabs$/.test(name) ? RealReact.createElement(component, { navigation: nav, route: { params: stackParams[name] ?? {} } }) : null),
     }),
   },
   "@react-native-community/datetimepicker": host("DateTimePicker"),
@@ -574,7 +586,7 @@ const setDriverApi = () => {
     check("Mi cuenta: Mi domicilio abre su pantalla", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "DriverHomeScreen"]));
     for (const [tab, route] of [["Envíos", "EnviosScreen"], ["QR", "DriverScanOptionsScreen"], ["Colectas", "CollectionsScreen"], ["Alertas", "NotificationsScreen"]]) {
       tree = await press(tree, tab);
-      check(`Mi cuenta: barra → ${tab}`, JSON.stringify(lastNav()) === JSON.stringify(["navigate", route]));
+      check(`Mi cuenta: barra → ${tab}`, JSON.stringify(lastNav()) === JSON.stringify(["tab", route]));
     }
     tree = await press(tree, "Cerrar sesión");
     check("Mi cuenta: cerrar sesión pide confirmación (sin cerrar)", alerts.length === 1 && alerts[0][0] === "Cerrar sesión" && alerts[0][2].map((b: any) => b.text).join("|") === "Cancelar|Cerrar sesión" && !nav.calls.some((c) => c[0] === "reset"));
@@ -615,14 +627,14 @@ const setDriverApi = () => {
     cont.props.onPress();
     check("Envíos: «Continuar» abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 8 }]));
     tree = await press(tree, "+1");
-    check("Envíos: con dos en la calle, «+1» los muestra en Inicio", js(lastNav()) === js(["navigate", "DriverScreen"]));
+    check("Envíos: con dos en la calle, «+1» los muestra en Inicio", js(lastNav()) === js(["tab", "DriverScreen"]));
 
     // Ofertas: sin botón propio; un aviso discreto (2 Turbos sueltos + 1
     // recorrido) que lleva a Alertas › Ofertas, y el contador en la barra.
     check("Envíos: sin botón «Ofertas» en el encabezado", !all(tree, (x) => x.type === "Pressable" && textOf(x) === "Ofertas").length);
     check("Envíos: el contador de ofertas está en «Alertas» de la barra", byLabel(tree, "Alertas: 3").length === 1);
     tree = await press(tree, "Tenés 3 ofertas sin contestar: ver en Alertas");
-    check("Envíos: el aviso abre Alertas › Ofertas", js(lastNav()) === js(["navigate", "NotificationsScreen", { tab: "offers" }]));
+    check("Envíos: el aviso abre Alertas › Ofertas", js(lastNav()) === js(["tab", "NotificationsScreen", { tab: "offers" }]));
 
     // Flex en curso: repartos abiertos (también de ayer) y sus envíos.
     tree = await press(tree, "Flex");
@@ -803,7 +815,7 @@ const setDriverApi = () => {
     nav.calls = [];
     for (const [tab, route] of [["Inicio", "DriverScreen"], ["QR", "DriverScanOptionsScreen"], ["Alertas", "NotificationsScreen"]]) {
       tree = await press(tree, tab);
-      check(`Envíos: barra → ${tab}`, js(lastNav()) === js(["navigate", route]));
+      check(`Envíos: barra → ${tab}`, js(lastNav()) === js(["tab", route]));
     }
   }
   {
@@ -820,7 +832,7 @@ const setDriverApi = () => {
     check("Recorridos: tocar un recorrido abre su detalle", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "RouteDetailScreen", { routeId: 12 }]));
     check("Recorridos: las ofertas no se contestan acá (sin botones duplicados)", !all(tree, (x) => typeof x.props?.onPress === "function" && ["Aceptar", "No"].includes(textOf(x))).length);
     tree = await press(tree, "2 ofertas sin contestar");
-    check("Recorridos: el acceso con el contador (Turbo + recorrido) abre Alertas › Ofertas", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "NotificationsScreen", { tab: "offers" }]));
+    check("Recorridos: el acceso con el contador (Turbo + recorrido) abre Alertas › Ofertas", JSON.stringify(lastNav()) === JSON.stringify(["tab", "NotificationsScreen", { tab: "offers" }]));
   }
 
   const same = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
@@ -858,14 +870,14 @@ const setDriverApi = () => {
     check("Alertas: «Notificaciones» vuelve a la lista", textOf(tree).includes("TARDE 01") && !textOf(tree).includes("Si no contestás a tiempo"));
     tree = await press(tree, "TARDE 01");
     tree = await press(modal(), "Ver colectas");
-    check("Alertas: colecta quitada → Colectas", same(lastNav(), ["navigate", "CollectionsScreen"]));
+    check("Alertas: colecta quitada → Colectas", same(lastNav(), ["tab", "CollectionsScreen"]));
     notis.calls = [];
     tree = await press(tree, "Mantenimiento programado");
     tree = await press(modal(), "Eliminar");
     check("Alertas: eliminar quita esa alerta (ya leída: no se vuelve a marcar)", same(notis.calls, [["remove", "f"]]));
     for (const [tab, route] of [["Inicio", "DriverScreen"], ["Envíos", "EnviosScreen"], ["QR", "DriverScanOptionsScreen"]]) {
       tree = await press(tree, tab);
-      check(`Alertas: barra → ${tab}`, same(lastNav(), ["navigate", route]));
+      check(`Alertas: barra → ${tab}`, same(lastNav(), ["tab", route]));
     }
     for (const scheme of ["dark", "light"]) for (const style of VISUAL_STYLES) {
       const th = createTheme({ scheme, style });
@@ -900,7 +912,7 @@ const setDriverApi = () => {
     const err = all(tree, (x) => x.type === "Text" && textOf(x).startsWith("Sin permiso de ubicación"))[0];
     check("Mi domicilio: sin permiso, el error de siempre con el rojo del tema", !!err && flat(err.props.style).color === t.status.rejected.text);
     check("Mi domicilio: el error es legible", legibility(tree, t.surfaces.screen).bad.length === 0, legibility(tree, t.surfaces.screen).bad.join(" · "));
-    tree = await press(tree, "Mi cuenta");
+    byLabel(tree, "Volver")[0].props.onPress(); tree = await settle();
     check("Mi domicilio: volver", same(lastNav(), ["goBack"]));
   }
 
@@ -1078,7 +1090,7 @@ const setDriverApi = () => {
     second.props.onPress();
     check("Inicio: la fila abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 12 }]));
     byLabel(tree, "Alertas: 3")[0].props.onPress();
-    check("Inicio: «Alertas» de la barra abre Alertas", js(lastNav()) === js(["navigate", "NotificationsScreen"]));
+    check("Inicio: «Alertas» de la barra abre Alertas", js(lastNav()) === js(["tab", "NotificationsScreen"]));
     for (const scheme of ["dark", "light"]) {
       const th = createTheme({ scheme });
       useTheme(th);
@@ -1109,7 +1121,7 @@ const setDriverApi = () => {
     useTheme(dark);
     banner().props.onPress();
     tree = await settle();
-    check("Aviso: tocarlo abre Alertas › Ofertas y se cierra", js(lastNav()) === js(["navigate", "NotificationsScreen", { tab: "offers" }]) && !banner());
+    check("Aviso: tocarlo abre Alertas › Ofertas y se cierra", js(lastNav()) === js(["tab", "NotificationsScreen", { tab: "offers" }]) && !banner());
     push.handlers.onRouteNotice({ kind: "ROUTE_OFFER", routeId: 77, source: "received", raw: {} });
     tree = await settle();
     check("Push recorrido ofrecido: aviso, sin diálogo", !alerts.length && byLabel(tree, "Te ofrecieron un recorrido. Ver ofertas").length === 1);
@@ -1119,7 +1131,7 @@ const setDriverApi = () => {
     nav.calls = [];
     push.handlers.onRouteNotice({ kind: "ROUTE_OFFER", routeId: 77, source: "response", raw: {} });
     push.handlers.onTurboOffer({ routeId: 90, source: "response", raw: {} });
-    check("Push tocada (recorrido o Turbo): abre Alertas › Ofertas", js(nav.calls) === js([["navigate", "NotificationsScreen", { tab: "offers" }], ["navigate", "NotificationsScreen", { tab: "offers" }]]), js(nav.calls));
+    check("Push tocada (recorrido o Turbo): abre Alertas › Ofertas", js(nav.calls) === js([["tab", "NotificationsScreen", { tab: "offers" }], ["tab", "NotificationsScreen", { tab: "offers" }]]), js(nav.calls));
     push.handlers.onRouteNotice({ kind: "PICKUP_ASSIGNED", routeId: 31, source: "received", raw: {} });
     check("Push colecta asignada: sigue con su confirmación de siempre", alerts.length === 1 && alerts[0][0] === "Colecta asignada");
 
@@ -1151,7 +1163,7 @@ const setDriverApi = () => {
     useTheme(createTheme({ scheme: "dark", style: "minimal" }));
     nav.calls = []; alerts.length = 0;
     let tree = await mount(screens[6][1]());
-    for (const [label, call] of [["Asignar", ["navigate", "DriverScanScreen", { mode: "asignarme" }]], ["Planta", ["navigate", "DriverScanScreen", { mode: "planta" }]], ["Pendientes", ["navigate", "EnviosScreen"]]] as const) {
+    for (const [label, call] of [["Asignar", ["navigate", "DriverScanScreen", { mode: "asignarme" }]], ["Planta", ["navigate", "DriverScanScreen", { mode: "planta" }]], ["Pendientes", ["tab", "EnviosScreen"]]] as const) {
       tree = await press(tree, label);
       check(`QR: ${label}`, same(lastNav(), call));
     }
@@ -1367,7 +1379,7 @@ const setDriverApi = () => {
     tree = await open("asignarme");
     tree = await scan(tree, ML("47455555555"));
     tree = await press(tree, "Inicio");
-    check("Cierre: la barra navega con el pedido en curso", same(lastNav(), ["navigate", "DriverScreen"]));
+    check("Cierre: la barra navega con el pedido en curso", same(lastNav(), ["tab", "DriverScreen"]));
     tree = await mount(RealReact.createElement("View", null));
     let crashed = "";
     try { pendingReply({ ok: false, status: 401, sessionExpired: true }); await settle(); } catch (e: any) { crashed = String(e?.message ?? e); }
@@ -2353,11 +2365,11 @@ const setDriverApi = () => {
     tree = await press(tree, "Ver anteriores");
     check("Charla: «Ver anteriores» trae los de antes, en orden", textOf(tree).includes("Mensaje viejo") && textOf(tree).indexOf("Mensaje viejo") < textOf(tree).indexOf("¿Llegaste a la tienda?") && !textOf(tree).includes("Ver anteriores"));
     nav.routes = [{ name: "DriverScreen" }, { name: "NotificationsScreen" }, { name: "ChatScreen" }];
-    tree = await press(tree, "Chats");
-    check("Charla: «<<» vuelve a la lista que ya está abierta (no apila otra)", js(lastNav()) === js(["popTo", "NotificationsScreen", { tab: "messages" }]));
+    byLabel(tree, "Volver a los chats")[0].props.onPress(); tree = await settle();
+    check("Charla: «<<» vuelve a la lista que ya está abierta (no apila otra)", js(lastNav()) === js(["tab", "NotificationsScreen", { tab: "messages" }]));
     nav.routes = [{ name: "DriverScreen" }, { name: "ChatScreen" }];
-    tree = await press(tree, "Chats");
-    check("Charla: «<<» sin la lista atrás (vino de un push): la lista toma su lugar", js(lastNav()) === js(["replace", "NotificationsScreen", { tab: "messages" }]));
+    byLabel(tree, "Volver a los chats")[0].props.onPress(); tree = await settle();
+    check("Charla: «<<» sin la lista atrás (vino de un push): la lista toma su lugar", js(lastNav()) === js(["tab", "NotificationsScreen", { tab: "messages" }]));
     nav.routes = [];
     setChatApi({ "GET /v2/chat/conversations/1/messages": { ok: true, has_more: false, conversation: { ...CONV, id: 1, can_write: false }, messages: [msg(8, "Mañana no hay colectas")] } });
     alertsParams.current = { conversationId: 1 };
@@ -2393,8 +2405,8 @@ const setDriverApi = () => {
     nav.calls = [];
     tree = await press(tree, "Consultalo con coordinación");
     check("Asistente: si no se pudo derivar, lo dice y no navega", !nav.calls.length && textOf(tree).includes("Sin conexión con el servidor"));
-    tree = await press(tree, "Chats");
-    check("Asistente: «<<» lleva a la lista de chats", js(lastNav()) === js(["replace", "NotificationsScreen", { tab: "messages" }]));
+    byLabel(tree, "Volver a los chats")[0].props.onPress(); tree = await settle();
+    check("Asistente: «<<» lleva a la lista de chats", js(lastNav()) === js(["tab", "NotificationsScreen", { tab: "messages" }]));
 
     // Push de un mensaje: con la app abierta, se pone al día el número; tocado, abre la charla.
     setEnviosApi(); push.handlers = null;
@@ -2407,7 +2419,7 @@ const setDriverApi = () => {
     push.handlers.onChatMessage({ conversationId: 2, source: "response" });
     check("Push de chat tocado: abre esa charla", js(lastNav()) === js(["navigate", "ChatScreen", { conversationId: 2 }]));
     push.handlers.onChatMessage({ conversationId: null, source: "response" });
-    check("Push de chat sin charla: abre la lista", js(lastNav()) === js(["popTo", "NotificationsScreen", { tab: "messages" }]));
+    check("Push de chat sin charla: abre la lista", js(lastNav()) === js(["tab", "NotificationsScreen", { tab: "messages" }]));
     alertsParams.current = {};
   }
 

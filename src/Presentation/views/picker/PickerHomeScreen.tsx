@@ -4,21 +4,21 @@
 
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
+import { goToPickerTab } from "../../navigator/tabNavigation";
 
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
 import { UserContext } from "../../context/UserContext";
 import { DriverActionCard } from "../../components/DriverActionCard";
-import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
+import type { PickerTabScreenProps } from "../../navigator/PickerStackNavigator";
 import { fetchShelves, loadErrorMessage } from "./warehouseApi";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
 import { refreshUnreadCount } from "./notificationsApi";
 import { usePickerPush } from "./pickerPush";
 import { refreshChatUnread } from "../driver/chat/chatStore";
 
-type Props = NativeStackScreenProps<PickerStackParamList, "PickerHomeScreen">;
+type Props = PickerTabScreenProps<"PickerHomeScreen">;
 
 // El servidor no le muestra al Picker el nombre ni el tipo de su Warehouse:
 // solo el ID, que sale de sus estanterías.
@@ -58,10 +58,10 @@ export default function PickerHomeScreen({ navigation }: Props) {
   );
 
   usePickerPush(
-    () => navigation.navigate("PickerNotificationsScreen", { warehouseId }),
+    () => goToPickerTab(navigation, "PickerNotificationsScreen", { warehouseId }),
     (conversationId) => conversationId
       ? navigation.navigate("PickerChatScreen", { conversationId })
-      : navigation.navigate("PickerNotificationsScreen", { warehouseId, tab: "messages" }),
+      : goToPickerTab(navigation, "PickerNotificationsScreen", { warehouseId, tab: "messages" }),
   );
 
   return (

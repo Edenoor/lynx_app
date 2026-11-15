@@ -27,6 +27,7 @@ import { fetchMyHome } from "./homeApi";
 import DriverAvatar from "../../../components/driver/DriverAvatar";
 import { loadDriverProfile, useDriverProfile } from "./driverProfileApi";
 import { documentsLabel, DriverDocument, fullName, vehicleLabel } from "./driverProfile";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
 
 const DEFAULT_AVATAR = require("../../../../../assets/user.png");
 
@@ -80,22 +81,22 @@ export default function DriverAccountScreen() {
   const handleTabPress = useCallback(
     (tab: DriverTabKey) => {
       if (tab === "home") {
-        navigation.navigate("DriverScreen");
+        goToDriverTab(navigation, "DriverScreen");
         return;
       }
 
       if (tab === "deliveries") {
-        navigation.navigate("EnviosScreen");
+        goToDriverTab(navigation, "EnviosScreen");
         return;
       }
 
 if (tab === "scan") {
-  navigation.navigate("DriverScanOptionsScreen");
+  goToDriverTab(navigation, "DriverScanOptionsScreen");
   return;
 }
 
       if (tab === "activity") {
-        navigation.navigate("NotificationsScreen");
+        goToDriverTab(navigation, "NotificationsScreen");
       }
     },
     [navigation]

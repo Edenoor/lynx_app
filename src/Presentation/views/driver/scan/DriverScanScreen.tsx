@@ -47,6 +47,7 @@ import {
   SESSION_EXPIRED,
   sessionSummary,
 } from "./driverScan";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
 
 type Props = StackScreenProps<DriverStackParamList, "DriverScanScreen">;
 
@@ -141,9 +142,9 @@ export default function DriverScanScreen({ navigation, route }: Props) {
       if (tab === "scan") return;
       setBlocked(true);
       setOpen(false);
-      if (tab === "home") navigation.navigate("DriverScreen");
-      else if (tab === "deliveries") navigation.navigate("EnviosScreen");
-      else if (tab === "activity") navigation.navigate("NotificationsScreen");
+      if (tab === "home") goToDriverTab(navigation, "DriverScreen");
+      else if (tab === "deliveries") goToDriverTab(navigation, "EnviosScreen");
+      else if (tab === "activity") goToDriverTab(navigation, "NotificationsScreen");
     },
     [navigation]
   );

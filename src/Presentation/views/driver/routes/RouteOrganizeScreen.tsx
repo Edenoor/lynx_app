@@ -27,6 +27,8 @@ import {
   moveStop, orderedStops, pointAvailability, pointLabel, sameOrder, START_KINDS,
 } from "./routePlan";
 import { stopAddress } from "./stopView";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
+import { BackButton } from "../../../components/BackButton";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteOrganizeScreen">;
 type Chooser = "start" | "end" | "first" | "last";
@@ -49,10 +51,10 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
 
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
+      case "home": goToDriverTab(navigation, "DriverScreen"); break;
+      case "deliveries": goToDriverTab(navigation, "EnviosScreen"); break;
+      case "scan": goToDriverTab(navigation, "DriverScanOptionsScreen"); break;
+      case "activity": goToDriverTab(navigation, "NotificationsScreen"); break;
       default: break; // Colectas lo resuelve DriverBottomNavigation.
     }
   };
@@ -156,9 +158,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
         <View style={styles.contentArea}>
           <KeyboardScreen contentContainerStyle={styles.page}>
             <View style={styles.header}>
-              <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver">
-                <Ionicons name="arrow-back" size={22} color={theme.text.primary} />
-              </Pressable>
+              <BackButton onPress={() => navigation.goBack()} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.eyebrow}>{TYPE_LABEL[route.type]} #{route.id}</Text>
                 <Text style={styles.title}>Organizar recorrido</Text>
@@ -371,7 +371,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
   page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 120, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
-  back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },
   title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
   meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },

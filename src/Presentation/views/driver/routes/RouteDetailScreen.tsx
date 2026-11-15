@@ -38,6 +38,8 @@ import ProviderBadge from "../../../components/driver/ProviderBadge";
 import { canOrganize } from "./routePlan";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
+import { BackButton } from "../../../components/BackButton";
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 // Mercado Libre decide el resultado de sus envíos: desde Lynx no se registra nada.
 const ML_TITLE = "Entrega de Mercado Libre";
@@ -126,10 +128,10 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     });
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
+      case "home": goToDriverTab(navigation, "DriverScreen"); break;
+      case "deliveries": goToDriverTab(navigation, "EnviosScreen"); break;
+      case "scan": goToDriverTab(navigation, "DriverScanOptionsScreen"); break;
+      case "activity": goToDriverTab(navigation, "NotificationsScreen"); break;
       default: break;
     }
   };
@@ -197,7 +199,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
         <View style={styles.scrollArea}>
           <KeyboardScreen contentContainerStyle={styles.page}>
           <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
+            <BackButton onPress={() => navigation.goBack()} />
             {isPickup ? (
               <View style={{ flex: 1 }}>
                 <Text style={styles.eyebrow}>Colecta {route.template_id ? "habitual" : "extraordinaria"} · #{route.id}</Text>
@@ -738,7 +740,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
   page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 120, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
-  back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },
   title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
   meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },

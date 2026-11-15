@@ -17,6 +17,7 @@ import { SafeScreen } from "../../../components/SafeScreen";
 import { errorMessage } from "../errorMessage";
 import { ChatPerson, fetchPeople, openDirect } from "./chatApi";
 import { personDetail } from "./chatView";
+import { BackButton } from "../../../components/BackButton";
 
 // chatRoute: la pantalla de la charla en ese stack. onBack: vuelve a la lista de chats.
 type Props = { chatRoute: string; onBack: (navigation: any) => void };
@@ -70,10 +71,7 @@ export default function ChatPeopleScreen({ chatRoute, onBack }: Props) {
     <SafeScreen>
       <ThemedStatusBar />
       <View style={styles.header}>
-        <Pressable style={styles.back} onPress={() => onBack(navigation)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Volver a los chats">
-          <MaterialCommunityIcons name="chevron-double-left" size={22} color={theme.text.secondary} />
-          <Text style={styles.backText}>Chats</Text>
-        </Pressable>
+        <BackButton onPress={() => onBack(navigation)} label="Volver a los chats" />
         <Text style={styles.title}>Nueva charla</Text>
         <TextInput
           value={text}
@@ -128,8 +126,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     paddingBottom: t.spacing.sm,
     gap: t.spacing.sm,
   },
-  back: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
-  backText: { color: t.text.secondary, fontSize: 14, fontWeight: t.font.weight.bold },
   title: { color: t.text.primary, fontSize: 26, lineHeight: 30, fontWeight: t.font.weight.black, letterSpacing: -0.5 },
   input: {
     minHeight: 48,

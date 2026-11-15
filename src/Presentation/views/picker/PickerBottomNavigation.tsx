@@ -5,11 +5,10 @@
 
 import React from "react";
 import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BOTTOM_NAVIGATION_SPACE, BottomNavigationBar, BottomNavigationItem } from "../../components/BottomNavigationBar";
-import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
+import { goToPickerTab } from "../../navigator/tabNavigation";
 import { alertsBadge, useUnreadCount } from "./notificationsApi";
 import { useChatUnread } from "../driver/chat/chatStore";
 
@@ -22,7 +21,7 @@ type Props = {
 };
 
 export function PickerBottomNavigation({ activeTab, warehouseId }: Props) {
-  const navigation = useNavigation<NativeStackNavigationProp<PickerStackParamList>>();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const unread = useUnreadCount();
   const chatUnread = useChatUnread();
@@ -35,9 +34,10 @@ export function PickerBottomNavigation({ activeTab, warehouseId }: Props) {
 
   const onPress = (tab: PickerTabKey) => {
     if (tab === activeTab) return;
-    if (tab === "home") navigation.popTo("PickerHomeScreen");
-    else if (tab === "scan") navigation.navigate("PickerScanOptionsScreen", { warehouseId });
-    else navigation.navigate("PickerNotificationsScreen", { warehouseId });
+    // Cada pestaña queda montada: se vuelve a ella, no se apila otra.
+    if (tab === "home") goToPickerTab(navigation, "PickerHomeScreen");
+    else if (tab === "scan") goToPickerTab(navigation, "PickerScanOptionsScreen", { warehouseId });
+    else goToPickerTab(navigation, "PickerNotificationsScreen", { warehouseId });
   };
 
   return <BottomNavigationBar items={tabs} activeKey={activeTab} onPress={onPress} bottomInset={insets.bottom} />;

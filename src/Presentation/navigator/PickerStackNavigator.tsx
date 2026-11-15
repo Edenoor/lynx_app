@@ -1,5 +1,7 @@
 import React, { useEffect } from "react";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createNativeStackNavigator, type NativeStackScreenProps } from "@react-navigation/native-stack";
+import { createBottomTabNavigator, type BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type { CompositeScreenProps, NavigatorScreenParams } from "@react-navigation/native";
 
 import PickerHomeScreen from "../views/picker/PickerHomeScreen";
 import PickerScanScreen from "../views/picker/PickerScanScreen";
@@ -21,11 +23,19 @@ import { backToPickerChatList, resetChatStore } from "../views/driver/chat/chatS
 const PickerChatScreen = () => <ChatScreen onBack={backToPickerChatList} />;
 const PickerChatPeopleScreen = () => <ChatPeopleScreen chatRoute="PickerChatScreen" onBack={backToPickerChatList} />;
 
-export type PickerStackParamList = {
+// Las tres pestañas de la barra inferior. Cada una queda montada y recuerda su
+// estado; para ir a una desde cualquier pantalla: goToPickerTab (tabNavigation).
+// warehouseId falta si se llega sin pasar por Inicio (un push): vale como null.
+export type PickerTabParamList = {
   PickerHomeScreen: undefined;
-  PickerScanOptionsScreen: { warehouseId: number | null };
+  PickerScanOptionsScreen: { warehouseId?: number | null } | undefined;
   // tab: la pestaña de Alertas que se abre (Mensajes, desde una charla o un push).
-  PickerNotificationsScreen: { warehouseId: number | null; tab?: "notifications" | "messages" };
+  PickerNotificationsScreen: { warehouseId?: number | null; tab?: "notifications" | "messages" } | undefined;
+};
+
+export type PickerStackParamList = {
+  // El navegador de pestañas; lo demás se apila encima.
+  PickerTabs: NavigatorScreenParams<PickerTabParamList> | undefined;
   // Chat interno: una charla y el directorio para empezar una de a uno.
   PickerChatScreen: { conversationId: number; title?: string };
   PickerChatPeopleScreen: undefined;
@@ -52,16 +62,33 @@ export type PickerStackParamList = {
   };
 };
 
+// Props de una pantalla-pestaña: navega entre pestañas y también apila
+// pantallas del stack.
+export type PickerTabScreenProps<K extends keyof PickerTabParamList> = CompositeScreenProps<
+  BottomTabScreenProps<PickerTabParamList, K>,
+  NativeStackScreenProps<PickerStackParamList>
+>;
+
 const Stack = createNativeStackNavigator<PickerStackParamList>();
+const Tab = createBottomTabNavigator<PickerTabParamList>();
+
+// La barra la dibuja cada pantalla (PickerBottomNavigation). Atrás desde una
+// pestaña vuelve a Inicio y desde Inicio sale de la app.
+const noTabBar = () => null;
+const PickerTabs = () => (
+  <Tab.Navigator initialRouteName="PickerHomeScreen" backBehavior="firstRoute" tabBar={noTabBar} screenOptions={{ headerShown: false }}>
+    <Tab.Screen name="PickerHomeScreen" component={PickerHomeScreen} />
+    <Tab.Screen name="PickerScanOptionsScreen" component={PickerScanOptionsScreen} />
+    <Tab.Screen name="PickerNotificationsScreen" component={PickerNotificationsScreen} />
+  </Tab.Navigator>
+);
 
 export const PickerStackNavigator = () => {
   // Al cerrar sesión: los no leídos del chat no son del próximo usuario.
   useEffect(() => () => resetChatStore(), []);
   return (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="PickerHomeScreen" component={PickerHomeScreen} />
-    <Stack.Screen name="PickerScanOptionsScreen" component={PickerScanOptionsScreen} />
-    <Stack.Screen name="PickerNotificationsScreen" component={PickerNotificationsScreen} />
+    <Stack.Screen name="PickerTabs" component={PickerTabs} />
     <Stack.Screen name="PickerShelfScanScreen" component={PickerShelfScanScreen} />
     <Stack.Screen name="PickerBulkyMockScreen" component={PickerBulkyMockScreen} />
     <Stack.Screen name="PickerReportMockScreen" component={PickerReportMockScreen} />

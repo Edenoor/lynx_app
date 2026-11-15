@@ -21,6 +21,7 @@ import { SafeScreen } from "../../../components/SafeScreen";
 import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import { DriverHome, HomeCandidate, clearMyHome, fetchMyHome, saveMyHome, searchHomeAddress, shortAddress } from "./homeApi";
 import { errorMessage } from "../errorMessage";
+import { BackButton } from "../../../components/BackButton";
 
 type Pending = { address: string; latitude: number; longitude: number; source: "search" | "gps" };
 
@@ -148,10 +149,7 @@ export default function DriverHomeScreen({ step }: Props = {}) {
       <ThemedStatusBar />
       {/* KeyboardScreen: la dirección y «Buscar» no quedan tapados por el teclado. */}
       <KeyboardScreen contentContainerStyle={styles.content}>
-        <Pressable style={styles.back} onPress={() => navigation.goBack()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={20} color={theme.text.secondary} />
-          <Text style={styles.backText}>{step ? "Volver" : "Mi cuenta"}</Text>
-        </Pressable>
+        <BackButton onPress={() => navigation.goBack()} label={step ? "Volver" : "Volver a Mi cuenta"} />
 
         <Text style={styles.title}>{step ? "Tu domicilio" : "Mi domicilio"}</Text>
         <Text style={styles.subtitle}>
@@ -272,8 +270,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     paddingBottom: 48,
     gap: t.spacing.md,
   },
-  back: { flexDirection: "row", alignItems: "center", gap: 2 },
-  backText: { color: t.text.secondary, fontSize: 14, fontWeight: t.font.weight.bold },
   title: {
     color: t.text.primary,
     fontSize: 34,

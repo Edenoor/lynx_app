@@ -6,6 +6,7 @@
 
 import { fetchUnread } from "./chatApi";
 import { sharedValue, useSharedValue } from "../work/sharedValue";
+import { goToDriverTab, goToPickerTab } from "../../../navigator/tabNavigation";
 
 const UNREAD_TTL_MS = 30_000;
 
@@ -52,30 +53,17 @@ export function resetChatStore() {
   unread.set(null);
 }
 
-// La lista de chats es la pestaña «Mensajes» de Alertas. Si Alertas ya está
-// abierta más atrás se vuelve a ella (sin apilar otra); si no, se abre.
-type StackNav = {
-  popTo: (...args: any[]) => void;
-  replace: (...args: any[]) => void;
-  getState: () => { routes?: { name: string; params?: any }[] } | undefined;
-};
-const LIST = ["NotificationsScreen", { tab: "messages" }] as const;
+// La lista de chats es la pestaña «Mensajes» de Alertas, que es una pestaña
+// de la barra: se vuelve a ella (lo apilado encima se cierra), nunca se apila
+// otra. Vale igual si se llegó sin pasar por la lista (un push, Inicio).
+type TabNav = { dispatch: (action: any) => void };
 
-export const openChatList = (navigation: StackNav) => navigation.popTo(...LIST);
+export const openChatList = (navigation: TabNav) => goToDriverTab(navigation, "NotificationsScreen", { tab: "messages" });
 
-// «<<» desde una charla o el asistente. Si se llegó sin pasar por la lista
-// (un push, el ícono flotante), la lista toma el lugar de esta pantalla.
-export function backToChatList(navigation: StackNav) {
-  if (navigation.getState()?.routes?.some((r) => r.name === LIST[0])) navigation.popTo(...LIST);
-  else navigation.replace(...LIST);
-}
+// Volver desde una charla o el asistente.
+export const backToChatList = openChatList;
 
-// Picker: su lista de chats es la pestaña «Mensajes» de sus Alertas. Si ya
-// está abierta más atrás se vuelve a ella con sus parámetros (el Warehouse);
-// si no (se llegó por un push), toma el lugar de esta pantalla.
-const PICKER_LIST = "PickerNotificationsScreen";
-export function backToPickerChatList(navigation: StackNav) {
-  const open = navigation.getState()?.routes?.find((r) => r.name === PICKER_LIST);
-  if (open) navigation.popTo(PICKER_LIST, { ...open.params, tab: "messages" });
-  else navigation.replace(PICKER_LIST, { warehouseId: null, tab: "messages" });
-}
+// Picker: su lista de chats es la pestaña «Mensajes» de sus Alertas, que
+// conserva sus parámetros (el Warehouse).
+export const backToPickerChatList = (navigation: TabNav) =>
+  goToPickerTab(navigation, "PickerNotificationsScreen", { tab: "messages" });

@@ -8,35 +8,32 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
 import DriverQrActionGrid from "../../../components/DriverQrActionGrid";
-import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
+import type { DriverTabScreenProps } from "../../../navigator/DriverStackNavigator";
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
 
-type Props = NativeStackScreenProps<
-  DriverStackParamList,
-  "DriverScanOptionsScreen"
->;
+type Props = DriverTabScreenProps<"DriverScanOptionsScreen">;
 
 export default function DriverScanOptionsScreen({ navigation }: Props) {
   const styles = useThemedStyles(makeStyles);
   const handleTabPress = (tab: DriverTabKey) => {
     switch (tab) {
       case "home":
-        navigation.navigate("DriverScreen");
+        goToDriverTab(navigation, "DriverScreen");
         break;
       case "deliveries":
-        navigation.navigate("EnviosScreen");
+        goToDriverTab(navigation, "EnviosScreen");
         break;
       case "scan":
         break;
       case "activity":
-        navigation.navigate("NotificationsScreen");
+        goToDriverTab(navigation, "NotificationsScreen");
         break;
       default:
         break;
@@ -78,7 +75,7 @@ export default function DriverScanOptionsScreen({ navigation }: Props) {
               onPlant={() =>
                 navigation.navigate("DriverScanScreen", { mode: "planta" })
               }
-              onPending={() => navigation.navigate("EnviosScreen")}
+              onPending={() => goToDriverTab(navigation, "EnviosScreen")}
             />
           </View>
         </View>

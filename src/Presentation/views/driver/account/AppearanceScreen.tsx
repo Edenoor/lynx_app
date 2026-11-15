@@ -24,6 +24,7 @@ import {
   VISUAL_STYLES,
   VisualStyle,
 } from "../../../theme/appearance";
+import { BackButton } from "../../../components/BackButton";
 
 type Icon = keyof typeof Ionicons.glyphMap;
 
@@ -59,9 +60,7 @@ export default function AppearanceScreen() {
       <ThemedStatusBar />
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back} accessibilityLabel="Volver">
-            <Ionicons name="arrow-back" size={22} color={theme.text.primary} />
-          </Pressable>
+          <BackButton onPress={() => navigation.goBack()} />
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>CONFIGURACIÓN</Text>
             <Text style={styles.title}>Apariencia</Text>
@@ -187,7 +186,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   screen: { backgroundColor: t.colors.background },
   page: { paddingHorizontal: t.layout.screenPadding, paddingBottom: 48, gap: 10 },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", paddingTop: t.spacing.lg, marginBottom: t.spacing.sm },
-  back: { padding: 6, marginTop: 2 },
   kicker: { ...t.typography.kicker },
   title: { ...t.typography.titleSm, marginTop: 2 },
   subtitle: { ...t.typography.bodySm, marginTop: 4 },

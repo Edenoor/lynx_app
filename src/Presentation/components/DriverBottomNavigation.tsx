@@ -3,6 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import { BottomNavigationBar, BottomNavigationItem } from "./BottomNavigationBar";
 import { useOfferCount } from "../views/driver/offers/offerStore";
 import { useChatUnread } from "../views/driver/chat/chatStore";
+import { goToDriverTab } from "../navigator/tabNavigation";
 
 // Perfil se abre desde Inicio (arriba a la derecha); los recorridos de reparto,
 // desde Envíos. Alertas lleva el contador de ofertas sin contestar y de
@@ -62,7 +63,7 @@ export function DriverBottomNavigation({
   const items = pending ? tabs.map((t) => (t.key === "activity" ? { ...t, badge: pending > 99 ? "99+" : String(pending) } : t)) : tabs;
   const handlePress = (tab: DriverTabKey) => {
     if (tab === "collections") {
-      if (activeTab !== "collections") navigation.navigate("CollectionsScreen");
+      if (activeTab !== "collections") goToDriverTab(navigation, "CollectionsScreen");
       return;
     }
     onPress(tab);

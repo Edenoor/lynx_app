@@ -72,6 +72,7 @@ import { refreshChatUnread } from "../chat/chatStore";
 import { RouteSummary, tomorrowIso } from "../routes/routesApi";
 import { loadText, loadTotal } from "../turbo/turboGroup";
 import { errorMessage } from "../errorMessage";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
 
 type ModalityKey = "turbo" | "flex" | "baul" | "tradicional";
 type SubKey = "current" | "finished" | "tomorrow" | "legacy";
@@ -471,17 +472,17 @@ export const EnviosScreen = ({ navigation }: any) => {
       if (tabKey === "deliveries") return;
 
       if (tabKey === "home") {
-        navigation.navigate("DriverScreen");
+        goToDriverTab(navigation, "DriverScreen");
         return;
       }
 
       if (tabKey === "scan") {
-        navigation.navigate("DriverScanOptionsScreen");
+        goToDriverTab(navigation, "DriverScanOptionsScreen");
         return;
       }
 
       if (tabKey === "activity") {
-        navigation.navigate("NotificationsScreen");
+        goToDriverTab(navigation, "NotificationsScreen");
       }
     },
     [navigation]
@@ -823,7 +824,7 @@ export const EnviosScreen = ({ navigation }: any) => {
         />
       )}
 
-      <ContinueBar missions={missions} onOpen={openMission} onSeeAll={() => navigation.navigate("DriverScreen")} />
+      <ContinueBar missions={missions} onOpen={openMission} onSeeAll={() => goToDriverTab(navigation, "DriverScreen")} />
 
       <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
 

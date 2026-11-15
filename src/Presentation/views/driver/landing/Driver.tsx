@@ -19,7 +19,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import useViewModel from "./ViewModel";
 import useEnviosViewModel from "../Envios/ViewModel";
-import { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
+import type { DriverTabScreenProps } from "../../../navigator/DriverStackNavigator";
 import { postJson } from "../../../config/Api";
 import { useNotifications } from "../../../context/NotificationContext";
 import {
@@ -54,7 +54,8 @@ import { invalidateDriverWork, useDriverWork } from "../work/workSource";
 import { offerNoticeText } from "../offers/offerInbox";
 import { openOfferInbox, refreshOfferCount, setOfferTurboEnabled, showOfferNotice, useOfferCount } from "../offers/offerStore";
 import { chatMessageArrived, openChatList, refreshChatUnread } from "../chat/chatStore";
-interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
+import { goToDriverTab } from "../../../navigator/tabNavigation";
+type Props = DriverTabScreenProps<"DriverScreen">;
 type PendingAssignment = {
   deliveryId: string | number;
   tracking?: string | null;
@@ -326,7 +327,7 @@ export const DriverScreen = ({ navigation }: Props) => {
             // Sin routeId, o una colecta quitada (el detalle ya no es suyo:
             // 403), se abre la lista. Un recorrido ofrecido se contesta en
             // Alertas › Ofertas. El detalle consulta el estado vigente.
-            const openList = () => nav.navigate(isCollection ? "CollectionsScreen" : "RoutesScreen");
+            const openList = () => (isCollection ? goToDriverTab(nav, "CollectionsScreen") : nav.navigate("RoutesScreen"));
             // Lo que muestran Inicio y Envíos cambió (colecta asignada, recorrido actualizado).
             invalidateDriverWork();
             if (kind === "ROUTE_OFFER") {
@@ -545,19 +546,19 @@ export const DriverScreen = ({ navigation }: Props) => {
   };
   const handleTabPress = (tab: DriverTabKey) => {
     if (tab === "home") {
-      navigation.navigate("DriverScreen");
+      goToDriverTab(navigation, "DriverScreen");
       return;
     }
     if (tab === "deliveries") {
-      navigation.navigate("EnviosScreen");
+      goToDriverTab(navigation, "EnviosScreen");
       return;
     }
     if (tab === "scan") {
-      navigation.navigate("DriverScanOptionsScreen");
+      goToDriverTab(navigation, "DriverScanOptionsScreen");
       return;
     }
     if (tab === "activity") {
-      navigation.navigate("NotificationsScreen");
+      goToDriverTab(navigation, "NotificationsScreen");
     }
   };
   const feedbackTone =
@@ -653,7 +654,7 @@ export const DriverScreen = ({ navigation }: Props) => {
               <MissionCard key={m.key} mission={m} compact onPress={() => (navigation as any).navigate(m.target.screen, m.target.params)} />
             ))}
             {missions.length > 1 + MORE_MISSIONS ? (
-              <Pressable onPress={() => navigation.navigate("EnviosScreen")} style={styles.moreMissions} accessibilityRole="button" hitSlop={6}>
+              <Pressable onPress={() => goToDriverTab(navigation, "EnviosScreen")} style={styles.moreMissions} accessibilityRole="button" hitSlop={6}>
                 <Text style={styles.moreMissionsText}>
                   {missions.length - 1 - MORE_MISSIONS === 1 ? "Un recorrido más en curso" : `${missions.length - 1 - MORE_MISSIONS} recorridos más en curso`}: ver en Envíos
                 </Text>

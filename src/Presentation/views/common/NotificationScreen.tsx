@@ -29,6 +29,8 @@ import OfferInboxPanel from "../driver/offers/OfferInboxPanel";
 import { useOfferCount } from "../driver/offers/offerStore";
 import ChatListPanel from "../driver/chat/ChatListPanel";
 import { useChatUnread } from "../driver/chat/chatStore";
+import { goToDriverTab } from "../../navigator/tabNavigation";
+import { BackButton } from "../../components/BackButton";
 
 // Alertas del chofer: tres pestañas, las notificaciones, la bandeja de ofertas
 // y los chats.
@@ -290,17 +292,20 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
   const liveState = !live ? "" : "loading" in live ? "Consultando…" : "error" in live
     ? `No disponible (${live.error})`
     : (liveRoute!.type === "PICKUP" ? COLLECTION_STATUS_LABEL[liveRoute!.status] : STATUS_LABEL[liveRoute!.status]) ?? liveRoute!.status;
+  // Colectas es una pestaña de la barra; Recorridos se apila.
+  const openScreen = (screen: "CollectionsScreen" | "RoutesScreen") =>
+    screen === "CollectionsScreen" ? goToDriverTab(navigation, "CollectionsScreen") : (navigation as any).navigate(screen);
   const openRoute = (fallback: "CollectionsScreen" | "RoutesScreen") => {
     const routeId = selected ? routeIdOf(selected.data) : null;
     if (selected) markRead(selected.id);
     setSelected(null);
     if (routeId) (navigation as any).navigate("RouteDetailScreen", { routeId, name: liveName || undefined });
-    else (navigation as any).navigate(fallback);
+    else openScreen(fallback);
   };
   const openList = (screen: "CollectionsScreen" | "RoutesScreen") => {
     if (selected) markRead(selected.id);
     setSelected(null);
-    (navigation as any).navigate(screen);
+    openScreen(screen);
   };
   const openOffers = () => {
     if (selected) markRead(selected.id);
@@ -384,17 +389,17 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
       }
 
       if (tab === "home") {
-        navigation.navigate("DriverScreen");
+        goToDriverTab(navigation, "DriverScreen");
         return;
       }
 
       if (tab === "deliveries") {
-        navigation.navigate("EnviosScreen");
+        goToDriverTab(navigation, "EnviosScreen");
         return;
       }
 
       if (tab === "scan") {
-        navigation.navigate("DriverScanOptionsScreen");
+        goToDriverTab(navigation, "DriverScanOptionsScreen");
       }
     },
     [navigation]
@@ -405,14 +410,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
       <ThemedStatusBar />
       <View style={styles.header}>
         {!driverStack ? (
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={12}
-            accessibilityLabel="Volver"
-            style={styles.back}
-          >
-            <Ionicons name="arrow-back" size={26} color={theme.text.primary} />
-          </TouchableOpacity>
+          <BackButton onPress={() => navigation.goBack()} style={styles.back} />
         ) : null}
         <Text style={styles.kicker}>{driverStack ? "LYNX DRIVER" : "LYNX"}</Text>
         <Text style={styles.title}>Alertas</Text>

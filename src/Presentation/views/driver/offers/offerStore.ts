@@ -9,6 +9,7 @@ import { fetchRouteOffers } from "../routes/routesApi";
 import { fetchMyOffers } from "../turbo/turboApi";
 import { sharedValue, useSharedValue } from "../work/sharedValue";
 import { pendingOffers, visibleTurboOffers } from "./offerInbox";
+import { goToDriverTab } from "../../../navigator/tabNavigation";
 
 const COUNT_TTL_MS = 30_000;
 
@@ -77,5 +78,5 @@ export function resetOfferStore() {
 
 // La bandeja es la pestaña «Ofertas» de Alertas: todos los accesos (aviso,
 // push, Envíos, Recorridos) llegan por acá.
-export const openOfferInbox = (navigation: { navigate: (...args: any[]) => void }) =>
-  navigation.navigate("NotificationsScreen", { tab: "offers" });
+export const openOfferInbox = (navigation: { dispatch: (action: any) => void }) =>
+  goToDriverTab(navigation, "NotificationsScreen", { tab: "offers" });

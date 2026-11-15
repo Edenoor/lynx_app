@@ -23,6 +23,7 @@ import { collectInGroup, completeGroup, fetchGroup, fetchMyGroups, groupStoreAct
 import { NO_RETIRAR_ANTES } from "./turboOffer";
 import { canMove, deliveries, deliveryClosed, deliveryTime, groupActions, groupTitle, moveTargets, STORE_STATE_LABEL, storeTitle, storeTurbos } from "./turboGroup";
 import { turboPickupError } from "../routes/turboPickup";
+import { BackButton } from "../../../components/BackButton";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "TurboGroupScreen">;
 
@@ -103,7 +104,7 @@ export default function TurboGroupScreen({ navigation, route: nav }: Props) {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={false} onRefresh={load} tintColor={theme.text.accent} />}>
           <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
+            <BackButton onPress={() => navigation.goBack()} />
             <View style={{ flex: 1 }}>
               <Text style={styles.eyebrow}>Turbo · grupo #{group.id}</Text>
               <Text style={styles.title}>{groupTitle(group)}</Text>
@@ -260,7 +261,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
   page: { paddingHorizontal: t.layout.screenPadding, paddingTop: t.spacing.lg, paddingBottom: 40, gap: t.spacing.sm },
   header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: t.spacing.md, paddingTop: t.spacing.lg },
-  back: { padding: 6, marginTop: 2 },
   eyebrow: { ...t.typography.kicker },
   title: { color: t.text.primary, fontSize: 22, fontWeight: "700" },
   meta: { color: t.text.secondary, fontSize: 13, marginTop: 2 },
