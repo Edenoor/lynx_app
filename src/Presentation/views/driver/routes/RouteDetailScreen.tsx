@@ -4,7 +4,7 @@
 // completar el recorrido. En un reparto, las paradas con todos sus envíos
 // terminados van a «Finalizados» y los de Mercado Libre se cierran en Envíos Flex.
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, ImageBackground, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, ImageBackground, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
@@ -69,6 +69,8 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const [mapOpen, setMapOpen] = useState(false);
   // Confirmación breve de lo que el servidor aceptó (SuccessFlash). Después del mapa: las pruebas toman los useState por orden.
   const [flash, setFlash] = useState<FlashMessage | null>(null);
+  // Deslizar para actualizar (último estado: las pruebas toman los useState por orden).
+  const [refreshing, setRefreshing] = useState(false);
   // El conteo de carga escrito y sin confirmar no se pierde por salir; los
   // formularios de cada parada avisan lo suyo (pendingWork).
   usePendingWork(route?.type === "DELIVERY" && route.status === "ASSIGNED" && count.trim() !== "");
@@ -77,6 +79,15 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
     catch (e: any) { setError(errorMessage(e, "No se pudo cargar el recorrido")); }
   }, [routeId]);
   useEffect(() => { load(); }, [load]);
+  // Deslizar hacia abajo relee el recorrido, como al volver a la pantalla. Con
+  // una acción en curso no (su resultado ya recarga). Si falla, el recorrido
+  // queda a la vista con el error arriba (load). No toca formularios ni GPS.
+  const onRefresh = useCallback(async () => {
+    if (busy) return;
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [busy, load]);
   // Lo que Mercado Libre cierra mientras el chofer está en Envíos Flex (u otra
   // pantalla) se ve al volver: se relee al volver a esta pantalla y al volver
   // la app a primer plano. Sin sondeo. El primer foco es la carga de arriba.
@@ -205,7 +216,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
             los importes del cierre no quedan tapados por el teclado (la app es
             edge-to-edge: el adjustResize del manifest ya no corre nada). */}
         <View style={styles.scrollArea}>
-          <KeyboardScreen contentContainerStyle={styles.page}>
+          <KeyboardScreen contentContainerStyle={styles.page} scrollProps={{ refreshControl: <RefreshControl refreshing={refreshing} onRefresh={onRefresh} enabled={!busy} tintColor={theme.text.accent} /> }}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.back}><Ionicons name="arrow-back" size={22} color={theme.text.primary} /></Pressable>
             {isPickup ? (

@@ -1111,6 +1111,23 @@ const setDriverApi = () => {
     check("Inicio: la fila abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 12 }]));
     byLabel(tree, "Alertas: 3")[0].props.onPress();
     check("Inicio: «Alertas» de la barra abre Alertas", js(lastNav()) === js(tabNav("NotificationsScreen")));
+    // Deslizar hacia abajo en Inicio: vuelve a pedir recorridos y ofertas al momento;
+    // sin red, lo que se veía queda con el aviso.
+    {
+      tree = await mount(homeEl());
+      const sv = () => all(tree, (x) => x.type === "ScrollView" && !!x.props.refreshControl)[0];
+      check("Inicio: se puede deslizar para actualizar", !!sv());
+      api.calls = [];
+      await sv().props.refreshControl.props.onRefresh(); tree = await settle();
+      check("Inicio: actualizar vuelve a pedir los recorridos y las ofertas (sin esperar la caché)",
+        api.calls.some((c) => c.startsWith(`GET /v2/routes/mine?date=${TODAY}`)) && api.calls.includes("GET /v2/turbo/offers/mine") && api.calls.includes("GET /v2/offers/mine"), api.calls.join(", "));
+      check("Inicio: al terminar, el indicador se apaga", sv().props.refreshControl.props.refreshing === false);
+      api.replies[`GET /v2/routes/mine?date=${TODAY}`] = new Error("Network request failed");
+      await sv().props.refreshControl.props.onRefresh(); tree = await settle();
+      const after = textOf(tree);
+      check("Inicio: actualizar sin red deja los recorridos que se veían y avisa", after.includes("Reparto #8") && /Sin conexión|No se pudieron cargar tus recorridos/.test(after) && sv().props.refreshControl.props.refreshing === false, after.slice(0, 300));
+      setEnviosApi();
+    }
     for (const scheme of ["dark", "light"]) {
       const th = createTheme({ scheme });
       useTheme(th);
@@ -1903,6 +1920,21 @@ const setDriverApi = () => {
     check("Reparto con una entrega pendiente: completar frenado, dice cuántas faltan", !!pressable(tree, "Queda 1 parada pendiente").props.disabled);
     check("Parada: dirección como título, destinatario abajo y el estado real del envío", textOf(head(tree, "Mitre 10")).indexOf("Luis") > 0 && textOf(head(tree, "Mitre 10")).includes("En camino"));
     check("Reparto: nunca «Resuelta» ni «En calle»", !/Resuelta|En calle/.test(body));
+    // Deslizar hacia abajo en el detalle: relee el recorrido; sin red, queda lo que se veía.
+    {
+      const sv = () => all(tree, (x) => x.type === "ScrollView" && !!x.props.refreshControl)[0];
+      const gets = () => api.calls.filter((c) => c === "GET /v2/routes/158").length;
+      check("Detalle: se puede deslizar para actualizar", !!sv() && sv().props.refreshControl.props.enabled === true);
+      const before = gets();
+      await sv().props.refreshControl.props.onRefresh(); tree = await settle();
+      check("Detalle: actualizar vuelve a pedir el recorrido, una vez", gets() === before + 1, api.calls.join(", "));
+      check("Detalle: al terminar, el indicador se apaga", sv().props.refreshControl.props.refreshing === false);
+      api.replies["GET /v2/routes/158"] = new Error("Network request failed");
+      await sv().props.refreshControl.props.onRefresh(); tree = await settle();
+      check("Detalle: actualizar sin red deja las paradas a la vista y avisa", !!head(tree, "Mitre 10") && textOf(tree).includes("Finalizados (2)") && sv().props.refreshControl.props.refreshing === false && /conexi|cargar el recorrido/i.test(textOf(tree)), textOf(tree).slice(0, 300));
+      api.replies["GET /v2/routes/158"] = { ok: true, route: r158 };
+      await sv().props.refreshControl.props.onRefresh(); tree = await settle();
+    }
     tree = await press(tree, "Finalizados (2)");
     body = textOf(tree);
     check("Finalizados: al abrirlo, las paradas terminadas en orden de visita, con dirección, destinatario y resultado",

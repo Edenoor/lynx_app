@@ -7,6 +7,7 @@ import {
   Modal,
   Switch,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -156,8 +157,18 @@ export const DriverScreen = ({ navigation }: Props) => {
   const { add } = useNotifications();
   // Recorridos en la calle (misión activa): los mismos datos que Envíos,
   // leídos una vez. Las ofertas se ven en Alertas (contador en la barra).
-  const { work } = useDriverWork();
+  const { work, error: workError, refresh: refreshWork } = useDriverWork();
   const missions = work?.missions ?? [];
+  // Deslizar hacia abajo: relee los recorridos y las ofertas al momento (lo
+  // mismo que al volver a la pantalla, sin esperar la caché). Si falla, lo
+  // leído queda a la vista con el aviso de error.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    await Promise.allSettled([refreshWork(), refreshOfferCount(true)]);
+    setRefreshing(false);
+  };
   // Turbos que lleva hoy contra su tope (null: sin dato, un servidor anterior).
   const turboLoad = work?.turboLoad ?? null;
   const [turboOn, setTurboOn] = useState<boolean>(false);
@@ -571,6 +582,7 @@ export const DriverScreen = ({ navigation }: Props) => {
         style={styles.content}
         contentContainerStyle={[styles.contentInner, { paddingTop: insets.top + theme.spacing.md }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.text.accent} progressViewOffset={insets.top} />}
       >
         {trackingMode && trackingMode !== "background" ? (
           <Pressable onPress={trackingMode === "forbidden" || trackingMode === "paused" ? undefined : () => Linking.openSettings()} style={styles.trackingBanner}>
@@ -622,6 +634,7 @@ export const DriverScreen = ({ navigation }: Props) => {
         </View>
         <View style={styles.homeSpacer} />
         <View style={styles.homeBottom}>
+        {workError ? <Text style={styles.workError}>{workError}</Text> : null}
         {missions.length ? (
           <View style={styles.missions}>
             <MissionCard mission={missions[0]} onPress={() => (navigation as any).navigate(missions[0].target.screen, missions[0].target.params)} />
@@ -849,6 +862,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   missions: {
     marginTop: t.spacing.md,
   },
+  workError: { color: t.status.rejected.text, fontSize: 13, marginTop: t.spacing.sm },
   moreMissions: {
     flexDirection: "row",
     alignItems: "center",
