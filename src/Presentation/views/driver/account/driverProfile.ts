@@ -73,3 +73,26 @@ export function fullName(user: { first_name?: string | null; last_name?: string 
   const n = [user?.first_name, user?.last_name].map((x) => (x ?? "").trim()).filter(Boolean).join(" ");
   return n || user?.name?.trim() || user?.username?.trim() || "Sin nombre cargado";
 }
+
+// ---------- Cambiar la selfie desde Mi cuenta ----------
+// La foto nueva reemplaza la selfie del alta (driver_extra.selfie): el panel
+// la ve igual. La anterior no se borra del Storage (cada foto es un archivo).
+
+export const SELFIE_MAX_BYTES = 5 * 1024 * 1024;
+const SELFIE_TYPES = ["image/jpeg", "image/jpg", "image/png"];
+
+// Lo que sacó la cámara, antes de subirlo. null = sirve.
+export function selfieFileError(file: { size?: number | null; type?: string | null; uri?: string | null }): string | null {
+  const size = Number(file.size);
+  if (!Number.isFinite(size) || size <= 0) return "La foto salió vacía. Sacala de nuevo.";
+  if (size > SELFIE_MAX_BYTES) return "La foto es muy pesada (más de 5 MB). Sacala de nuevo.";
+  const type = String(file.type ?? "").toLowerCase();
+  const byName = /\.(jpe?g|png)(\?|$)/i.test(String(file.uri ?? ""));
+  if (type ? !SELFIE_TYPES.includes(type) : !byName) return "La foto tiene que ser JPG o PNG. Sacala de nuevo.";
+  return null;
+}
+
+// Releída la ficha: ¿quedó guardada la foto que se subió? Un chofer sin fila
+// de documentos (driver_extra) recibe «ok» del servidor sin que se guarde nada.
+export const selfieSaved = (extra: any, url: string): boolean =>
+  typeof extra?.selfie === "string" && extra.selfie.trim() === url.trim();

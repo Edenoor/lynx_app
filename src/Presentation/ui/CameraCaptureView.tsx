@@ -29,6 +29,9 @@ type Props = {
   facing?: "front" | "back";
   overlayMode?: OverlayMode;
   allowFlip?: boolean;
+  // Encabezado y texto del permiso: los del alta, salvo que se pidan otros (Mi cuenta).
+  kicker?: string;
+  permissionText?: string;
   onCaptured: (tmpUri: string, w?: number, h?: number) => Promise<void> | void;
 };
 
@@ -38,6 +41,8 @@ export function CameraCaptureView({
   facing = "back",
   overlayMode = "none",
   allowFlip = false,
+  kicker = "VALIDACIÓN",
+  permissionText = "Necesitamos acceso a la cámara para validar tu documentación y continuar con el alta.",
   onCaptured,
 }: Props) {
   const cameraRef = useRef<CameraView>(null);
@@ -59,10 +64,7 @@ export function CameraCaptureView({
         <View style={styles.permissionCard}>
           <Text style={styles.kicker}>CÁMARA</Text>
           <Text style={styles.permissionTitle}>Permiso de cámara</Text>
-          <Text style={styles.permissionText}>
-            Necesitamos acceso a la cámara para validar tu documentación y
-            continuar con el alta.
-          </Text>
+          <Text style={styles.permissionText}>{permissionText}</Text>
 
           <RoundedButton text="Dar permiso" onPress={requestPermission} />
         </View>
@@ -99,7 +101,7 @@ export function CameraCaptureView({
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.headerText}>
-            <Text style={styles.kicker}>VALIDACIÓN</Text>
+            <Text style={styles.kicker}>{kicker}</Text>
             <Text style={styles.title}>{title}</Text>
           </View>
 

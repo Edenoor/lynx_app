@@ -123,6 +123,13 @@ export default function DriverAccountScreen() {
             <Text style={styles.email} numberOfLines={1}>
               {user?.email || username || "Sin email"}
             </Text>
+            {/* La foto nueva reemplaza la selfie del alta; se confirma con el servidor (DriverSelfieScreen). */}
+            {profile ? (
+              <Pressable onPress={() => navigation.navigate("DriverSelfieScreen")} style={styles.changePhoto} hitSlop={6} accessibilityRole="button" accessibilityLabel="Cambiar foto">
+                <Ionicons name="camera-outline" size={15} color={theme.text.accent} />
+                <Text style={styles.changePhotoText}>Cambiar foto</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -364,6 +371,9 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     fontWeight: t.font.weight.black,
     letterSpacing: -0.6,
   },
+
+  changePhoto: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", marginTop: t.spacing.xs, minHeight: 28 },
+  changePhotoText: { color: t.text.accent, fontSize: 13, fontWeight: t.font.weight.black },
 
   email: {
     color: t.text.muted,

@@ -3,9 +3,10 @@
 // Mi cuenta: un solo pedido por sesión, y se vuelve a leer al entrar a Mi
 // cuenta. Se vacía al cerrar sesión (resetDriverProfile).
 
-import { getJson } from "../../../config/Api";
+import { getJson, putJson } from "../../../config/Api";
+import { uploadDriverDocument } from "../../../../Infrastructure/firebase/uploadDriverDocument";
 import { sharedValue, useSharedValue } from "../work/sharedValue";
-import { DriverProfile, parseProfile } from "./driverProfile";
+import { DriverProfile, parseProfile, safeImageUrl, selfieFileError, selfieSaved } from "./driverProfile";
 
 // undefined = todavía no se leyó (o falló); null = el usuario no tiene ficha de chofer.
 const profile = sharedValue<DriverProfile | null | undefined>(undefined);
@@ -37,3 +38,33 @@ export function loadDriverProfile(userId: number | string | null | undefined, { 
 
 export const useDriverProfile = () => useSharedValue(profile);
 export const resetDriverProfile = () => { profile.set(undefined); inflight = null; };
+
+// Cambiar la selfie (Mi cuenta). Mismo camino que el alta: la foto va al
+// Storage de la app (drivers/<usuario>/documents, un archivo nuevo: la
+// anterior no se borra) y la URL a PUT /v2/drivers/:id/extra, solo «selfie»
+// (al chofer el servidor no le borra lo que no manda, y solo le deja su
+// ficha). Recién cuando la ficha releída trae la URL nueva se muestra en
+// Mi cuenta e Inicio; si algo falla, queda la anterior y se lanza el error.
+export async function updateSelfie(userId: number | string | null | undefined, uri: string): Promise<void> {
+  if (userId === null || userId === undefined || userId === "") throw new Error("No se pudo identificar tu usuario.");
+  if (!profile.get()) await loadDriverProfile(userId, { force: true });
+  const current = profile.get();
+  if (!current) throw new Error("No se pudo leer tu ficha de chofer. Revisá la conexión y probá de nuevo.");
+
+  const file = await (await fetch(uri)).blob();
+  const invalid = selfieFileError({ size: file.size, type: file.type, uri });
+  if (invalid) throw new Error(invalid);
+  const mimeType = /png/i.test(file.type || uri) ? "image/png" : "image/jpeg";
+
+  let url: string;
+  try {
+    url = (await uploadDriverDocument({ driverId: String(userId), documentType: "selfie", uri, mimeType })).fileUrl;
+  } catch {
+    throw new Error("No se pudo subir la foto. Revisá la conexión y probá de nuevo.");
+  }
+  unwrap(await putJson(`/v2/drivers/${current.driverId}/extra`, { driver: { selfie: url } }));
+  const extra = unwrap(await getJson(`/v2/drivers/${current.driverId}/extra`)).extra ?? null;
+  if (!selfieSaved(extra, url)) throw new Error("El servidor no guardó la foto en tu ficha. Avisale a coordinación.");
+  const latest = profile.get();
+  profile.set({ ...(latest ?? current), selfie: safeImageUrl(extra.selfie) });
+}

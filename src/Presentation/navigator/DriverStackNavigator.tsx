@@ -7,6 +7,7 @@ import NotificationsScreen from "../views/common/NotificationScreen";
 import DriverAccountScreen from "../views/driver/account/DriverAccountScreen";
 import DriverHomeScreen from "../views/driver/account/DriverHomeScreen";
 import AppearanceScreen from "../views/driver/account/AppearanceScreen";
+import DriverSelfieScreen from "../views/driver/account/DriverSelfieScreen";
 
 import { OnboardingStackNavigator } from "../navigator/OnboardingStackNavigator";
 import { useOnboarding } from "../onboarding/OnboardingContext";
@@ -38,6 +39,8 @@ export type DriverStackParamList = {
   DriverAccountScreen: undefined;
   DriverHomeScreen: undefined;
   AppearanceScreen: undefined;
+  // Cambiar la foto de perfil (la selfie del alta) con la cámara.
+  DriverSelfieScreen: undefined;
   DriverScanOptionsScreen: undefined;
   DriverScanScreen: { mode: DriverScanMode };
   // Recorridos de reparto y Turbo por día (se entra desde Envíos).
@@ -88,6 +91,7 @@ export const DriverStackNavigator = () => {
           />
           <Stack.Screen name="DriverHomeScreen" component={DriverHomeScreen} />
           <Stack.Screen name="AppearanceScreen" component={AppearanceScreen} />
+          <Stack.Screen name="DriverSelfieScreen" component={DriverSelfieScreen} />
           <Stack.Screen
             name="DriverScanOptionsScreen"
             component={DriverScanOptionsScreen}

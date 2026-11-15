@@ -3,7 +3,7 @@
 //     src/Presentation/views/driver/account/driverProfile.test.ts
 //   node /tmp/driver-profile/driverProfile.test.js
 
-import { documentsLabel, fullName, parseProfile, safeImageUrl, vehicleLabel } from "./driverProfile";
+import { documentsLabel, fullName, parseProfile, safeImageUrl, SELFIE_MAX_BYTES, selfieFileError, selfieSaved, vehicleLabel } from "./driverProfile";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -33,6 +33,15 @@ eq("vehículo con patente", vehicleLabel(p), "moto · Honda · Wave · Patente A
 eq("sin vehículo", [vehicleLabel(null), vehicleLabel({ vehicle: null, plate: null })], ["Sin vehículo cargado", "Sin vehículo cargado"]);
 eq("documentos: cuántos se enviaron", [documentsLabel(p), documentsLabel(parseProfile(role, null)), documentsLabel(null)], ["2 de 6 enviados", "Sin documentos enviados", "DNI, registro y cédula"]);
 eq("nombre y apellido", [fullName({ first_name: "Ana María", last_name: "Pérez" }), fullName({ username: "ana" }), fullName(null)], ["Ana María Pérez", "ana", "Sin nombre cargado"]);
+
+// Cambiar la selfie: la foto de la cámara antes de subirla, y la ficha releída.
+eq("selfie: un JPG de la cámara sirve", selfieFileError({ size: 800_000, type: "image/jpeg", uri: "file:///cache/Camera/a.jpg" }), null);
+eq("selfie: sin tipo informado, vale la extensión", [selfieFileError({ size: 10, type: "", uri: "file:///x/a.jpg" }), selfieFileError({ size: 10, type: null, uri: "file:///x/a.heic" })], [null, "La foto tiene que ser JPG o PNG. Sacala de nuevo."]);
+eq("selfie: otro formato no", selfieFileError({ size: 10, type: "image/heic", uri: "file:///x/a.jpg" }), "La foto tiene que ser JPG o PNG. Sacala de nuevo.");
+eq("selfie: vacía o pesada no", [selfieFileError({ size: 0, type: "image/jpeg" }), selfieFileError({ size: SELFIE_MAX_BYTES + 1, type: "image/jpeg" }), selfieFileError({ size: SELFIE_MAX_BYTES, type: "image/png" })],
+  ["La foto salió vacía. Sacala de nuevo.", "La foto es muy pesada (más de 5 MB). Sacala de nuevo.", null]);
+eq("selfie guardada: la ficha releída trae la URL que se subió", [selfieSaved({ selfie: `${FB}selfie_2.jpg ` }, `${FB}selfie_2.jpg`), selfieSaved({ selfie: `${FB}selfie_1.jpg` }, `${FB}selfie_2.jpg`)], [true, false]);
+eq("selfie guardada: sin fila de documentos (null) no cuenta como guardada", [selfieSaved(null, `${FB}s.jpg`), selfieSaved(undefined, `${FB}s.jpg`), selfieSaved({ selfie: null }, `${FB}s.jpg`)], [false, false, false]);
 
 console.log(failed ? `\n${failed} FALLAS` : "\nOK");
 if (failed) process.exit(1);

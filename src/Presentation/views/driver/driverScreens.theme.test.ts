@@ -165,6 +165,8 @@ const host = (name: string) => name;
 // y soltarlo (null) no lo corrige hasta que llega el aviso del sistema.
 const native = { calls: [] as (string | null)[], reported: "dark" as string | null };
 const camera = { permission: { granted: true } as any, request: async () => ({ granted: false, canAskAgain: true }) as any };
+// Subidas al Storage (uploadDriverDocument): nada sale a Firebase. `fail` hace fallar la próxima.
+const uploads = { calls: [] as any[], fail: false, url: "" };
 const RN = {
   StyleSheet: { create: (s: any) => s, hairlineWidth: 0.5, flatten: (s: any) => flat(s), absoluteFill: {}, absoluteFillObject: {} },
   View: "View", Text: "Text", ScrollView: "ScrollView", Pressable: "Pressable", TouchableOpacity: "TouchableOpacity",
@@ -272,6 +274,13 @@ const RELATIVE_MOCKS: [string, any][] = [
     readCurrentPosition: async () => null, onTrackingChange: () => () => {},
   }],
   ["landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, first_name: "Ana María", email: "ana@lynx.test", username: "ana" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
+  ["firebase/uploadDriverDocument", {
+    uploadDriverDocument: async (input: any) => {
+      uploads.calls.push(input);
+      if (uploads.fail) throw new Error("storage/unauthorized");
+      return { documentType: input.documentType, storagePath: `drivers/${input.driverId}/documents/x.jpg`, fileUrl: uploads.url, mimeType: input.mimeType };
+    },
+  }],
   ["remote/api/ApiDelivery", { ApiDelivery: { post: () => { throw new Error("sin red en la prueba"); } } }],
   ["components/LynxPulseLoader", { LynxPulseLoader: host("LynxPulseLoader") }],
   ["context/NotificationContext", { useNotifications: () => notis }],
@@ -2465,6 +2474,108 @@ const setDriverApi = () => {
       api.replies = { "GET /v2/users/7/role": new Error("Network request failed"), "GET /v2/driver-home/me": { ok: true, home: null } };
       tree = await mount(RealReact.createElement(Account));
       check("Mi cuenta sin red: avatar genérico, sin error ni bloqueo", !avatars(tree).length && textOf(tree).includes("Datos personales"));
+      // Cambiar la foto: la cámara del alta, vista previa con Guardar y Cancelar;
+      // la nueva se ve recién cuando la ficha releída la trae. La cámara real no
+      // dispara en esta prueba: mientras dura el bloque, la vista de cámara es un
+      // botón que entrega la foto (la pantalla ya está cargada por el stack).
+      {
+        const camModule = L("src/Presentation/ui/CameraCaptureView.tsx");
+        const realCamera = camModule.CameraCaptureView;
+        camModule.CameraCaptureView = (p: any) => RealReact.createElement("Pressable", {
+          accessibilityLabel: "Sacar foto", onPress: () => p.onCaptured("file:///cache/Camera/nueva.jpg", 900, 1200),
+          cam: { kicker: p.kicker, facing: p.facing, overlayMode: p.overlayMode, permissionText: p.permissionText },
+        });
+        const Selfie = L("src/Presentation/views/driver/account/DriverSelfieScreen.tsx").default;
+        const NEW = `${FB}selfie_nueva.jpg?alt=media&token=n`;
+        const SAVED = { ok: true, extra: { ...EXTRA.extra, selfie: NEW } };
+        const file = { size: 900_000, type: "image/jpeg" };
+        const realFetch = (globalThis as any).fetch;
+        (globalThis as any).fetch = async () => ({ blob: async () => ({ ...file }) });
+        const both = () => RealReact.createElement(RealReact.Fragment, null, RealReact.createElement(Account), RealReact.createElement(Selfie));
+        const open = async (extra: any) => {
+          uploads.calls = []; uploads.fail = false; uploads.url = NEW; nav.calls = []; api.bodies = [];
+          api.calls = []; api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": extra, "GET /v2/driver-home/me": { ok: true, home: null } };
+          tree = await mount(both());
+          byLabel(tree, "Sacar foto")[0].props.onPress(); tree = await settle();
+        };
+        const shownAvatar = () => avatars(tree)[0]?.props.source.uri;
+        const puts = () => api.bodies.filter(([k]) => k === "PUT /v2/drivers/49/extra").map(([, b]) => b);
+
+        api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": EXTRA, "GET /v2/driver-home/me": { ok: true, home: null } };
+        tree = await mount(RealReact.createElement(Account));
+        check("Mi cuenta: «Cambiar foto» junto a la selfie actual", byLabel(tree, "Cambiar foto").length === 1 && shownAvatar() === EXTRA.extra.selfie);
+        nav.calls = [];
+        byLabel(tree, "Cambiar foto")[0].props.onPress();
+        check("Mi cuenta: «Cambiar foto» abre la cámara", js(lastNav()) === js(["navigate", "DriverSelfieScreen"]));
+
+        uploads.calls = []; api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": EXTRA, "GET /v2/driver-home/me": { ok: true, home: null } };
+        tree = await mount(both());
+        const cam = byLabel(tree, "Sacar foto")[0]?.props.cam;
+        check("Cambiar foto: la cámara del alta, frontal y con el marco de selfie", js(cam) === js({ kicker: "MI CUENTA", facing: "front", overlayMode: "selfie", permissionText: "Necesitamos acceso a la cámara para sacar tu nueva foto de perfil." }), js(cam));
+
+        // Guardar: sube, guarda solo la selfie, relee y recién ahí la muestra.
+        await open([EXTRA, SAVED]);
+        let body = textOf(tree);
+        check("Cambiar foto: vista previa con Guardar y Cancelar, sin subir nada todavía",
+          body.includes("¿Usamos esta foto?") && byLabel(tree, "Vista previa de la nueva foto")[0]?.props.source.uri === "file:///cache/Camera/nueva.jpg"
+          && body.includes("Guardar") && body.includes("Cancelar") && !uploads.calls.length && shownAvatar() === EXTRA.extra.selfie, body.slice(0, 200));
+        let release: (v: any) => void = () => {};
+        api.replies["PUT /v2/drivers/49/extra"] = new Promise((r) => (release = r));
+        tree = await press(tree, "Guardar");
+        check("Cambiar foto: mientras guarda, indicador y botones apagados", textOf(tree).includes("Guardando…") && !!pressable(tree, "Guardando…").props.disabled && !!pressable(tree, "Cancelar").props.disabled);
+        check("Cambiar foto: mientras guarda, la foto visible sigue siendo la anterior", shownAvatar() === EXTRA.extra.selfie);
+        release({ ok: true }); tree = await settle();
+        check("Cambiar foto: sube al Storage del alta (su carpeta, tipo selfie, JPG)", js(uploads.calls) === js([{ driverId: "7", documentType: "selfie", uri: "file:///cache/Camera/nueva.jpg", mimeType: "image/jpeg" }]), js(uploads.calls));
+        check("Cambiar foto: PUT /v2/drivers/49/extra solo con la selfie (no toca los otros documentos)", js(puts()) === js([{ driver: { selfie: NEW } }]), js(api.bodies));
+        check("Cambiar foto: relee la ficha después de guardar", api.calls.lastIndexOf("GET /v2/drivers/49/extra") > api.calls.indexOf("PUT /v2/drivers/49/extra"), api.calls.join(", "));
+        check("Cambiar foto: confirmada, se ve la nueva en Mi cuenta y se vuelve", shownAvatar() === NEW && js(lastNav()) === js(["goBack"]));
+
+        // El servidor contesta ok pero la ficha no la trae (chofer sin fila de documentos): no es un éxito.
+        await open([EXTRA, EXTRA]);
+        tree = await press(tree, "Guardar");
+        body = textOf(tree);
+        check("Cambiar foto: ok sin guardar se detecta al releer, con un error claro", body.includes("El servidor no guardó la foto en tu ficha. Avisale a coordinación.") && body.includes("Tu foto anterior sigue igual."), body.slice(0, 300));
+        check("Cambiar foto: sin guardar, la anterior queda y no se vuelve", shownAvatar() === EXTRA.extra.selfie && !nav.calls.some((c) => c[0] === "goBack"));
+        check("Cambiar foto: después del error se puede volver a intentar", !pressable(tree, "Guardar").props.disabled);
+
+        // La subida falla: no se toca la ficha.
+        await open([EXTRA, SAVED]);
+        uploads.fail = true;
+        tree = await press(tree, "Guardar");
+        check("Cambiar foto: si la subida falla, lo dice y no toca la ficha", textOf(tree).includes("No se pudo subir la foto. Revisá la conexión y probá de nuevo.") && !puts().length && shownAvatar() === EXTRA.extra.selfie);
+
+        // El servidor la rechaza (otra ficha, sesión): su error y la anterior.
+        await open([EXTRA, SAVED]);
+        api.replies["PUT /v2/drivers/49/extra"] = { ok: false, status: 403, error: "Acceso denegado" };
+        tree = await press(tree, "Guardar");
+        check("Cambiar foto: un rechazo del servidor se muestra y queda la anterior", textOf(tree).includes("Acceso denegado") && shownAvatar() === EXTRA.extra.selfie && !nav.calls.some((c) => c[0] === "goBack"));
+
+        // Formato o tamaño inválido: no se sube.
+        await open([EXTRA, SAVED]);
+        file.type = "image/heic";
+        tree = await press(tree, "Guardar");
+        check("Cambiar foto: un formato que no es JPG ni PNG no se sube", textOf(tree).includes("La foto tiene que ser JPG o PNG.") && !uploads.calls.length && !puts().length);
+        file.type = "image/jpeg"; file.size = 6 * 1024 * 1024;
+        tree = await press(tree, "Guardar");
+        check("Cambiar foto: una foto de más de 5 MB no se sube", textOf(tree).includes("La foto es muy pesada") && !uploads.calls.length);
+        file.size = 900_000;
+
+        // Cancelar: vuelve sin subir ni guardar nada.
+        await open([EXTRA, SAVED]);
+        tree = await press(tree, "Cancelar");
+        check("Cambiar foto: Cancelar vuelve sin subir ni guardar", js(lastNav()) === js(["goBack"]) && !uploads.calls.length && !puts().length && shownAvatar() === EXTRA.extra.selfie);
+
+        for (const scheme of ["dark", "light"]) {
+          const th = createTheme({ scheme });
+          useTheme(th);
+          await open([EXTRA, EXTRA]);
+          tree = await press(tree, "Guardar");
+          check(`Cambiar foto ${scheme}: vista previa y error legibles`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+        }
+        useTheme(dark);
+        (globalThis as any).fetch = realFetch;
+        camModule.CameraCaptureView = realCamera;
+      }
       // Inicio: la selfie en el botón de perfil, junto al rayito Turbo.
       api.calls = [];
       api.replies = { "GET /v2/users/7/role": ROLE, "GET /v2/drivers/49/extra": EXTRA };
