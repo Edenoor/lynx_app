@@ -3,7 +3,7 @@
 // cada parada, registrar qué pasó con cada envío, cerrar la parada y
 // completar el recorrido. En un reparto, las paradas con todos sus envíos
 // terminados van a «Finalizados» y los de Mercado Libre se cierran en Envíos Flex.
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, ImageBackground, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -40,6 +40,7 @@ import { canOrganize } from "./routePlan";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
 import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
 import { usePendingWork } from "../pendingWork";
+import { searchStops } from "./stopSearch";
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 // Mercado Libre decide el resultado de sus envíos: desde Lynx no se registra nada.
 const ML_TITLE = "Entrega de Mercado Libre";
@@ -202,9 +203,9 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   // Reparto: pendientes arriba y lo terminado plegado abajo. Colecta y Turbo, como siempre.
   const sections = isDelivery ? splitStops(route.stops) : null;
   const progress = isDelivery ? routeProgress(route.stops) : null;
-  const stopCard = (s: Stop) => (
+  const stopCard = (s: Stop, match?: number[]) => (
     <StopCard key={s.id} routeId={route.id} stop={s} stops={route.stops} routeType={route.type} routeStatus={route.status} inProgress={inProgress} busy={busy}
-      open={openStop === s.id} dimmed={openStop !== null && openStop !== s.id} onToggle={toggleStop} act={act} onStopSaved={replaceStop} />
+      open={openStop === s.id} dimmed={openStop !== null && openStop !== s.id} onToggle={toggleStop} act={act} onStopSaved={replaceStop} match={match} />
   );
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
@@ -331,12 +332,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
               </View>
             </ThemedCard>
           ) : null}
-          {sections ? (
-            <>
-              {sections.pending.map(stopCard)}
-              {sections.finished.length ? <FinishedStops count={sections.finished.length}>{() => sections.finished.map(stopCard)}</FinishedStops> : null}
-            </>
-          ) : route.stops.map(stopCard)}
+          {sections ? <DeliveryStops stops={route.stops} sections={sections} stopCard={stopCard} /> : route.stops.map((s) => stopCard(s))}
           {inProgress ? (
             <Pressable onPress={onComplete} disabled={busy || !allClosed} style={[styles.btn, styles.btnBig, (busy || !allClosed) && styles.btnDisabled]}>
               <Ionicons name="checkmark-done" size={18} color={theme.text.onPrimary} />
@@ -370,17 +366,59 @@ function Stat({ value, label, warn }: { value: number; label: string; warn?: boo
   );
 }
 // «Finalizados (N)»: plegado al entrar; las paradas se dibujan recién al abrirlo.
-function FinishedStops({ count, children }: { count: number; children: () => React.ReactNode }) {
+// Con una búsqueda (forceOpen) se ven abiertos: también son resultados.
+function FinishedStops({ count, forceOpen = false, children }: { count: number; forceOpen?: boolean; children: () => React.ReactNode }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [open, setOpen] = useState(false);
+  const shown = open || forceOpen;
   return (
     <>
-      <Pressable onPress={() => setOpen((v) => !v)} style={styles.finishedHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+      <Pressable onPress={() => setOpen((v) => !v)} disabled={forceOpen} style={styles.finishedHead} accessibilityRole="button" accessibilityState={{ expanded: shown }}>
         <Text style={styles.finishedTitle}>Finalizados ({count})</Text>
-        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={theme.text.secondary} />
+        {forceOpen ? null : <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={theme.text.secondary} />}
       </Pressable>
-      {open ? children() : null}
+      {shown ? children() : null}
+    </>
+  );
+}
+// Reparto: el buscador (stopSearch.ts) arriba de las paradas, sobre lo ya
+// cargado. Sin búsqueda, como siempre: pendientes y «Finalizados» plegado.
+// Con búsqueda, solo las paradas que coinciden, en su orden, con sus envíos
+// destacados. No toca estados, contadores ni el botón de completar (que
+// siguen mirando el recorrido entero).
+function DeliveryStops({ stops, sections, stopCard }: {
+  stops: Stop[]; sections: { pending: Stop[]; finished: Stop[] }; stopCard: (s: Stop, match?: number[]) => React.ReactNode;
+}) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [query, setQuery] = useState("");
+  const matches = useMemo(() => searchStops(stops, query), [stops, query]);
+  const pick = (list: Stop[]) => (matches ? list.filter((s) => matches.has(s.id)) : list);
+  const pending = pick(sections.pending);
+  const finished = pick(sections.finished);
+  const card = (s: Stop) => stopCard(s, matches?.get(s.id));
+  const clear = () => setQuery("");
+  return (
+    <>
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={18} color={theme.text.muted} />
+        <TextInput value={query} onChangeText={setQuery} placeholder="Buscar por tracking, destinatario o dirección" placeholderTextColor={theme.text.muted}
+          style={styles.searchInput} autoCorrect={false} autoCapitalize="none" returnKeyType="search" accessibilityLabel="Buscar envío en el recorrido" />
+        {query ? (
+          <Pressable onPress={clear} hitSlop={8} accessibilityRole="button" accessibilityLabel="Limpiar búsqueda">
+            <Ionicons name="close-circle" size={18} color={theme.text.muted} />
+          </Pressable>
+        ) : null}
+      </View>
+      {matches && !matches.size ? (
+        <View style={styles.searchEmpty}>
+          <Text style={styles.stopMeta}>Ningún envío de este recorrido coincide con «{query.trim()}».</Text>
+          <Pressable onPress={clear} hitSlop={6} accessibilityRole="button"><Text style={styles.link}>Ver todas las paradas</Text></Pressable>
+        </View>
+      ) : null}
+      {pending.map(card)}
+      {finished.length ? <FinishedStops count={finished.length} forceOpen={!!matches}>{() => finished.map(card)}</FinishedStops> : null}
     </>
   );
 }
@@ -439,11 +477,13 @@ function DeliveryHead({ d }: { d: Stop["deliveries"][number] }) {
 // Memorizada: con 80-100 paradas, abrir una o recargar no vuelve a dibujar las
 // que no cambiaron (las funciones que recibe son estables).
 const StopCard = memo(StopCardView);
-function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress, busy, open, dimmed, onToggle, act, onStopSaved }: {
+function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress, busy, open, dimmed, onToggle, act, onStopSaved, match }: {
   routeId: number; stop: Stop; stops: Stop[]; routeType: RouteDetail["type"]; routeStatus: RouteDetail["status"]; inProgress: boolean; busy: boolean; open: boolean;
   // Otra parada está abierta: esta se atenúa, pero se puede tocar.
   dimmed: boolean; onToggle: (stopId: number) => void;
   act: (fn: () => Promise<unknown>, onError?: (message: string) => void, success?: string) => Promise<void>; onStopSaved: (stop: Stop) => void;
+  // Búsqueda en el reparto: los envíos que coinciden (se destacan).
+  match?: number[];
 }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -575,6 +615,11 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
               {declares ? ` · ${declarationLabel(stop.declared_count)}` : ""}
             </Text>
           )}
+          {match?.length ? (
+            <Text style={styles.searchHit}>
+              Coincide: {stop.deliveries.filter((d) => match.includes(d.delivery_id)).map((d) => `${d.tracking ?? d.delivery_id}${d.nombre_destinatario ? ` · ${d.nombre_destinatario}` : ""}`).join(", ")}
+            </Text>
+          ) : null}
         </View>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color={theme.text.muted} />
       </Pressable>
@@ -608,7 +653,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
             const canAct = inProgress && !view.final && (stop.status === "ARRIVED" || stop.status === "PENDING");
             const ml = providerGoverned(d);
             return (
-              <View key={d.delivery_id} style={styles.deliveryRow}>
+              <View key={d.delivery_id} style={[styles.deliveryRow, match?.includes(d.delivery_id) && styles.deliveryRowHit]}>
                 <View style={{ flex: 1 }}>
                   <DeliveryHead d={d} />
                   <Text style={[styles.stopMeta, view.tone === "delivered" ? styles.deliveryDone : view.final ? styles.stopStatusClosed : null]}>{view.label}</Text>
@@ -823,6 +868,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // La parada abierta se destaca; las demás se atenúan un poco (siguen tocables).
   stopOpen: { borderWidth: 1.5, borderColor: t.colors.primary },
   stopDimmed: { opacity: 0.6 },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, backgroundColor: t.surfaces.input, paddingHorizontal: 12, marginTop: t.spacing.sm, marginBottom: t.spacing.xs },
+  searchInput: { flex: 1, minHeight: 44, color: t.text.primary, paddingVertical: 0 },
+  searchEmpty: { gap: 6, paddingVertical: t.spacing.sm, paddingHorizontal: 4 },
+  searchHit: { color: t.text.accent, fontSize: 13, fontWeight: "600", marginTop: 4 },
+  deliveryRowHit: { borderLeftWidth: 3, borderLeftColor: t.text.accent, paddingLeft: 8 },
   finishedHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48, paddingHorizontal: 4, marginTop: t.spacing.sm },
   finishedTitle: { color: t.text.secondary, fontSize: 15, fontWeight: "700" },
   notes: { gap: 8 },

@@ -1935,6 +1935,40 @@ const setDriverApi = () => {
       api.replies["GET /v2/routes/158"] = { ok: true, route: r158 };
       await sv().props.refreshControl.props.onRefresh(); tree = await settle();
     }
+    // Buscador del reparto: local, por tracking, destinatario o dirección; no cambia
+    // el orden, los estados ni lo que falta para completar.
+    {
+      const field = () => byLabel(tree, "Buscar envío en el recorrido")[0];
+      const type = async (q: string) => { field().props.onChangeText(q); tree = await settle(); };
+      check("Buscador: está en el detalle del reparto", !!field() && field().props.value === "");
+      const callsBefore = api.calls.length;
+      await type("4603");
+      let txt = textOf(tree);
+      check("Buscador por tracking: solo la parada que coincide, aunque esté finalizada (abierta)", !!head(tree, "Paso 5") && !head(tree, "Mitre 10") && !head(tree, "Lavalle 300"), txt.slice(0, 300));
+      check("Buscador: destaca el envío que coincide en la parada", txt.includes("Coincide: 4603 · Daniela Cliente"));
+      for (const scheme of ["dark", "light"]) {
+        const th = createTheme({ scheme });
+        useTheme(th); tree = await settle();
+        check(`Buscador ${scheme}: el campo y lo destacado se leen`, legibility(tree, th.surfaces.screen).bad.length === 0, legibility(tree, th.surfaces.screen).bad.join(" · "));
+      }
+      useTheme(dark); tree = await settle();
+      check("Buscador: lo que falta para completar sigue mirando todo el recorrido", txt.includes("Queda 1 parada pendiente") && !!pressable(tree, "Queda 1 parada pendiente").props.disabled);
+      check("Buscador: la cabecera sigue contando todo", txt.includes("3 envíos · 1 pendiente · 2 finalizados"));
+      await type("  LAVALLE ");
+      check("Buscador por dirección: sin mayúsculas ni espacios de más", !!head(tree, "Lavalle 300") && !head(tree, "Paso 5") && !head(tree, "Mitre 10"));
+      await type("mitre");
+      check("Buscador: una parada pendiente queda con sus acciones", !!head(tree, "Mitre 10") && !textOf(tree).includes("Finalizados ("));
+      await type("zzz");
+      txt = textOf(tree);
+      check("Buscador sin coincidencias: lo dice y ofrece volver a todas", txt.includes("Ningún envío de este recorrido coincide con «zzz».") && !head(tree, "Mitre 10") && txt.includes("Ver todas las paradas"));
+      check("Buscador: escribir no pide nada a la API", api.calls.length === callsBefore, api.calls.slice(callsBefore).join(", "));
+      tree = await press(tree, "Ver todas las paradas");
+      check("Buscador: «Ver todas las paradas» vuelve al listado completo, en su orden y con «Finalizados» plegado",
+        field().props.value === "" && !!head(tree, "Mitre 10") && !head(tree, "Lavalle 300") && textOf(tree).includes("Finalizados (2)"));
+      await type("4602");
+      byLabel(tree, "Limpiar búsqueda")[0].props.onPress(); tree = await settle();
+      check("Buscador: el botón de limpiar también vuelve al listado completo", field().props.value === "" && !!head(tree, "Mitre 10") && textOf(tree).includes("Finalizados (2)"));
+    }
     tree = await press(tree, "Finalizados (2)");
     body = textOf(tree);
     check("Finalizados: al abrirlo, las paradas terminadas en orden de visita, con dirección, destinatario y resultado",
