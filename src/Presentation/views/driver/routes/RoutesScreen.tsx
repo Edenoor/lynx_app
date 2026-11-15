@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
-import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
+import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { fetchMyRoutes, RouteSummary, todayIso } from "./routesApi";
 import { fetchMyGroups, TurboGroup, TurboLoad } from "../turbo/turboApi";
@@ -57,16 +57,6 @@ export default function RoutesScreen({ navigation }: Props) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => navigation.addListener("focus", load), [navigation, load]);
-
-  const handleTabPress = (tab: DriverTabKey) => {
-    switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
-      default: break;
-    }
-  };
 
   return (
     <ImageBackground source={require("../../../../../assets/background-1.png")} style={styles.background} imageStyle={styles.backgroundImage}>
@@ -120,7 +110,7 @@ export default function RoutesScreen({ navigation }: Props) {
             contentContainerStyle={{ paddingBottom: 24 }}
           />
         </View>
-        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+        <DriverBottomNavigation activeTab="deliveries" />
       </SafeAreaView>
     </ImageBackground>
   );

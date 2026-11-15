@@ -19,9 +19,8 @@ import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import ThemedCard from "../../../components/ThemedCard";
 import StatusChip from "../../../components/StatusChip";
-import DriverBottomNavigation, {
-  DriverTabKey,
-} from "../../../components/DriverBottomNavigation";
+import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
+import { goToDriverTab } from "../../../navigator/driverTabs";
 import ContinueBar, { CONTINUE_BAR_SPACE } from "../../../components/driver/ContinueBar";
 import { useDriverWork } from "../work/workSource";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
@@ -157,25 +156,6 @@ export default function CollectionsScreen({ navigation }: Props) {
     );
   };
 
-  const handleTabPress = (tab: DriverTabKey) => {
-    switch (tab) {
-      case "home":
-        navigation.navigate("DriverScreen");
-        break;
-      case "deliveries":
-        navigation.navigate("EnviosScreen");
-        break;
-      case "scan":
-        navigation.navigate("DriverScanOptionsScreen");
-        break;
-      case "activity":
-        navigation.navigate("NotificationsScreen");
-        break;
-      default:
-        break;
-    }
-  };
-
   // Una tarjeta por horario de colecta habitual; las extraordinarias, una por recorrido.
   const cards = collectionCards(routes ?? [], today, tomorrow);
   const habituales = cards.filter((c): c is HabitualCard => c.kind === "habitual");
@@ -272,13 +252,10 @@ export default function CollectionsScreen({ navigation }: Props) {
         <ContinueBar
           missions={missions}
           onOpen={(m) => (navigation as any).navigate(m.target.screen, m.target.params)}
-          onSeeAll={() => navigation.navigate("DriverScreen")}
+          onSeeAll={() => goToDriverTab(navigation, "home")}
         />
 
-        <DriverBottomNavigation
-          activeTab="collections"
-          onPress={handleTabPress}
-        />
+        <DriverBottomNavigation activeTab="collections" />
       </SafeAreaView>
     </ImageBackground>
   );

@@ -21,7 +21,7 @@ import type { Theme } from "../../../theme/createTheme";
 import { DEFAULT_THEME, FixedTheme } from "../../../theme/FixedTheme";
 import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import { QrScanner } from "../../../components/QrScanner";
-import { DriverBottomNavigation, DriverTabKey } from "../../../components/DriverBottomNavigation";
+import { DriverBottomNavigation } from "../../../components/DriverBottomNavigation";
 import { getJsonWithTimeout, postJsonWithTimeout, putJsonWithTimeout } from "../../../config/Api";
 import { playScanError, playScanSuccess } from "../../../config/ScanSound";
 import { PendingPackage, processScan } from "../../picker/pickerScan";
@@ -136,17 +136,11 @@ export default function DriverScanScreen({ navigation, route }: Props) {
     navigation.goBack();
   }, [navigation]);
 
-  const handleTabPress = useCallback(
-    (tab: DriverTabKey) => {
-      if (tab === "scan") return;
-      setBlocked(true);
-      setOpen(false);
-      if (tab === "home") navigation.navigate("DriverScreen");
-      else if (tab === "deliveries") navigation.navigate("EnviosScreen");
-      else if (tab === "activity") navigation.navigate("NotificationsScreen");
-    },
-    [navigation]
-  );
+  // Salir del escáner por la barra cierra la cámara (el Modal quedaba encima); la barra navega sola.
+  const handleTabPress = useCallback(() => {
+    setBlocked(true);
+    setOpen(false);
+  }, []);
 
   const ensurePermission = useCallback(async () => {
     if (!permission?.granted) {

@@ -43,8 +43,8 @@ import { confirmationNoticeText } from "../routes/collectionLabels";
 import { todayIso } from "../routes/routesApi";
 import {
   DriverBottomNavigation,
-  DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
+import { goToDriverTab } from "../../../navigator/driverTabs";
 import DriverPerformanceCard from "../../../components/DriverPerformanceCard";
 import { capNotice, loadTotal } from "../turbo/turboGroup";
 import MissionCard from "../../../components/driver/MissionCard";
@@ -537,23 +537,6 @@ export const DriverScreen = ({ navigation }: Props) => {
       setAssignmentActionLoading(null);
     }
   };
-  const handleTabPress = (tab: DriverTabKey) => {
-    if (tab === "home") {
-      navigation.navigate("DriverScreen");
-      return;
-    }
-    if (tab === "deliveries") {
-      navigation.navigate("EnviosScreen");
-      return;
-    }
-    if (tab === "scan") {
-      navigation.navigate("DriverScanOptionsScreen");
-      return;
-    }
-    if (tab === "activity") {
-      navigation.navigate("NotificationsScreen");
-    }
-  };
   const feedbackTone =
     feedbackModal.type === "success"
       ? theme.status.confirmed
@@ -647,7 +630,7 @@ export const DriverScreen = ({ navigation }: Props) => {
               <MissionCard key={m.key} mission={m} compact onPress={() => (navigation as any).navigate(m.target.screen, m.target.params)} />
             ))}
             {missions.length > 1 + MORE_MISSIONS ? (
-              <Pressable onPress={() => navigation.navigate("EnviosScreen")} style={styles.moreMissions} accessibilityRole="button" hitSlop={6}>
+              <Pressable onPress={() => goToDriverTab(navigation, "deliveries")} style={styles.moreMissions} accessibilityRole="button" hitSlop={6}>
                 <Text style={styles.moreMissionsText}>
                   {missions.length - 1 - MORE_MISSIONS === 1 ? "Un recorrido más en curso" : `${missions.length - 1 - MORE_MISSIONS} recorridos más en curso`}: ver en Envíos
                 </Text>
@@ -687,7 +670,7 @@ export const DriverScreen = ({ navigation }: Props) => {
         </View>
         </View>
       </ScrollView>
-      <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
+      <DriverBottomNavigation activeTab="home" />
       <Modal transparent visible={turboPanelVisible} animationType="fade" onRequestClose={() => setTurboPanelVisible(false)}>
         <Pressable style={styles.feedbackOverlay} onPress={() => setTurboPanelVisible(false)}>
           <Pressable style={styles.turboSheet} onPress={() => {}}>

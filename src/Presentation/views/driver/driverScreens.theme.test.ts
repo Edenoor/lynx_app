@@ -104,6 +104,7 @@ async function mount(el: any) {
   for (const slots of instances.values()) for (const s of slots) if (typeof s.cleanup === "function") s.cleanup();
   resetCaches();
   instances.clear();
+  preventers.clear();
   pending = [];
   rootEl = el;
   return settle();
@@ -112,6 +113,7 @@ async function settle() {
   let tree: any;
   for (let n = 0; n < 40; n++) {
     dirty = false;
+    drawPass++;
     tree = draw(rootEl, "root");
     const run = pending; pending = [];
     run.forEach((f) => f());
@@ -122,7 +124,27 @@ async function settle() {
 }
 
 // ---------- Simulaciones ----------
-const nav = { calls: [] as any[], navigate: (...a: any[]) => nav.calls.push(["navigate", ...a]), goBack: () => nav.calls.push(["goBack"]), addListener: () => () => {}, getParent: () => ({ reset: (a: any) => nav.calls.push(["reset", a]) }) };
+// La barra cambia de sección con un reset del stack (navigator/driverTabs.ts):
+// el stack simulado es [Inicio, otra pantalla] y se anota como «stackReset».
+const HOME_ROUTE = { key: "home", name: "DriverScreen" };
+const nav = {
+  calls: [] as any[], navigate: (...a: any[]) => nav.calls.push(["navigate", ...a]), goBack: () => nav.calls.push(["goBack"]), addListener: () => () => {},
+  getParent: () => ({ reset: (a: any) => nav.calls.push(["reset", a]) }),
+  getState: () => ({ index: 1, routes: [HOME_ROUTE, { key: "here", name: "Here" }] }),
+  reset: (s: any) => nav.calls.push(["stackReset", s]),
+  dispatch: (a: any) => nav.calls.push(["dispatch", a]),
+};
+const tabNav = (screen: string) => ["stackReset", screen === "DriverScreen" ? { index: 0, routes: [HOME_ROUTE] } : { index: 1, routes: [HOME_ROUTE, { name: screen }] }];
+// usePreventRemove (pendingWork.tsx): uno por componente, y cuenta lo que se
+// dibujó en la última pasada (un formulario que se cerró ya no frena nada).
+const preventers = new Map<any, { prevent: boolean; cb: (e: any) => void; pass: number }>();
+let drawPass = 0;
+const preventRemove = {
+  get current() {
+    const hit = [...preventers.values()].find((p) => p.pass === drawPass && p.prevent);
+    return { prevent: !!hit, cb: hit?.cb ?? (() => {}) };
+  },
+};
 const alerts: any[] = [];
 // Sonidos de resultado del escáner, en orden.
 const sounds: string[] = [];
@@ -184,6 +206,7 @@ const MOCKS: Record<string, any> = {
     // Alertas abre la pestaña pedida en route.params.tab (fase 2: Ofertas es una pestaña).
     useRoute: () => ({ params: alertsParams.current }),
     useFocusEffect: (cb: any) => FakeReact.useEffect(cb, [cb]),
+    usePreventRemove: (prevent: boolean, cb: (e: any) => void) => { preventers.set(hooks, { prevent, cb, pass: drawPass }); },
     useIsFocused: () => true,
     DarkTheme: { dark: true, colors: {} },
     DefaultTheme: { dark: false, colors: {} },
@@ -576,7 +599,7 @@ const setDriverApi = () => {
     check("Mi cuenta: Mi domicilio abre su pantalla", JSON.stringify(lastNav()) === JSON.stringify(["navigate", "DriverHomeScreen"]));
     for (const [tab, route] of [["Envíos", "EnviosScreen"], ["QR", "DriverScanOptionsScreen"], ["Colectas", "CollectionsScreen"], ["Alertas", "NotificationsScreen"]]) {
       tree = await press(tree, tab);
-      check(`Mi cuenta: barra → ${tab}`, JSON.stringify(lastNav()) === JSON.stringify(["navigate", route]));
+      check(`Mi cuenta: barra → ${tab}`, JSON.stringify(lastNav()) === JSON.stringify(tabNav(route)));
     }
     tree = await press(tree, "Cerrar sesión");
     check("Mi cuenta: cerrar sesión pide confirmación (sin cerrar)", alerts.length === 1 && alerts[0][0] === "Cerrar sesión" && alerts[0][2].map((b: any) => b.text).join("|") === "Cancelar|Cerrar sesión" && !nav.calls.some((c) => c[0] === "reset"));
@@ -617,7 +640,7 @@ const setDriverApi = () => {
     cont.props.onPress();
     check("Envíos: «Continuar» abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 8 }]));
     tree = await press(tree, "+1");
-    check("Envíos: con dos en la calle, «+1» los muestra en Inicio", js(lastNav()) === js(["navigate", "DriverScreen"]));
+    check("Envíos: con dos en la calle, «+1» los muestra en Inicio (sin otro Inicio encima)", js(lastNav()) === js(tabNav("DriverScreen")));
 
     // Ofertas: sin botón propio; un aviso discreto (2 Turbos sueltos + 1
     // recorrido) que lleva a Alertas › Ofertas, y el contador en la barra.
@@ -804,7 +827,7 @@ const setDriverApi = () => {
     nav.calls = [];
     for (const [tab, route] of [["Inicio", "DriverScreen"], ["QR", "DriverScanOptionsScreen"], ["Alertas", "NotificationsScreen"]]) {
       tree = await press(tree, tab);
-      check(`Envíos: barra → ${tab}`, js(lastNav()) === js(["navigate", route]));
+      check(`Envíos: barra → ${tab}`, js(lastNav()) === js(tabNav(route)));
     }
   }
   {
@@ -866,7 +889,7 @@ const setDriverApi = () => {
     check("Alertas: eliminar quita esa alerta (ya leída: no se vuelve a marcar)", same(notis.calls, [["remove", "f"]]));
     for (const [tab, route] of [["Inicio", "DriverScreen"], ["Envíos", "EnviosScreen"], ["QR", "DriverScanOptionsScreen"]]) {
       tree = await press(tree, tab);
-      check(`Alertas: barra → ${tab}`, same(lastNav(), ["navigate", route]));
+      check(`Alertas: barra → ${tab}`, same(lastNav(), tabNav(route)));
     }
     for (const scheme of ["dark", "light"]) for (const style of VISUAL_STYLES) {
       const th = createTheme({ scheme, style });
@@ -1087,7 +1110,7 @@ const setDriverApi = () => {
     second.props.onPress();
     check("Inicio: la fila abre ese recorrido", js(lastNav()) === js(["navigate", "RouteDetailScreen", { routeId: 12 }]));
     byLabel(tree, "Alertas: 3")[0].props.onPress();
-    check("Inicio: «Alertas» de la barra abre Alertas", js(lastNav()) === js(["navigate", "NotificationsScreen"]));
+    check("Inicio: «Alertas» de la barra abre Alertas", js(lastNav()) === js(tabNav("NotificationsScreen")));
     for (const scheme of ["dark", "light"]) {
       const th = createTheme({ scheme });
       useTheme(th);
@@ -1280,7 +1303,7 @@ const setDriverApi = () => {
       check("Escáner en claro: el resultado se sigue viendo sobre el visor oscuro", card(t2) === "Envío asignado. 47000000101");
       t2 = await press(t2, "Colectas");
       check("Escáner: «Colectas» de la barra cierra el visor y abre Colectas (el Modal no queda encima)",
-        !all(t2, (x) => x.type === "Modal").length && same(lastNav(), ["navigate", "CollectionsScreen"]), JSON.stringify(nav.calls));
+        !all(t2, (x) => x.type === "Modal").length && same(lastNav(), tabNav("CollectionsScreen")), JSON.stringify(nav.calls));
       useTheme(dark);
       // Lo que siguen esperando las pruebas de abajo: un escaneo hecho en esta pantalla.
       tree = await open("asignarme");
@@ -1397,7 +1420,7 @@ const setDriverApi = () => {
     tree = await open("asignarme");
     tree = await scan(tree, ML("47455555555"));
     tree = await press(tree, "Inicio");
-    check("Cierre: la barra navega con el pedido en curso", same(lastNav(), ["navigate", "DriverScreen"]));
+    check("Cierre: la barra navega con el pedido en curso", same(lastNav(), tabNav("DriverScreen")));
     tree = await mount(RealReact.createElement("View", null));
     let crashed = "";
     try { pendingReply({ ok: false, status: 401, sessionExpired: true }); await settle(); } catch (e: any) { crashed = String(e?.message ?? e); }
@@ -1930,6 +1953,7 @@ const setDriverApi = () => {
       check("Observación: multilínea, sin enviar con Enter, y «Guardar» apagado sin cambios",
         notesInput().props.multiline === true && !notesInput().props.onSubmitEditing && !!pressable(tree, "Guardar observación").props.disabled);
       notesInput().props.onChangeText("Portón verde"); tree = await settle();
+      check("Salir con una observación sin guardar: la pantalla lo frena (Atrás, gesto o barra)", preventRemove.current?.prevent === true);
       api.calls = []; api.bodies = [];
       api.replies["PUT /v2/routes/158/stops/2/notes"] = { ok: false, status: 404, invalidResponse: true, error: "Respuesta inesperada del servidor (404)" };
       pressable(tree, "Guardar observación").props.onPress(); pressable(tree, "Guardar observación").props.onPress(); tree = await settle();
@@ -1945,11 +1969,30 @@ const setDriverApi = () => {
       tree = await press(tree, "Guardar observación");
       check("Observación: PUT /v2/routes/158/stops/2/notes con el texto y confirma", js(api.bodies) === js([["PUT /v2/routes/158/stops/2/notes", { notes: "Portón verde" }]]) && textOf(tree).includes("Observación guardada"), js(api.bodies));
       check("Observación guardada: el campo queda con driver_notes, sin la nota del sistema", notesInput().props.value === "Portón verde" && !textOf(tree).includes("escaneado por el chofer"));
+      check("Observación guardada: salir ya no pregunta", preventRemove.current?.prevent === false);
       api.bodies = [];
       tree = await press(tree, "No pude entregar");
       const comment = all(tree, (x) => x.type === "TextInput" && /Comentario \(opcional\)/.test(x.props.placeholder ?? ""))[0];
       check("No pude entregar (propio): comentario opcional, multilínea", !!comment && comment.props.multiline === true);
       comment.props.onChangeText("  Nadie en casa  "); tree = await settle();
+      // Un envío a medio cerrar: salir pregunta y solo sale si el chofer lo elige.
+      check("Cierre abierto: salir de la pantalla lo frena", preventRemove.current?.prevent === true);
+      {
+        alerts.length = 0; nav.calls = [];
+        const leave = { type: "RESET", payload: { index: 1, routes: [HOME_ROUTE, { name: "EnviosScreen" }] } };
+        // Dos formularios frenan la misma salida a la vez: un solo aviso.
+        preventRemove.current!.cb({ data: { action: leave } });
+        preventRemove.current!.cb({ data: { action: leave } });
+        check("Salida frenada dos veces a la vez: un solo aviso", alerts.length === 1, js(alerts));
+        const [title, , buttons] = alerts[0] ?? [];
+        check("Cierre abierto: el aviso dice que se pierde lo no confirmado y ofrece quedarse o salir",
+          title === "Tenés algo sin confirmar" && buttons?.map((b: any) => b.text).join("|") === "Seguir acá|Salir igual", js(alerts));
+        check("Cierre abierto: «Seguir acá» no navega", !nav.calls.length && !buttons?.[0]?.onPress);
+        buttons?.[1]?.onPress();
+        check("Cierre abierto: «Salir igual» hace la navegación que se había frenado", js(nav.calls) === js([["dispatch", leave]]), js(nav.calls));
+        alerts.length = 0; nav.calls = [];
+        check("Cierre abierto: el texto escrito sigue ahí mientras no se sale", textOf(tree).includes("Confirmar no entregado"));
+      }
       // Sin el OK del servidor no hay confirmación: el error queda en el cierre.
       announced.length = 0;
       api.replies["POST /v2/routes/158/stops/2/outcomes"] = { ok: false, status: 409, error: "La parada ya está cerrada" };
@@ -1960,6 +2003,10 @@ const setDriverApi = () => {
       api.bodies = [];
       tree = await press(tree, "Confirmar no entregado");
       check("No entregado: confirmación breve recién con el OK", js(announced) === js(["No entregado registrado"]));
+      // El cierre ya no frena; la recarga trajo la parada sin la observación (el
+      // servidor simulado no la guarda), así que el texto del campo sigue sin guardar.
+      check("No entregado confirmado: el cierre ya no frena; sí la observación que la recarga no trajo",
+        !textOf(tree).includes("Confirmar no entregado") && notesInput().props.value === "Portón verde" && preventRemove.current?.prevent === true);
       const nd = api.bodies.find(([k]) => k === "POST /v2/routes/158/stops/2/outcomes");
       check("No pude entregar: el comentario viaja en notes (recortado), sin declarar nada más",
         !!nd && js(nd[1]) === js({ delivery_id: nd[1].delivery_id, outcome: "NOT_DELIVERED", notes: "Nadie en casa" }), js(api.bodies));
@@ -2152,6 +2199,7 @@ const setDriverApi = () => {
       check("Ruteador: al entrar pide el recorrido y los lugares, nada más", js([...api.calls].sort()) === js(["GET /v2/routes/158", "GET /v2/routes/158/plan/places"]), js(api.calls));
       check("Ruteador: por defecto sale del depósito y termina en Mi domicilio", text.includes("Depósito · Barracas") && text.includes("Terminar enMi domicilio") && text.includes("Primera paradaAutomática") && text.includes("Última paradaAutomática"));
       check("Ruteador: sin cambios no hay nada que confirmar", !!pressable(tree, "Confirmar orden").props.disabled);
+      check("Ruteador: sin cambios, salir no pregunta", preventRemove.current.prevent === false);
       check("Ruteador: la parada visitada no se mueve (sin flechas)", text.includes("Cerrada · no se mueve") && !byLabel(tree, "Subir parada 3").length && byLabel(tree, "Bajar parada 1").length === 1);
       tree = await press(tree, "Optimizar");
       check("Ruteador: optimizar manda depósito y domicilio por tipo (las coordenadas las pone el servidor)",
@@ -2163,6 +2211,7 @@ const setDriverApi = () => {
       byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
       check("Ruteador: a mano vuelve al orden original → nada que confirmar", js(addresses(tree)) === js(["Lavalle 300", "Mitre 10", "Paso 5"]) && textOf(tree).includes("Cambiaste el orden a mano") && !!pressable(tree, "Confirmar orden").props.disabled);
       byLabel(tree, "Bajar parada 1")[0].props.onPress(); tree = await settle();
+      check("Ruteador: con un orden sin confirmar, salir (Atrás, gesto o barra) pregunta antes", preventRemove.current.prevent === true);
       const SHAPE13 = { ok: true, route_id: 158, stop_ids: [1, 3], missing_stop_ids: [2], shapes: ["_p~iF~ps|U_ulLnnqC"], precision: 6, km: 2.1, seconds: 300 };
       api.replies["POST /v2/routes/158/plan/shape-preview"] = SHAPE13;
       tree = await press(tree, "Ver en el mapa");

@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAppTheme, useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { canDeclare, declarationLabel, parseDeclaredCount } from "./stopDeclaration";
+import { usePendingWork } from "../pendingWork";
 
 type Props = {
   count: number | null;
@@ -25,6 +26,7 @@ export default function DeclaredCountForm({ count, routeStatus, busy, error, onS
   const [editing, setEditing] = useState(count === null);
   const [text, setText] = useState("");
   const [invalid, setInvalid] = useState<string | null>(null);
+  usePendingWork(editing && text.trim() !== "");
   const editable = canDeclare(routeStatus);
 
   const submit = () => {

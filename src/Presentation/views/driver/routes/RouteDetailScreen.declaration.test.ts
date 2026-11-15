@@ -69,12 +69,12 @@ const MOCKS: Record<string, any> = {
   "@expo/vector-icons": { Ionicons: "Ionicons" },
   "expo-status-bar": { StatusBar: "StatusBar" },
   // La barra de abajo (DriverBottomNavigation) navega por su cuenta.
-  "@react-navigation/native": { useIsFocused: () => true, useNavigation: () => nav },
+  "@react-navigation/native": { useIsFocused: () => true, useNavigation: () => nav, usePreventRemove: () => {} },
   // El mapa del recorrido (RouteMapModal).
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker" },
   "react-native-safe-area-context": { SafeAreaView: "SafeAreaView", useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
 };
-const nav = { navigate: () => {}, goBack: () => {}, addListener: () => () => {} };
+const nav = { navigate: () => {}, goBack: () => {}, addListener: () => () => {}, getState: () => undefined, reset: () => {} };
 // DriverLocation simulado: cuántas veces la pantalla pidió la política del GPS.
 const gps = { refreshes: 0 };
 const DriverLocationMock = { refreshTrackingPolicy: () => { gps.refreshes++; return Promise.resolve(); } };

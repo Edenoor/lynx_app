@@ -12,7 +12,7 @@ import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
 import ThemedCard from "../../../components/ThemedCard";
 import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import { EDGES_ABOVE_BOTTOM_BAR, SafeScreen } from "../../../components/SafeScreen";
-import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
+import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
 import RouteMapModal from "../../../components/driver/RouteMapModal";
 import { queueFlash } from "../../../components/driver/SuccessFlash";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
@@ -28,6 +28,7 @@ import {
   moveStop, orderedStops, pointAvailability, pointLabel, sameOrder, START_KINDS,
 } from "./routePlan";
 import { stopAddress } from "./stopView";
+import { usePendingWork } from "../pendingWork";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteOrganizeScreen">;
 type Chooser = "start" | "end" | "first" | "last";
@@ -49,16 +50,6 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
   const [mapOpen, setMapOpen] = useState(false);
   const [unreachable, setUnreachable] = useState<number[]>([]);
 
-  const handleTabPress = (tab: DriverTabKey) => {
-    switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
-      default: break; // Colectas lo resuelve DriverBottomNavigation.
-    }
-  };
-
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -73,6 +64,9 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
     }
   }, [routeId]);
   useEffect(() => { load(); }, [load]);
+  // Un orden cambiado y sin confirmar no se pierde por salir (Atrás, gesto o
+  // barra). Mientras se guarda (busy) no se pregunta: confirmar vuelve solo.
+  usePendingWork(!!route && !busy && !sameOrder(order, route.stops.map(s => s.id)));
 
   if (!route || !places || !points) {
     return (
@@ -85,7 +79,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
               <Text style={styles.link}>Volver</Text>
             </Pressable>
           </View>
-          <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+          <DriverBottomNavigation activeTab="deliveries" />
         </SafeScreen>
       </ImageBackground>
     );
@@ -248,7 +242,7 @@ export default function RouteOrganizeScreen({ navigation, route: nav }: Props) {
             ) : null}
           </KeyboardScreen>
         </View>
-        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+        <DriverBottomNavigation activeTab="deliveries" />
       </SafeScreen>
 
       <RouteMapModal

@@ -20,7 +20,6 @@ import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import useViewModel from "../landing/ViewModel";
 import {
   DriverBottomNavigation,
-  DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
 import { fetchMyHome } from "./homeApi";
 import DriverAvatar from "../../../components/driver/DriverAvatar";
@@ -77,30 +76,6 @@ export default function DriverAccountScreen() {
 
   const driverName = useMemo(() => getDriverDisplayName(user), [user]);
   const username = (user as any)?.username || user?.email || user?.name || "";
-
-  const handleTabPress = useCallback(
-    (tab: DriverTabKey) => {
-      if (tab === "home") {
-        navigation.navigate("DriverScreen");
-        return;
-      }
-
-      if (tab === "deliveries") {
-        navigation.navigate("EnviosScreen");
-        return;
-      }
-
-if (tab === "scan") {
-  navigation.navigate("DriverScanOptionsScreen");
-  return;
-}
-
-      if (tab === "activity") {
-        navigation.navigate("NotificationsScreen");
-      }
-    },
-    [navigation]
-  );
 
   const handleLogout = () => {
     Alert.alert("Cerrar sesión", "¿Querés salir de tu cuenta?", [
@@ -240,7 +215,7 @@ if (tab === "scan") {
       </ScrollView>
 
       {/* Perfil se abre desde Inicio: la barra lo muestra como parte de Inicio. */}
-      <DriverBottomNavigation activeTab="home" onPress={handleTabPress} />
+      <DriverBottomNavigation activeTab="home" />
 
       {/* Los documentos se ven dentro de la app (la dirección viene del pedido autenticado). No hay validación: solo si se envió. */}
       {docsOpen && profile ? (

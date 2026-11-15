@@ -38,7 +38,8 @@ import {
 import ProviderBadge from "../../../components/driver/ProviderBadge";
 import { canOrganize } from "./routePlan";
 import { refreshTrackingPolicy } from "../../../config/DriverLocation";
-import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
+import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
+import { usePendingWork } from "../pendingWork";
 type Props = NativeStackScreenProps<DriverStackParamList, "RouteDetailScreen">;
 // Mercado Libre decide el resultado de sus envíos: desde Lynx no se registra nada.
 const ML_TITLE = "Entrega de Mercado Libre";
@@ -68,6 +69,9 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const [mapOpen, setMapOpen] = useState(false);
   // Confirmación breve de lo que el servidor aceptó (SuccessFlash). Después del mapa: las pruebas toman los useState por orden.
   const [flash, setFlash] = useState<FlashMessage | null>(null);
+  // El conteo de carga escrito y sin confirmar no se pierde por salir; los
+  // formularios de cada parada avisan lo suyo (pendingWork).
+  usePendingWork(route?.type === "DELIVERY" && route.status === "ASSIGNED" && count.trim() !== "");
   const load = useCallback(async () => {
     try { const r = await fetchRoute(routeId); setRoute(r); setError(null); }
     catch (e: any) { setError(errorMessage(e, "No se pudo cargar el recorrido")); }
@@ -139,15 +143,6 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
       // Flex que no figura «En camino» en Mercado Libre: se avisa, no se frena.
       if (r.warnings?.length) Alert.alert("Revisá en Envíos Flex", r.warnings.map((w) => w.message).join("\n"));
     });
-  const handleTabPress = (tab: DriverTabKey) => {
-    switch (tab) {
-      case "home": navigation.navigate("DriverScreen"); break;
-      case "deliveries": navigation.navigate("EnviosScreen"); break;
-      case "scan": navigation.navigate("DriverScanOptionsScreen"); break;
-      case "activity": navigation.navigate("NotificationsScreen"); break;
-      default: break;
-    }
-  };
 
   // Antes de completar, la app cierra las paradas terminadas que el servidor no
   // cierra solo (stopsToCloseOnFinish), una por una, como haría el chofer.
@@ -171,7 +166,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
             {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator color={theme.text.accent} />}
             <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 16 }}><Text style={styles.link}>Volver</Text></Pressable>
           </View>
-          <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+          <DriverBottomNavigation activeTab="deliveries" />
         </SafeScreen>
       </View>
     );
@@ -344,7 +339,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
           </KeyboardScreen>
         </View>
         {flash ? <SuccessFlash message={flash} /> : null}
-        <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+        <DriverBottomNavigation activeTab={isPickup ? "collections" : "deliveries"} />
       </SafeScreen>
       <RouteMapModal
         visible={mapOpen} title={`${TYPE_LABEL[route.type]} #${route.id}`} stops={route.stops} onClose={() => setMapOpen(false)}
@@ -387,6 +382,7 @@ function StopNotes({ routeId, stopId, saved, onSaved }: { routeId: number; stopI
   // Frena el segundo toque antes de que el estado deshabilite el botón.
   const sending = useRef(false);
   const changed = text.trim() !== (saved ?? "").trim();
+  usePendingWork(changed);
   const save = async () => {
     if (sending.current || !changed) return;
     sending.current = true;

@@ -13,7 +13,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useThemedStyles } from "../../../theme/ThemeContext";
 import type { Theme } from "../../../theme/createTheme";
 import { ThemedStatusBar } from "../../../theme/ThemedStatusBar";
-import DriverBottomNavigation, { DriverTabKey } from "../../../components/DriverBottomNavigation";
+import DriverBottomNavigation from "../../../components/DriverBottomNavigation";
 import DriverQrActionGrid from "../../../components/DriverQrActionGrid";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
@@ -25,23 +25,6 @@ type Props = NativeStackScreenProps<
 
 export default function DriverScanOptionsScreen({ navigation }: Props) {
   const styles = useThemedStyles(makeStyles);
-  const handleTabPress = (tab: DriverTabKey) => {
-    switch (tab) {
-      case "home":
-        navigation.navigate("DriverScreen");
-        break;
-      case "deliveries":
-        navigation.navigate("EnviosScreen");
-        break;
-      case "scan":
-        break;
-      case "activity":
-        navigation.navigate("NotificationsScreen");
-        break;
-      default:
-        break;
-    }
-  };
 
   return (
     <ImageBackground
@@ -83,7 +66,7 @@ export default function DriverScanOptionsScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <DriverBottomNavigation activeTab="scan" onPress={handleTabPress} />
+        <DriverBottomNavigation activeTab="scan" />
       </SafeAreaView>
     </ImageBackground>
   );

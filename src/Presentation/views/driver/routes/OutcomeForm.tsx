@@ -13,6 +13,7 @@ import type { Theme } from "../../../theme/createTheme";
 import {
   Destination, DESTINATION_LABEL, emptyDraft, formatAmountAr, NOTES_MAX, OutcomeDraft, parseAmountAr, PAYMENT_LABEL, PaymentMethod, RETURN_LABEL, ReturnKind,
 } from "./outcomeDeclaration";
+import { usePendingWork } from "../pendingWork";
 
 type Props = {
   outcome: "DELIVERED" | "NOT_DELIVERED";
@@ -38,6 +39,8 @@ export default function OutcomeForm({ outcome, cobranza, reverseRequest = null, 
   // El error del importe se muestra al salir del campo o al confirmar, no
   // mientras se escribe («1.5» camino a «1.500»).
   const [showAmountError, setShowAmountError] = useState(false);
+  // Abierto = un envío a medio cerrar: salir de la pantalla pregunta antes (pendingWork).
+  usePendingWork(true);
   const set = (patch: Partial<OutcomeDraft>) => setDraft((d) => ({ ...d, ...patch }));
   const amount = parseAmountAr(draft.amountText);
   const delivered = outcome === "DELIVERED";

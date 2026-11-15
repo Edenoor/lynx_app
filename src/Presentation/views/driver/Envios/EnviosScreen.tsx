@@ -41,8 +41,8 @@ import WorkItemCard from "../../../components/driver/WorkItemCard";
 import ContinueBar, { CONTINUE_BAR_SPACE } from "../../../components/driver/ContinueBar";
 import {
   DriverBottomNavigation,
-  DriverTabKey,
 } from "../../../components/DriverBottomNavigation";
+import { goToDriverTab } from "../../../navigator/driverTabs";
 import {
   closedOf,
   dayLabel,
@@ -337,27 +337,6 @@ export const EnviosScreen = ({ navigation }: any) => {
     setRefreshing(false);
   }, [reload, work, sub, modality, loadHistory, loadScheduled]);
 
-  const handleTabPress = useCallback(
-    (tabKey: DriverTabKey) => {
-      if (tabKey === "deliveries") return;
-
-      if (tabKey === "home") {
-        navigation.navigate("DriverScreen");
-        return;
-      }
-
-      if (tabKey === "scan") {
-        navigation.navigate("DriverScanOptionsScreen");
-        return;
-      }
-
-      if (tabKey === "activity") {
-        navigation.navigate("NotificationsScreen");
-      }
-    },
-    [navigation]
-  );
-
   const openItem = (it: WorkItem) =>
     it.kind === "group"
       ? navigation.navigate("TurboGroupScreen", { groupId: it.group.id })
@@ -624,9 +603,9 @@ export const EnviosScreen = ({ navigation }: any) => {
         </ScrollView>
       )}
 
-      <ContinueBar missions={missions} onOpen={openMission} onSeeAll={() => navigation.navigate("DriverScreen")} />
+      <ContinueBar missions={missions} onOpen={openMission} onSeeAll={() => goToDriverTab(navigation, "home")} />
 
-      <DriverBottomNavigation activeTab="deliveries" onPress={handleTabPress} />
+      <DriverBottomNavigation activeTab="deliveries" />
 
       <Modal visible={calendarOpen} transparent animationType="fade" onRequestClose={() => setCalendarOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setCalendarOpen(false)}>

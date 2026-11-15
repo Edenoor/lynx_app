@@ -371,29 +371,10 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
 
   const selectedStatus = selected ? getVisualLabel(selected) : "";
 
-  const handleTabPress = useCallback(
-    (tab: DriverTabKey) => {
-      if (tab === "activity") {
-        setTab("notifications");
-        return;
-      }
-
-      if (tab === "home") {
-        navigation.navigate("DriverScreen");
-        return;
-      }
-
-      if (tab === "deliveries") {
-        navigation.navigate("EnviosScreen");
-        return;
-      }
-
-      if (tab === "scan") {
-        navigation.navigate("DriverScanOptionsScreen");
-      }
-    },
-    [navigation]
-  );
+  // Tocar «Alertas» estando acá vuelve a la pestaña de avisos; la barra navega sola.
+  const handleTabPress = useCallback((tab: DriverTabKey) => {
+    if (tab === "activity") setTab("notifications");
+  }, []);
 
   return (
     <View style={styles.container}>
