@@ -4,6 +4,8 @@
 // red: la pantalla hace los pedidos y acá solo se interpreta lo que vuelve.
 // Al chofer no se le muestran ids internos ni respuestas crudas del servidor.
 
+import type { ScanKind } from "../../../config/scanResult";
+
 export type DriverScanMode = "colecta" | "planta" | "asignarme";
 
 export type ScanPayload = {
@@ -14,7 +16,8 @@ export type ScanPayload = {
   securityDigit?: string | null;
 };
 
-export type ScanTone = "success" | "warning" | "error";
+// Verde, amarillo (ya estaba hecho) o rojo: scanResult.
+export type ScanTone = ScanKind;
 
 export type ScanFeedback = {
   tone: ScanTone;
@@ -179,14 +182,21 @@ const ASSIGN_RESULT: Record<string, string> = {
   claimed: "Envío asignado",
   resumed: "Entrega retomada",
   loaded: "Envío retirado",
-  already: "Ya lo tenías cargado",
 };
+
+export const ALREADY_SCANNED = "Este paquete ya fue escaneado";
 
 // PUT /v2/deliveries/self-assign { qr } (claimByScan): result claimed | resumed | loaded | already.
 // El servidor decide: 'resumed' es un no entregado de su propio Baúl, que
-// vuelve a un reparto suyo de hoy sin pasar por el depósito.
+// vuelve a un reparto suyo de hoy sin pasar por el depósito. 'already' (ya
+// lo tenía retirado, sin escribir nada) es el único duplicado: los 409
+// (RESERVED, CLOSED, NOT_IN_WAREHOUSE, HELD_BY_DRIVER, RETRY) son errores.
 export function assignFeedback(res: any, tracking: string): ScanFeedback {
   if (!res?.ok) return rejection("asignarme", res);
+  if (res?.result === "already") {
+    const where = res?.route?.id ? `ya lo tenías cargado en tu recorrido #${res.route.id}` : "ya lo tenías cargado";
+    return { tone: "duplicate", title: ALREADY_SCANNED, detail: [tracking || null, where].filter(Boolean).join(" · ") };
+  }
   const routeId = res?.result === "resumed" ? res?.route?.id : null;
   const detail = [tracking || null, routeId ? `agregado a tu recorrido #${routeId}` : null].filter(Boolean).join(" · ");
   return { tone: "success", title: ASSIGN_RESULT[String(res?.result)] ?? "Envío asignado", detail: detail || null };
@@ -203,7 +213,7 @@ export function collectFeedback(res: any, tracking: string): ScanFeedback {
 export function noResponseFeedback(mode: DriverScanMode): ScanFeedback {
   const what = mode === "asignarme" ? "quedó asignado" : mode === "colecta" ? "quedó ingresado" : "quedó registrado";
   return {
-    tone: "warning",
+    tone: "error",
     title: "Sin respuesta del servidor",
     detail: `No sabemos si ${what}. Revisalo antes de volver a escanearlo.`,
   };
@@ -211,11 +221,11 @@ export function noResponseFeedback(mode: DriverScanMode): ScanFeedback {
 
 // Planta: el resultado ya armado por la regla del Picker (presentOutcome).
 export function plantaFeedback(
-  view: { tone: "success" | "neutral" | "warning" | "danger"; title: string; shelf: string | null; lines: string[]; warnings: string[] },
+  view: { tone: ScanTone; title: string; shelf: string | null; lines: string[]; warnings: string[] },
   status: number | null
 ): ScanFeedback {
   if (status === 401) return SESSION_EXPIRED;
-  const tone: ScanTone = view.tone === "success" ? "success" : view.tone === "danger" ? "error" : "warning";
+  const tone = view.tone;
   const detail = [...view.lines.filter(Boolean).slice(0, 1), ...view.warnings.map((w) => `⚠ ${w}`)].join("\n");
   return { tone, title: view.title, detail: detail || null, shelf: view.shelf, warned: view.warnings.length > 0 };
 }
@@ -226,13 +236,30 @@ export const SESSION_ERRORS_KEPT = 20;
 
 export type ScanSessionError = { title: string; detail: string | null; code: string };
 
-export type ScanSession = { ok: number; failed: number; errors: ScanSessionError[] };
+// done: los códigos que salieron bien en esta sesión (para Colecta, abajo).
+export type ScanSession = { ok: number; failed: number; errors: ScanSessionError[]; done: string[] };
 
-export const EMPTY_SESSION: ScanSession = { ok: 0, failed: 0, errors: [] };
+export const EMPTY_SESSION: ScanSession = { ok: 0, failed: 0, errors: [], done: [] };
+
+// Códigos que no identifican un bulto: no sirven para saber si se repitió.
+const NOT_A_PACKAGE = new Set(["Estantería", "Etiqueta sin tracking"]);
+
+// Colecta: POST /v2/deliveries/scan responde igual la primera vez que las
+// siguientes (no dice si ya estaba). Lo único seguro es lo de esta sesión: el
+// mismo bulto que ya salió bien acá es un duplicado y no suma. Asignarme y
+// Planta no lo necesitan: el servidor ya lo dice (already, already_here).
+export function sessionRepeat(mode: DriverScanMode, feedback: ScanFeedback, session: ScanSession, code: string): ScanFeedback {
+  if (mode !== "colecta" || feedback.tone !== "success" || NOT_A_PACKAGE.has(code) || !session.done.includes(code)) return feedback;
+  return { tone: "duplicate", title: ALREADY_SCANNED, detail: `${code} · ya lo ingresaste en esta sesión` };
+}
 
 // `code`: lo que identifica el bulto para el chofer (tracking), no un id interno.
+// Un duplicado no suma ni como escaneado ni como error.
 export function recordScan(session: ScanSession, feedback: ScanFeedback, code: string): ScanSession {
-  if (feedback.tone === "success") return { ...session, ok: session.ok + 1 };
+  if (feedback.tone === "duplicate") return session;
+  if (feedback.tone === "success") {
+    return { ...session, ok: session.ok + 1, done: session.done.includes(code) ? session.done : [...session.done, code] };
+  }
   const entry = { title: feedback.title, detail: feedback.detail, code };
   return {
     ...session,

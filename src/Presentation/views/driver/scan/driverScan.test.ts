@@ -18,6 +18,7 @@ import {
   scanLabel,
   SESSION_ERRORS_KEPT,
   SESSION_EXPIRED,
+  sessionRepeat,
   sessionSummary,
 } from "./driverScan";
 
@@ -65,7 +66,20 @@ eq("asignado", assignFeedback({ ok: true, status: 200, result: "claimed", delive
 eq("retomado del Baúl: el recorrido al que fue", assignFeedback({ ok: true, result: "resumed", delivery_id: 5, route: { id: 12 } }, "47000000101"), { tone: "success", title: "Entrega retomada", detail: "47000000101 · agregado a tu recorrido #12" });
 eq("retomado sin recorrido en la respuesta: sin número inventado", assignFeedback({ ok: true, result: "resumed" }, "1").detail, "1");
 eq("ya era suyo, ahora retirado", short(assignFeedback({ ok: true, result: "loaded" }, "1")), "success: Envío retirado");
-eq("lectura repetida del servidor (already) es éxito, no error", short(assignFeedback({ ok: true, result: "already" }, "1")), "success: Ya lo tenías cargado");
+eq("ya lo tenía retirado (already): duplicado amarillo, no error", assignFeedback({ ok: true, result: "already", route: { id: 9 } }, "4700"),
+  { tone: "duplicate", title: "Este paquete ya fue escaneado", detail: "4700 · ya lo tenías cargado en tu recorrido #9" });
+eq("already sin recorrido en la respuesta", assignFeedback({ ok: true, result: "already" }, "4700").detail, "4700 · ya lo tenías cargado");
+// Los 409 de claimByScan son errores reales, con su motivo: ninguno es duplicado.
+for (const [code, error] of [
+  ["RESERVED", "Este paquete está asignado a otro chofer (recorrido #7). Si te lo tenés que llevar, pedíselo al coordinador."],
+  ["CLOSED", "El envío está entregado: no sale a reparto"],
+  ["NOT_IN_WAREHOUSE", "El envío todavía no está en un depósito (COLLECTED): primero lo tiene que recibir un picker"],
+  ["HELD_BY_DRIVER", "Este paquete lo tiene otro chofer: tiene que pasar por el depósito antes de volver a salir"],
+  ["RETRY", "El paquete cambió de recorrido mientras se escaneaba: escanealo de nuevo"],
+]) {
+  const f = assignFeedback({ ok: false, status: 409, code, error }, "1");
+  eq(`409 ${code} → error con el motivo, no duplicado`, [f.tone, f.detail], ["error", error]);
+}
 {
   const f = assignFeedback({ ok: false, status: 409, error: "El envío está entregado: no sale a reparto", code: "CLOSED" }, "1");
   eq("409 → rojo con el texto del servidor", [f.tone, f.title, f.detail], ["error", "No se pudo asignar", "El envío está entregado: no sale a reparto"]);
@@ -92,16 +106,17 @@ eq("rol 401", roleProblem({ ok: false, status: 401, sessionExpired: true }), SES
 eq("sin conexión antes de escribir: dice que no se envió nada", NO_CONNECTION.detail, "No se envió nada. Volvé a escanearlo.");
 
 // 7) Sin respuesta después de enviar: no se sabe si se aplicó, no se reintenta.
-eq("asignarme sin respuesta", [noResponseFeedback("asignarme").tone, noResponseFeedback("asignarme").detail], ["warning", "No sabemos si quedó asignado. Revisalo antes de volver a escanearlo."]);
+eq("asignarme sin respuesta (error de comunicación: rojo)", [noResponseFeedback("asignarme").tone, noResponseFeedback("asignarme").detail], ["error", "No sabemos si quedó asignado. Revisalo antes de volver a escanearlo."]);
 eq("colecta sin respuesta", noResponseFeedback("colecta").detail, "No sabemos si quedó ingresado. Revisalo antes de volver a escanearlo.");
 
-// 8) Planta: la vista del Picker → verde / ámbar / rojo, sin el contenido leído.
+// 8) Planta: la vista del Picker (ya en verde / amarillo / rojo), sin el contenido leído.
 eq("planta recibido", plantaFeedback({ tone: "success", title: "Ingresó a planta", shelf: "NORTE-1", lines: ["T-A · Tienda", "Ana · CP 1000", ""], warnings: [] }, null),
   { tone: "success", title: "Ingresó a planta", detail: "T-A · Tienda", shelf: "NORTE-1", warned: false });
-eq("planta con avisos", plantaFeedback({ tone: "success", title: "Ya estaba en planta", shelf: "N-1", lines: ["T"], warnings: ["Está en N-1; le corresponde N-2."] }, null).warned, true);
-eq("planta cerrado → ámbar", plantaFeedback({ tone: "neutral", title: "Envío cerrado: no vuelve a planta", shelf: null, lines: [], warnings: [] }, null).tone, "warning");
-eq("planta error → rojo", plantaFeedback({ tone: "danger", title: "El envío no está en Lynx", shelf: null, lines: ["x"], warnings: [] }, 404).tone, "error");
-eq("planta 401 → sesión vencida", plantaFeedback({ tone: "danger", title: "Tu sesión expiró", shelf: null, lines: [], warnings: [] }, 401), SESSION_EXPIRED);
+eq("planta con avisos", plantaFeedback({ tone: "success", title: "Ingresó a planta", shelf: "N-1", lines: ["T"], warnings: ["Está en N-1; le corresponde N-2."] }, null).warned, true);
+eq("planta ya estaba → amarillo", plantaFeedback({ tone: "duplicate", title: "Ya estaba en planta", shelf: "N-1", lines: ["T"], warnings: [] }, null).tone, "duplicate");
+eq("planta cerrado → rojo", plantaFeedback({ tone: "error", title: "Envío cerrado: no vuelve a planta", shelf: null, lines: [], warnings: [] }, null).tone, "error");
+eq("planta error → rojo", plantaFeedback({ tone: "error", title: "El envío no está en Lynx", shelf: null, lines: ["x"], warnings: [] }, 404).tone, "error");
+eq("planta 401 → sesión vencida", plantaFeedback({ tone: "error", title: "Tu sesión expiró", shelf: null, lines: [], warnings: [] }, 401), SESSION_EXPIRED);
 
 // 9) Resumen de la sesión: contador de éxitos y errores, los más nuevos primero.
 {
@@ -109,14 +124,35 @@ eq("planta 401 → sesión vencida", plantaFeedback({ tone: "danger", title: "Tu
   s = recordScan(s, { tone: "success", title: "Envío asignado", detail: null }, "1001");
   s = recordScan(s, { tone: "success", title: "Envío asignado", detail: null }, "1002");
   s = recordScan(s, { tone: "error", title: "No se pudo asignar", detail: "Entregado" }, "1003");
-  s = recordScan(s, { tone: "warning", title: "Sin respuesta del servidor", detail: null }, "1004");
+  s = recordScan(s, { tone: "error", title: "Sin respuesta del servidor", detail: null }, "1004");
+  const before = s;
+  s = recordScan(s, { tone: "duplicate", title: "Este paquete ya fue escaneado", detail: null }, "1001");
+  eq("un duplicado no suma ni como escaneado ni como error", s, before);
   eq("dos éxitos, dos problemas", [s.ok, s.failed], [2, 2]);
+  eq("códigos que salieron bien", s.done, ["1001", "1002"]);
   eq("errores del más nuevo al más viejo", s.errors.map((e) => e.code), ["1004", "1003"]);
   eq("texto del resumen", sessionSummary(s), "2 escaneados · 2 con error");
   eq("singular", sessionSummary(recordScan(EMPTY_SESSION, { tone: "success", title: "", detail: null }, "1")), "1 escaneado");
-  eq("la sesión vacía no cambia", EMPTY_SESSION, { ok: 0, failed: 0, errors: [] });
+  eq("la sesión vacía no cambia", EMPTY_SESSION, { ok: 0, failed: 0, errors: [], done: [] });
   for (let i = 0; i < 30; i++) s = recordScan(s, { tone: "error", title: "x", detail: null }, String(i));
   eq(`guarda los últimos ${SESSION_ERRORS_KEPT} errores`, [s.errors.length, s.errors[0].code, s.failed], [SESSION_ERRORS_KEPT, "29", 32]);
+}
+
+// 10) Colecta: el servidor responde igual si ya estaba; lo repetido en la sesión es duplicado.
+{
+  const ok = collectFeedback({ ok: true, status: 200, success: true }, "4700");
+  let s = EMPTY_SESSION;
+  eq("primera vez: éxito", sessionRepeat("colecta", ok, s, "4700"), ok);
+  s = recordScan(s, sessionRepeat("colecta", ok, s, "4700"), "4700");
+  const again = sessionRepeat("colecta", ok, s, "4700");
+  eq("el mismo bulto otra vez: duplicado", again, { tone: "duplicate", title: "Este paquete ya fue escaneado", detail: "4700 · ya lo ingresaste en esta sesión" });
+  s = recordScan(s, again, "4700");
+  eq("y no suma", [s.ok, s.failed], [1, 0]);
+  eq("otro bulto: éxito", sessionRepeat("colecta", ok, s, "4701").tone, "success");
+  eq("un error no se convierte", sessionRepeat("colecta", { tone: "error", title: "x", detail: null }, s, "4700").tone, "error");
+  eq("etiqueta sin tracking: no se puede saber, éxito", sessionRepeat("colecta", ok, { ...s, done: ["Etiqueta sin tracking"] }, "Etiqueta sin tracking").tone, "success");
+  eq("Planta: dos estanterías seguidas no son duplicado", sessionRepeat("planta", ok, { ...s, done: ["Estantería"] }, "Estantería").tone, "success");
+  eq("Asignarme: lo decide el servidor (already), no la sesión", sessionRepeat("asignarme", ok, s, "4700").tone, "success");
 }
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }

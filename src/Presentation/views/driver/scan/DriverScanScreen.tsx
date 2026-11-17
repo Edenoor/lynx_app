@@ -1,6 +1,6 @@
 // src/Presentation/views/driver/scan/DriverScanScreen.tsx
 // Escaneo continuo del chofer (Asignarme, Colecta, Planta): cada lectura deja
-// su resultado en una tarjeta verde o roja y la cámara queda lista para la
+// su resultado en una tarjeta verde, amarilla (ya estaba hecho) o roja y la cámara queda lista para la
 // siguiente, sin diálogos que cerrar. Solo frena una sesión vencida o la
 // falta de permiso de cámara. La cámara es la del Picker (QrScanner): no lee
 // otra etiqueta mientras hay un pedido en curso y no repite la misma mientras
@@ -23,7 +23,7 @@ import { LynxPulseLoader } from "../../../components/LynxPulseLoader";
 import { QrScanner } from "../../../components/QrScanner";
 import { DriverBottomNavigation } from "../../../components/DriverBottomNavigation";
 import { getJsonWithTimeout, postJsonWithTimeout, putJsonWithTimeout } from "../../../config/Api";
-import { playScanError, playScanSuccess } from "../../../config/ScanSound";
+import { signalScan } from "../../../config/ScanSound";
 import { PendingPackage, processScan } from "../../picker/pickerScan";
 import { presentOutcome } from "../../picker/pickerOutcome";
 import {
@@ -45,6 +45,7 @@ import {
   scanBody,
   scanLabel,
   SESSION_EXPIRED,
+  sessionRepeat,
   sessionSummary,
 } from "./driverScan";
 
@@ -71,20 +72,13 @@ const PROCESSING: Record<DriverScanMode, string> = {
 // Asignar e ingresar pueden traer el envío desde Mercado Libre: mismo límite
 // que la recepción en planta.
 const SCAN_TIMEOUT_MS = 20_000;
-// El verde se va solo; el rojo queda hasta la próxima lectura.
+// El verde y el amarillo se van solos; el rojo queda hasta la próxima lectura.
 const SUCCESS_VISIBLE_MS = 2_500;
 const ERRORS_SHOWN = 5;
 
-const VIBRATION: Record<ScanTone | "warned", number[]> = {
-  success: [0, 80, 60, 120],
-  warned: [0, 120, 80, 120],
-  warning: [0, 120, 80, 120],
-  error: [0, 250, 100, 250],
-};
-
 const TONE: Record<ScanTone, { text: string; border: string; icon: keyof typeof Ionicons.glyphMap }> = {
   success: { text: AppTheme.status.delivered.text, border: AppTheme.status.delivered.text, icon: "checkmark-circle" },
-  warning: { text: AppTheme.status.pending.text, border: AppTheme.status.pending.text, icon: "help-circle" },
+  duplicate: { text: AppTheme.status.pending.text, border: AppTheme.status.pending.text, icon: "information-circle" },
   error: { text: AppTheme.status.rejected.text, border: AppTheme.status.rejected.text, icon: "close-circle" },
 };
 
@@ -103,6 +97,8 @@ export default function DriverScanScreen({ navigation, route }: Props) {
   const [processing, setProcessing] = useState(false);
   const [feedback, setFeedback] = useState<ScanFeedback | null>(null);
   const [session, setSession] = useState<ScanSession>(EMPTY_SESSION);
+  // La misma sesión, para leerla al llegar cada respuesta (sessionRepeat).
+  const sessionRef = useRef<ScanSession>(EMPTY_SESSION);
   const [showErrors, setShowErrors] = useState(false);
 
   // Cada modo (y cada montaje) es una sesión de escaneo: lo que responde
@@ -117,6 +113,7 @@ export default function DriverScanScreen({ navigation, route }: Props) {
     lastReceivedRef.current = null;
     setProcessing(false);
     setFeedback(null);
+    sessionRef.current = EMPTY_SESSION;
     setSession(EMPTY_SESSION);
     setShowErrors(false);
     return () => {
@@ -125,7 +122,7 @@ export default function DriverScanScreen({ navigation, route }: Props) {
   }, [mode]);
 
   useEffect(() => {
-    if (feedback?.tone !== "success") return;
+    if (feedback?.tone !== "success" && feedback?.tone !== "duplicate") return;
     const timer = setTimeout(() => setFeedback((current) => (current === feedback ? null : current)), SUCCESS_VISIBLE_MS);
     return () => clearTimeout(timer);
   }, [feedback]);
@@ -225,12 +222,15 @@ export default function DriverScanScreen({ navigation, route }: Props) {
       }
       if (generation.current !== gen) return;
 
+      const code = scanLabel(payload);
+      result = sessionRepeat(mode, result, sessionRef.current, code);
       setProcessing(false);
       setFeedback(result);
-      if (!result.sessionExpired) setSession((s) => recordScan(s, result, scanLabel(payload)));
-      Vibration.vibrate(VIBRATION[result.tone === "success" && result.warned ? "warned" : result.tone]);
-      if (result.tone === "success") playScanSuccess();
-      else playScanError();
+      if (!result.sessionExpired) {
+        sessionRef.current = recordScan(sessionRef.current, result, code);
+        setSession(sessionRef.current);
+      }
+      signalScan(result.tone, result.warned);
 
       if (result.sessionExpired) {
         setBlocked(true);

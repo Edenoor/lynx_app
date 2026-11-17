@@ -5,7 +5,7 @@
 // su CP; estantería → se mueve ahí el último paquete leído.
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useIsFocused } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
@@ -17,22 +17,14 @@ import type { PickerStackParamList } from "../../navigator/PickerStackNavigator"
 import { PendingPackage, processScan, ScanOutcome } from "./pickerScan";
 import { OutcomeTone, OutcomeView, presentOutcome } from "./pickerOutcome";
 import { PickerHeader, warehouseLabel } from "./pickerUi";
-import { playScanError, playScanSuccess } from "../../config/ScanSound";
+import { signalScan } from "../../config/ScanSound";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerScanScreen">;
 
-const VIBRATION: Record<OutcomeTone, number | number[]> = {
-  success: 60,
-  neutral: [0, 60, 80, 60],
-  warning: [0, 60, 80, 60],
-  danger: [0, 250, 100, 250],
-};
-
 const TONE_COLOR: Record<OutcomeTone, string> = {
   success: AppTheme.colors.success,
-  neutral: AppTheme.text.muted,
-  warning: AppTheme.colors.warning,
-  danger: AppTheme.colors.danger,
+  duplicate: AppTheme.colors.warning,
+  error: AppTheme.colors.danger,
 };
 
 // Una etiqueta rara puede traer un texto enorme: en pantalla se corta, al
@@ -57,11 +49,10 @@ export default function PickerScanScreen({ navigation, route }: Props) {
         const r = await processScan(raw, pending);
         setOutcome(r.outcome);
         setPending(r.pending);
-        const tone = presentOutcome(r.outcome, warehouse).tone;
-        Vibration.vibrate(VIBRATION[tone]);
-        // Éxito solo si se recibió o se movió; cualquier otro resultado avisa.
-        if (tone === "success") playScanSuccess();
-        else playScanError();
+        // Éxito si se recibió o se movió; duplicado (sin bip de error) si ya
+        // estaba; cualquier otro resultado, error.
+        const done = presentOutcome(r.outcome, warehouse);
+        signalScan(done.tone, done.warnings.length > 0);
       } finally {
         setProcessing(false);
       }

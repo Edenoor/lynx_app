@@ -148,6 +148,7 @@ const preventRemove = {
 const alerts: any[] = [];
 // Sonidos de resultado del escáner, en orden.
 const sounds: string[] = [];
+const signals: string[] = [];
 const lastNav = () => nav.calls[nav.calls.length - 1];
 const api = { calls: [] as string[], replies: {} as Record<string, any>, bodies: [] as [string, any][] };
 // Una respuesta armada que es un Error rechaza (sin red, sin respuesta a
@@ -226,6 +227,7 @@ const MOCKS: Record<string, any> = {
   "expo-file-system/legacy": {},
   "expo-location": { requestForegroundPermissionsAsync: async () => ({ status: "denied", canAskAgain: true }), Accuracy: { High: 4 } },
   "expo-camera": { CameraView: "CameraView", useCameraPermissions: () => [camera.permission, camera.request] },
+  "expo-clipboard": { setStringAsync: async () => true },
   "react-native-safe-area-context": { SafeAreaView: "SafeAreaView", useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
   "expo-splash-screen": { preventAutoHideAsync: () => Promise.resolve(), hideAsync: () => Promise.resolve() },
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker", Polyline: "Polyline" },
@@ -285,7 +287,12 @@ const RELATIVE_MOCKS: [string, any][] = [
   ["components/LynxPulseLoader", { LynxPulseLoader: host("LynxPulseLoader") }],
   ["context/NotificationContext", { useNotifications: () => notis }],
   ["context/UserContext", { UserContext, UserProvider: ({ children }: any) => children }],
-  ["config/ScanSound", { playScanError: () => { sounds.push("error"); }, playScanSuccess: () => { sounds.push("success"); } }],
+  ["config/ScanSound", {
+    playScanError: () => { sounds.push("error"); },
+    playScanSuccess: () => { sounds.push("success"); },
+    // Como signalScan: el duplicado no suena (ni con el bip de error).
+    signalScan: (kind: string) => { signals.push(kind); if (kind !== "duplicate") sounds.push(kind); },
+  }],
   ["home/ViewModel", { __esModule: true, default: () => ({ values: { username: "", password: "" }, onChange: () => {}, login: async () => ({ ok: false }), errorMessage: "", clearError: () => {} }) }],
   ["onboarding/OnboardingContext", { useOnboarding: () => onboarding, OnboardingProvider: ({ children }: any) => children }],
   ["onboarding/UploadDriverDocuments", { uploadDriverDocuments: () => new Promise(() => {}) }],
@@ -1282,6 +1289,79 @@ const setDriverApi = () => {
     check("Planta: bulto y después estantería lo mueve, con el mismo pedido", api.calls.includes("PUT /v2/warehouse/deliveries/1/shelf") && lastCard().startsWith("Estantería NORTE-2"), `${api.calls.join(", ")} | ${lastCard()}`);
     check("Planta: la recepción muestra la estantería", cards[0].startsWith("Estantería NORTE-1. Ingresó a planta"), cards[0]);
     check("Planta: no muestra el contenido leído de la etiqueta", !cards.some((c) => c.includes("Leído") || c.includes(SHELF)), cards.join(" | "));
+    // Ya estaba en planta (ops.already_here) y la misma estantería (from = destino):
+    // amarillo, sin bip de error. Un error real: rojo con bip de error.
+    {
+      const already = { ...received(1, "T-A"), ops: { from: "SHELVED", to: "SHELVED", transitions: [], already_here: true } };
+      api.replies = {
+        "POST /v2/warehouse/receive": [received(1, "T-A"), already, { ok: false, status: 409, error: "El envío está bajo custodia de otro Warehouse" }],
+        "PUT /v2/warehouse/deliveries/1/shelf": { ok: true, from: "NORTE-1", shelf: { id: 3, code: "NORTE-1", name: null } },
+      };
+      sounds.length = 0; signals.length = 0;
+      await scanAll(["46001", "46002", SHELF, "46003"]);
+      check("Planta ya estaba: amarillo con su estantería", cards[1].startsWith("Estantería NORTE-1. Ya estaba en planta"), cards[1]);
+      check("Planta misma estantería: no se movió", cards[2].startsWith("Estantería NORTE-1. Ya estaba en NORTE-1. T-A ya estaba en esa estantería"), cards[2]);
+      check("Planta 409: rojo con el motivo (no es duplicado)", cards[3].includes("No se puede recibir este envío") && cards[3].includes("custodia de otro Warehouse"), cards[3]);
+      check("Planta: verde, amarillo, amarillo, rojo; sin bip de error en los duplicados", same(signals, ["success", "duplicate", "duplicate", "error"]) && same(sounds, ["success", "error"]), `${signals.join(",")} | ${sounds.join(",")}`);
+      check("Planta: escaneos seguidos sin diálogos ni bloqueo", api.calls.length === 4 && alerts.length === 0, api.calls.join(", "));
+    }
+  }
+
+  // 9b') Picker: recepción en planta y Baúl con el mismo verde / amarillo / rojo.
+  {
+    const AppTheme = L("src/Presentation/theme/AppTheme.tsx").default;
+    const PickerScan = L("src/Presentation/views/picker/PickerScanScreen.tsx").default;
+    const PickerBaulScan = L("src/Presentation/views/picker/PickerBaulScanScreen.tsx").default;
+    const colorOf = (tree: any, text: string) => flat(all(tree, (x) => x.type === "Text" && textOf(x) === text)[0]?.props.style).color;
+    const read = async (tree: any, data: string) => {
+      all(tree, (x) => x.type === "CameraView")[0].props.onBarcodeScanned({ data });
+      return settle();
+    };
+
+    {
+      const rec = (already: boolean) => ({
+        ok: true, delivery: { id: 1, tracking: "T-A", store: "Tienda Uno", receiver: "Ana", direccion: null, postal_code: "1000", tipo_envio: "flex", is_turbo: false },
+        shelf: { id: 3, code: "NORTE-1", name: null, unclassified: false, suggested: null },
+        ops: already ? { from: "SHELVED", to: "SHELVED", transitions: [], already_here: true } : { from: "ENTERED", to: "SHELVED", transitions: ["ARRIVED_WAREHOUSE", "SHELVED"], already_here: false },
+        alerts: [],
+      });
+      api.calls = []; alerts.length = 0; sounds.length = 0; signals.length = 0;
+      api.replies = { "POST /v2/warehouse/receive": [rec(false), rec(true), { ok: false, status: 404, error: "El envío no está en Lynx" }, rec(false)] };
+      let tree = await mount(RealReact.createElement(PickerScan, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      tree = await read(tree, "46001");
+      check("Picker recepción: correcto en verde con bip de éxito", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && same(sounds, ["success"]), sounds.join(","));
+      tree = await read(tree, "46002");
+      check("Picker recepción: ya estaba en planta en amarillo, sin bip de error", colorOf(tree, "Ya estaba en planta") === AppTheme.colors.warning && same(sounds, ["success"]) && signals[1] === "duplicate", `${sounds.join(",")} | ${signals.join(",")}`);
+      tree = await read(tree, "46003");
+      check("Picker recepción: error real en rojo con el motivo y bip de error", colorOf(tree, "El envío no está en Lynx") === AppTheme.colors.danger && textOf(tree).includes("El envío no está en Lynx") && sounds[sounds.length - 1] === "error", sounds.join(","));
+      tree = await read(tree, "46004");
+      check("Picker recepción: después de un error sigue escaneando", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && api.calls.length === 4 && alerts.length === 0, api.calls.join(", "));
+    }
+
+    {
+      const parcel = { delivery_id: 7, tracking: "4700", lynx_code: null, store: "Tienda", driver_id: 5, rsd_id: 70, kind: "NOT_DELIVERED", declared_closure: "REENTREGA", attempted: true };
+      const lookup = (id: number, parcels: any[], message: string) => ({
+        ok: true, delivery: { id, tracking: String(4700 + id), lynx_code: null, store: "Tienda", ops_status: "NOT_DELIVERED" },
+        drivers: [{ id: 5, username: "juan", first_name: "Juan", last_name: null }], cash: [], parcels, items: [], to_verify: [], other_warehouse: false, message,
+      });
+      api.calls = []; alerts.length = 0; sounds.length = 0; signals.length = 0;
+      api.replies = {
+        "GET /v2/baul/lookup?qr=A7": [lookup(7, [parcel], "Pendiente en el Baúl de Juan: paquete sin entregar que tiene el chofer."), lookup(7, [], "Este envío no tiene nada pendiente en el Baúl.")],
+        "GET /v2/baul/lookup?qr=B8": lookup(8, [], "Este envío no tiene nada pendiente en el Baúl."),
+        "POST /v2/baul/drivers/5/parcels": { ok: true, destination: "REPARTO", shelf: { code: "C3" } },
+      };
+      let tree = await mount(RealReact.createElement(PickerBaulScan, { navigation: nav, route: { params: { driverId: 5, name: "Juan" } } }));
+      tree = await read(tree, "A7");
+      check("Baúl: algo para recibir en verde con bip de éxito", colorOf(tree, "Tiene algo para recibir") === AppTheme.colors.success && same(sounds, ["success"]), sounds.join(","));
+      tree = await press(tree, "Recibir paquete");
+      check("Baúl: confirmado, sin cambiar el aviso de siempre", textOf(tree).includes("4700: Recibido: va a la estantería C3.") && !textOf(tree).includes("Tiene algo para recibir"), textOf(tree));
+      tree = await read(tree, "B8");
+      check("Baúl: nada para recibir en rojo con bip de error", colorOf(tree, "No hay nada para recibir") === AppTheme.colors.danger && sounds[sounds.length - 1] === "error", sounds.join(","));
+      const soundsBefore = sounds.length;
+      tree = await read(tree, "A7");
+      check("Baúl: lo recibido acá, otra vez: amarillo y sin bip de error", colorOf(tree, "Este paquete ya fue escaneado") === AppTheme.colors.warning && textOf(tree).includes("Ya recibiste lo pendiente de este envío.") && sounds.length === soundsBefore && signals[signals.length - 1] === "duplicate", `${sounds.join(",")} | ${signals.join(",")}`);
+      check("Baúl: no se vuelve a confirmar nada", api.calls.filter((c) => c.startsWith("POST ")).length === 1, api.calls.join(", "));
+    }
   }
 
   // 9c) Escaneo continuo (Asignarme y Colecta): verde o rojo sin diálogos,
@@ -1299,7 +1379,7 @@ const setDriverApi = () => {
     const summary = (tree: any) => String(all(tree, (x) => /escaneado/.test(String(x.props?.accessibilityLabel ?? "")))[0]?.props.accessibilityLabel ?? "");
     const writes = () => api.calls.filter((c) => c.startsWith("PUT /v2/deliveries/self-assign") || c.startsWith("POST /v2/deliveries/scan")).length;
     const open = async (mode: string) => {
-      api.calls = []; alerts.length = 0; sounds.length = 0; nav.calls = [];
+      api.calls = []; alerts.length = 0; sounds.length = 0; signals.length = 0; nav.calls = [];
       return mount(RealReact.createElement(Scan, { navigation: nav, route: { params: { mode } } }));
     };
     const scan = async (tree: any, data: string) => {
@@ -1353,10 +1433,16 @@ const setDriverApi = () => {
     check("Asignarme: «Asignando envío...» mientras espera", all(tree, (x) => x.type === "LynxPulseLoader" && x.props.message === "Asignando envío...").length === 1);
     tree = await scan(tree, ML("47400000002"));
     check("Asignarme: con un pedido en curso no se lee otro código", writes() === 3, api.calls.join(", "));
-    // Respuesta tardía: llega y se muestra igual, sin diálogo.
-    release({ ok: true, result: "already" });
+    // Respuesta tardía: llega y se muestra igual, sin diálogo. Es «already»
+    // (ya lo tenía retirado): duplicado amarillo, sin bip de error y sin sumar.
+    const soundsBeforeAlready = sounds.length;
+    release({ ok: true, result: "already", route: { id: 900 } });
     tree = await settle();
-    check("Asignarme: respuesta tardía se muestra al llegar", card(tree) === "Ya lo tenías cargado. 47400000001" && alerts.length === 0, card(tree));
+    check("Asignarme: respuesta tardía se muestra al llegar", card(tree) === "Este paquete ya fue escaneado. 47400000001 · ya lo tenías cargado en tu recorrido #900" && alerts.length === 0, card(tree));
+    check("Asignarme duplicado: amarillo", flat(cardNode(tree).props.style).borderColor === dark.status.pending.text);
+    check("Asignarme duplicado: sin sonido (ni de error), con su vibración", sounds.length === soundsBeforeAlready && signals[signals.length - 1] === "duplicate", `${sounds.join(",")} | ${signals.join(",")}`);
+    check("Asignarme duplicado: no suma al contador", summary(tree) === "2 escaneados", summary(tree));
+    check("Asignarme duplicado: la cámara sigue lista", all(tree, (x) => x.type === "CameraView").length === 1);
 
     // Error recuperable: rojo con el texto del servidor, error en el resumen, cámara lista.
     api.replies["PUT /v2/deliveries/self-assign"] = { ok: false, status: 409, error: "El envío está entregado: no sale a reparto" };
@@ -1364,18 +1450,19 @@ const setDriverApi = () => {
     check("Asignarme: error recuperable en rojo, sin diálogo", card(tree) === "No se pudo asignar. El envío está entregado: no sale a reparto" && alerts.length === 0, card(tree));
     check("Asignarme: color de error", flat(cardNode(tree).props.style).borderColor === dark.status.rejected.text);
     check("Asignarme: sonido de error", sounds[sounds.length - 1] === "error", sounds.join(","));
-    check("Asignarme: el error queda en el resumen", summary(tree).startsWith("3 escaneados · 1 con error"), summary(tree));
-    tree = await press(tree, "✓ 3");
+    check("Asignarme: el error queda en el resumen", summary(tree).startsWith("2 escaneados · 1 con error"), summary(tree));
+    tree = await press(tree, "✓ 2");
     check("Asignarme: el resumen lista los errores con el tracking", textOf(tree).includes("Errores de esta sesión") && textOf(tree).includes("47400000003 · No se pudo asignar"), textOf(tree));
     const before = writes();
     tree = await scan(tree, ML("47400000004"));
     check("Asignarme: después del error se sigue escaneando", writes() === before + 1);
 
-    // Pérdida de conexión después de enviar: ámbar, no se sabe si se aplicó, sin reintento.
+    // Pérdida de conexión después de enviar: rojo (error de comunicación), no se sabe si se aplicó, sin reintento.
     api.replies["PUT /v2/deliveries/self-assign"] = new Error("sin red");
     const sent = writes();
     tree = await scan(tree, ML("47400000005"));
     check("Asignarme: sin red después de enviar avisa que no se sabe si quedó", card(tree) === "Sin respuesta del servidor. No sabemos si quedó asignado. Revisalo antes de volver a escanearlo.", card(tree));
+    check("Asignarme: sin red en rojo, con sonido de error", flat(cardNode(tree).props.style).borderColor === dark.status.rejected.text && sounds[sounds.length - 1] === "error", sounds.join(","));
     tree = await settle();
     check("Asignarme: sin reintento automático", writes() === sent + 1, api.calls.join(", "));
 
@@ -1424,6 +1511,16 @@ const setDriverApi = () => {
     check("Colecta: un solo pedido, sin buscar el rol, con { qr }", same(api.calls, ["POST /v2/deliveries/scan"]) && same(api.bodies.map(([, b]) => b), [{ qr: ML("47411111111") }]), `${api.calls.join(", ")} | ${JSON.stringify(api.bodies)}`);
     tree = await scan(tree, "47422222222");
     check("Colecta: tracking pelado → lo resuelve el servidor (la app no lo rechaza)", card(tree) === "Envío ingresado. 47422222222" && api.calls.length === 2 && alerts.length === 0, card(tree));
+    // El servidor responde igual si ya estaba: el mismo bulto otra vez en la sesión es duplicado.
+    {
+      const soundsBeforeRepeat = sounds.length;
+      tree = await scan(tree, ML("47411111111"));
+      check("Colecta repetida en la sesión: amarillo con el motivo", card(tree) === "Este paquete ya fue escaneado. 47411111111 · ya lo ingresaste en esta sesión", card(tree));
+      check("Colecta repetida: sin sonido de error y sin sumar", sounds.length === soundsBeforeRepeat && summary(tree) === "2 escaneados", `${sounds.join(",")} | ${summary(tree)}`);
+      check("Colecta repetida: el pedido va igual (la regla es del servidor)", api.calls.length === 3, api.calls.join(", "));
+      tree = await scan(tree, "47422222299");
+      check("Colecta: después del duplicado se sigue escaneando", card(tree) === "Envío ingresado. 47422222299" && summary(tree) === "3 escaneados", `${card(tree)} | ${summary(tree)}`);
+    }
     api.replies["POST /v2/deliveries/scan"] = { ok: true, status: 200, success: false, error: "No se encontró la cuenta del vendedor" };
     tree = await scan(tree, ML("47433333333"));
     check("Colecta: success:false en rojo con el motivo", card(tree) === "No se pudo ingresar. No se encontró la cuenta del vendedor", card(tree));

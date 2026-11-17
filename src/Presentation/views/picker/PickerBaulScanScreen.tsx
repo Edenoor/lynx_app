@@ -6,9 +6,12 @@
 // Con `driverId` (abierto desde un chofer) solo se confirma lo de ese chofer.
 // La cámara se pausa mientras queda algo por confirmar: una lectura de más
 // no cambia la tarjeta en la mitad de una cobranza.
+// Cada lectura: verde si hay algo para recibir; amarillo si ya se recibió en
+// esta pantalla (GET /lookup no dice si ya se recibió antes: solo lo que queda
+// pendiente); rojo si no hay nada para recibir o no se pudo buscar.
 
-import React, { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
+import React, { useCallback, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -20,11 +23,25 @@ import { lookupBaul, BaulApiError, BaulLookup, driverName } from "./baulApi";
 import { obligationsOf, refOf } from "./baulPicker";
 import { BaulObligationCard } from "./BaulObligationCard";
 import { PickerHeader } from "./pickerUi";
-import { playScanError, playScanSuccess } from "../../config/ScanSound";
+import { signalScan } from "../../config/ScanSound";
+import type { ScanKind } from "../../config/scanResult";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerBaulScanScreen">;
 
-type Scan = { qr: string; lookup: BaulLookup } | { qr: string; error: string };
+// kind: el resultado de una lectura de la cámara (null al volver a pedir lo
+// pendiente después de confirmar: ahí el resultado es el aviso de arriba).
+type Scan = { qr: string; lookup: BaulLookup; kind: ScanKind | null } | { qr: string; error: string };
+
+const KIND_TITLE: Record<ScanKind, string> = {
+  success: "Tiene algo para recibir",
+  duplicate: "Este paquete ya fue escaneado",
+  error: "No hay nada para recibir",
+};
+const KIND_COLOR: Record<ScanKind, string> = {
+  success: AppTheme.colors.success,
+  duplicate: AppTheme.colors.warning,
+  error: AppTheme.colors.danger,
+};
 
 export default function PickerBaulScanScreen({ navigation, route }: Props) {
   const { driverId, name } = route.params;
@@ -32,28 +49,30 @@ export default function PickerBaulScanScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [scan, setScan] = useState<Scan | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // Envíos con algo recibido en esta pantalla: volver a escanearlos es un duplicado.
+  const received = useRef(new Set<number>());
 
-  const identify = useCallback(async (qr: string) => {
+  const identify = useCallback(async (qr: string, fromCamera: boolean): Promise<ScanKind> => {
     setLoading(true);
     try {
       const lookup = await lookupBaul(qr);
-      setScan({ qr, lookup });
-      return lookup;
+      const found = obligationsOf(lookup).some((o) => driverId == null || o.driverId === driverId);
+      const kind: ScanKind = found ? "success" : received.current.has(lookup.delivery.id) ? "duplicate" : "error";
+      setScan({ qr, lookup, kind: fromCamera ? kind : null });
+      return kind;
     } catch (e) {
       const text = e instanceof BaulApiError ? e.message : "Sin conexión con el servidor. Volvé a escanear.";
       setScan({ qr, error: text });
-      return null;
+      return "error";
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [driverId]);
 
   const onScan = useCallback(async (raw: string) => {
     setNotice(null);
-    const lookup = await identify(raw);
-    const found = lookup ? obligationsOf(lookup).filter((o) => driverId == null || o.driverId === driverId) : [];
-    if (found.length) { Vibration.vibrate(60); playScanSuccess(); } else { Vibration.vibrate([0, 250, 100, 250]); playScanError(); }
-  }, [identify, driverId]);
+    signalScan(await identify(raw, true));
+  }, [identify]);
 
   const all = scan && "lookup" in scan ? obligationsOf(scan.lookup) : [];
   const mine = all.filter((o) => driverId == null || o.driverId === driverId);
@@ -82,10 +101,13 @@ export default function PickerBaulScanScreen({ navigation, route }: Props) {
             <Text style={[styles.hint, { color: AppTheme.colors.danger }]}>{scan.error}</Text>
           ) : (
             <>
+              {scan.kind ? <Text style={[styles.result, { color: KIND_COLOR[scan.kind] }]}>{KIND_TITLE[scan.kind]}</Text> : null}
               <Text style={styles.ref}>{refOf({ ...scan.lookup.delivery, delivery_id: scan.lookup.delivery.id })}{scan.lookup.delivery.store ? ` · ${scan.lookup.delivery.store}` : ""}</Text>
               {!mine.length ? (
                 <Text style={styles.hint}>
-                  {ofOthers ? "Lo que tiene pendiente es de otro chofer: recibilo desde su Baúl." : scan.lookup.message}
+                  {scan.kind === "duplicate"
+                    ? "Ya recibiste lo pendiente de este envío."
+                    : ofOthers ? "Lo que tiene pendiente es de otro chofer: recibilo desde su Baúl." : scan.lookup.message}
                 </Text>
               ) : null}
               {mine.map((o) => (
@@ -95,8 +117,9 @@ export default function PickerBaulScanScreen({ navigation, route }: Props) {
                     obligation={o}
                     onResult={(r) => {
                       setNotice({ ok: r.ok, text: r.text });
+                      if (r.ok) received.current.add(scan.lookup.delivery.id);
                       // Lo pendiente de este envío se vuelve a pedir: si no queda nada, la cámara sigue.
-                      if (r.reload) void identify(scan.qr);
+                      if (r.reload) void identify(scan.qr, false);
                     }}
                   />
                 </View>
@@ -122,6 +145,7 @@ const styles = StyleSheet.create({
   panelContent: { padding: AppTheme.spacing.md, gap: 10 },
   hint: { color: AppTheme.text.secondary, fontSize: 15, textAlign: "center", marginVertical: 12 },
   notice: { fontSize: 14, fontWeight: "700" },
+  result: { fontSize: 17, fontWeight: "800" },
   ref: { color: AppTheme.text.primary, fontSize: 16, fontWeight: "800" },
   item: { gap: 4 },
   owner: { color: AppTheme.text.muted, fontSize: 12, fontWeight: "700" },

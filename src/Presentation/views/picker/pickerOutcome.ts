@@ -2,10 +2,12 @@
 // Lo que ve el operador por cada lectura: color, título y detalle. Separado de
 // la pantalla para que los textos se puedan verificar sin dibujarla.
 
-import { OPS_LABEL } from "../driver/routes/routesApi";
-import { ReceiveStatus, ScanOutcome } from "./pickerScan";
+import { OPS_LABEL } from "../driver/routes/stopView";
+import type { ScanKind } from "../../config/scanResult";
+import type { ReceiveStatus, ScanOutcome } from "./pickerScan";
 
-export type OutcomeTone = "success" | "neutral" | "warning" | "danger";
+// Verde, amarillo o rojo (scanResult): lo mismo en Picker y en Planta del chofer.
+export type OutcomeTone = ScanKind;
 
 export type OutcomeView = {
   tone: OutcomeTone;
@@ -24,12 +26,14 @@ const joined = (...parts: (string | null | undefined)[]) => parts.filter(Boolean
 // Alertas que ya se explican con el título o con otra línea.
 const EXPLAINED_ALERTS = new Set(["CLOSED", "IN_ROUTE", "SHELF_MISMATCH"]);
 
+// alreadyHere es el único duplicado: el servidor lo dice con ops.already_here.
+// Cerrado, en recorrido o sin cambios: no se recibió (error, con el motivo).
 const RECEIVE_TITLES: Record<ReceiveStatus, { tone: OutcomeTone; title: string }> = {
   received: { tone: "success", title: "Ingresó a planta" },
-  alreadyHere: { tone: "success", title: "Ya estaba en planta" },
-  closed: { tone: "neutral", title: "Envío cerrado: no vuelve a planta" },
-  inRoute: { tone: "warning", title: "Asignado a un recorrido: no se reestantea" },
-  unchanged: { tone: "neutral", title: "Sin cambios" },
+  alreadyHere: { tone: "duplicate", title: "Ya estaba en planta" },
+  closed: { tone: "error", title: "Envío cerrado: no vuelve a planta" },
+  inRoute: { tone: "error", title: "Asignado a un recorrido: no se reestantea" },
+  unchanged: { tone: "error", title: "Sin cambios" },
 };
 
 function errorTitle(o: Extract<ScanOutcome, { kind: "error" }>): string {
@@ -56,12 +60,22 @@ export function presentOutcome(outcome: ScanOutcome, warehouse: string): Outcome
 
   switch (outcome.kind) {
     case "unknown":
-      return { ...base, tone: "warning", title: "Sin respuesta del servidor", lines: [outcome.message] };
+      return { ...base, tone: "error", title: "Sin respuesta del servidor", lines: [outcome.message] };
 
     case "sequence":
-      return { ...base, tone: "warning", title: outcome.message };
+      return { ...base, tone: "error", title: outcome.message };
 
     case "moved":
+      // Misma estantería (from = destino): el servidor no registra movimiento.
+      if (outcome.from === outcome.to) {
+        return {
+          ...base,
+          tone: "duplicate",
+          title: `Ya estaba en ${outcome.to}`,
+          shelf: outcome.to,
+          lines: [`${outcome.tracking ?? "El paquete"} ya estaba en esa estantería: no se movió.`, warehouse],
+        };
+      }
       return {
         ...base,
         tone: "success",
@@ -76,7 +90,7 @@ export function presentOutcome(outcome: ScanOutcome, warehouse: string): Outcome
     case "error":
       return {
         ...base,
-        tone: "danger",
+        tone: "error",
         title: errorTitle(outcome),
         lines: [outcome.message],
         warnings:
