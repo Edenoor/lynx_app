@@ -3,7 +3,7 @@
 //     src/Presentation/config/pushKind.ts src/Presentation/config/pushKind.test.ts
 //   node /tmp/pushkind/pushKind.test.js
 
-import { isRouteNotice, normalizeKind, routeIdOf, shownInApp } from "./pushKind";
+import { conversationIdOf, isChatMessage, isRouteNotice, normalizeKind, routeIdOf, shownInApp } from "./pushKind";
 
 let failed = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -33,6 +33,9 @@ eq("routeIdOf", [routeIdOf({ routeId: 12 }), routeIdOf({ routeId: "12" }), route
 
 // Con la app abierta: la confirmación de colecta (17:00) y la asignación no se ven dos veces (banner + diálogo).
 eq("shownInApp", ["ROUTE_CONFIRMATION", "PICKUP_ASSIGNED", "PICKUP_REASSIGNED", "ROUTE_OFFER", "TURBO_OFFER", "ASIGNACION"].map((k) => shownInApp(k as any)), [true, true, false, false, false, false]);
+// Chat interno: no es un aviso de Alertas
+eq("isChatMessage", [isChatMessage({ type: "CHAT_MESSAGE" }), isChatMessage({ type: "chat_message" }), isChatMessage({ type: "INFO" }), isChatMessage(undefined)], [true, true, false, false]);
+eq("conversationIdOf", [conversationIdOf({ conversationId: 9 }), conversationIdOf({ conversationId: "9" }), conversationIdOf({ conversation_id: 4 }), conversationIdOf({}), conversationIdOf({ conversationId: 0 }), conversationIdOf(null)], [9, 9, 4, null, null, null]);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

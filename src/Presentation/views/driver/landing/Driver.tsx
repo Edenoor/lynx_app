@@ -54,6 +54,7 @@ import { loadDriverProfile, useDriverProfile } from "../account/driverProfileApi
 import { invalidateDriverWork, useDriverWork } from "../work/workSource";
 import { offerNoticeText } from "../offers/offerInbox";
 import { openOfferInbox, refreshOfferCount, setOfferTurboEnabled, showOfferNotice, useOfferCount } from "../offers/offerStore";
+import { chatMessageArrived, openChatList, refreshChatUnread } from "../chat/chatStore";
 interface Props extends StackScreenProps<DriverStackParamList, "DriverScreen"> {}
 type PendingAssignment = {
   deliveryId: string | number;
@@ -166,7 +167,7 @@ export const DriverScreen = ({ navigation }: Props) => {
   const onRefresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
-    await Promise.allSettled([refreshWork(), refreshOfferCount(true)]);
+    await Promise.allSettled([refreshWork(), refreshOfferCount(true), refreshChatUnread(true)]);
     setRefreshing(false);
   };
   // Turbos que lleva hoy contra su tope (null: sin dato, un servidor anterior).
@@ -281,13 +282,8 @@ export const DriverScreen = ({ navigation }: Props) => {
     let cancelled = false;
     (async () => {
       try {
-        await setupPushAndRegisterDevice({
-          userId,
-          username,
-          rol: "driver",
-          vehicleType: defaultVehicleType,
-        });
-        if (cancelled) return;
+        // Los avisos se escuchan antes de registrar el teléfono, que pide
+        // permisos y espera una ubicación: el toque que abrió la app no espera al GPS.
         if (detachNotiRef.current) {
           detachNotiRef.current();
           detachNotiRef.current = null;
@@ -328,6 +324,15 @@ export const DriverScreen = ({ navigation }: Props) => {
             // (notification_log); los avisos de coordinación sí se listan.
             if (kind === "TURBO_OFFER" || kind === "ROUTE_OFFER") return;
             add({ title, body, kind, data });
+          },
+          // Mensaje del chat: con la app abierta se ponen al día el número y
+          // lo que esté a la vista; al tocar la notificación se abre la charla.
+          onChatMessage: ({ conversationId, source }) => {
+            chatMessageArrived();
+            if (source !== "response") return;
+            const nav = navigation as any;
+            if (conversationId) nav.navigate("ChatScreen", { conversationId });
+            else openChatList(nav);
           },
           // Avisos de recorridos: al tocar la notificación se abre lo que
           // corresponde; con la app abierta solo se avisa, sin cambiarle la
@@ -382,6 +387,13 @@ export const DriverScreen = ({ navigation }: Props) => {
             showOfferNotice({ ...offerNoticeText("TURBO_OFFER", raw), open: openOffers });
           },
         });
+        await setupPushAndRegisterDevice({
+          userId,
+          username,
+          rol: "driver",
+          vehicleType: defaultVehicleType,
+        });
+        if (cancelled) return;
       } catch (_e) {
         showFeedback(
           "error",
@@ -476,7 +488,7 @@ export const DriverScreen = ({ navigation }: Props) => {
       mounted = false;
     };
   }, [username]);
-  useFocusEffect(useCallback(() => { void refreshOfferCount(); }, []));
+  useFocusEffect(useCallback(() => { void refreshOfferCount(); void refreshChatUnread(); }, []));
   const toggleTurbo = async (val: boolean) => {
     if (!username) return;
     setTurboOn(val);

@@ -27,9 +27,13 @@ import {
 import { BOTTOM_NAVIGATION_SPACE } from "../../components/BottomNavigationBar";
 import OfferInboxPanel from "../driver/offers/OfferInboxPanel";
 import { useOfferCount } from "../driver/offers/offerStore";
+import ChatListPanel from "../driver/chat/ChatListPanel";
+import { useChatUnread } from "../driver/chat/chatStore";
 
-// Alertas del chofer: dos pestañas, las notificaciones y la bandeja de ofertas.
-type AlertsTab = "notifications" | "offers";
+// Alertas del chofer: tres pestañas, las notificaciones, la bandeja de ofertas
+// y los chats.
+type AlertsTab = "notifications" | "offers" | "messages";
+const asTab = (v: unknown): AlertsTab => (v === "offers" || v === "messages" ? v : "notifications");
 
 const kindLabel: Record<Noti["kind"], string> = {
   NEW_TRAD: "Nuevo envío",
@@ -259,12 +263,13 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
   const driverStack = area === "driver";
   // El vendedor no tiene ofertas: para él es solo la lista de notificaciones.
   const route = useRoute<any>();
-  const [tab, setTab] = useState<AlertsTab>(route.params?.tab === "offers" && driverStack ? "offers" : "notifications");
-  // Un aviso o una push que pide la pestaña Ofertas con la pantalla ya abierta.
+  const [tab, setTab] = useState<AlertsTab>(driverStack ? asTab(route.params?.tab) : "notifications");
+  // Un aviso o una push que pide la pestaña Ofertas (o Mensajes) con la pantalla ya abierta.
   useEffect(() => {
-    if (driverStack && route.params?.tab) setTab(route.params.tab === "offers" ? "offers" : "notifications");
+    if (driverStack && route.params?.tab) setTab(asTab(route.params.tab));
   }, [driverStack, route.params]);
   const offerCount = useOfferCount();
+  const chatUnread = useChatUnread();
 
   const selectedRouteId = selected && LIVE_ROUTE_KINDS.includes(selected.kind) ? routeIdOf(selected.data) : null;
   useEffect(() => {
@@ -397,6 +402,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
             {([
               ["notifications", "Notificaciones", unreadCount],
               ["offers", "Ofertas", offerCount ?? 0],
+              ["messages", "Mensajes", chatUnread ?? 0],
             ] as const).map(([key, label, n]) => {
               const active = tab === key;
               return (
@@ -408,7 +414,7 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={n ? `${label}: ${n}` : label}
                 >
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+                  <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
                   {n ? (
                     <View style={styles.tabBadge}>
                       <Text style={styles.tabBadgeText}>{n > 99 ? "99+" : n}</Text>
@@ -452,6 +458,8 @@ const NotificationsScreen: React.FC<{ area?: "driver" | "seller" }> = ({ area = 
 
       {tab === "offers" ? (
         <OfferInboxPanel navigation={navigation} bottomSpace={BOTTOM_NAVIGATION_SPACE} />
+      ) : tab === "messages" ? (
+        <ChatListPanel navigation={navigation} bottomSpace={BOTTOM_NAVIGATION_SPACE} />
       ) : (
       <FlatList
         data={data}

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import PickerHomeScreen from "../views/picker/PickerHomeScreen";
@@ -15,11 +15,23 @@ import PickerMoveShelfScreen from "../views/picker/PickerMoveShelfScreen";
 import PickerBaulScreen from "../views/picker/PickerBaulScreen";
 import PickerBaulDriverScreen from "../views/picker/PickerBaulDriverScreen";
 import PickerBaulScanScreen from "../views/picker/PickerBaulScanScreen";
+import ChatScreen from "../views/driver/chat/ChatScreen";
+import ChatPeopleScreen from "../views/driver/chat/ChatPeopleScreen";
+import { backToPickerChatList, resetChatStore } from "../views/driver/chat/chatStore";
+
+// El chat interno del picker: la misma charla que el chofer y el directorio,
+// volviendo a la pestaña Mensajes de sus Alertas.
+const PickerChatScreen = () => <ChatScreen onBack={backToPickerChatList} />;
+const PickerChatPeopleScreen = () => <ChatPeopleScreen chatRoute="PickerChatScreen" onBack={backToPickerChatList} />;
 
 export type PickerStackParamList = {
   PickerHomeScreen: undefined;
   PickerScanOptionsScreen: { warehouseId: number | null };
-  PickerNotificationsScreen: { warehouseId: number | null };
+  // tab: la pestaña de Alertas que se abre (Mensajes, desde una charla o un push).
+  PickerNotificationsScreen: { warehouseId: number | null; tab?: "notifications" | "messages" };
+  // Chat interno: una charla y el directorio para empezar una de a uno.
+  PickerChatScreen: { conversationId: number; title?: string };
+  PickerChatPeopleScreen: undefined;
   // purpose "move": se escanea la estantería de origen para mover un paquete.
   PickerShelfScanScreen: { warehouseId: number | null; purpose?: "move" };
   // Maquetas: no guardan nada.
@@ -50,7 +62,10 @@ export type PickerStackParamList = {
 
 const Stack = createNativeStackNavigator<PickerStackParamList>();
 
-export const PickerStackNavigator = () => (
+export const PickerStackNavigator = () => {
+  // Al cerrar sesión: los no leídos del chat no son del próximo usuario.
+  useEffect(() => () => resetChatStore(), []);
+  return (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="PickerHomeScreen" component={PickerHomeScreen} />
     <Stack.Screen name="PickerScanOptionsScreen" component={PickerScanOptionsScreen} />
@@ -66,5 +81,8 @@ export const PickerStackNavigator = () => (
     <Stack.Screen name="PickerBaulScreen" component={PickerBaulScreen} />
     <Stack.Screen name="PickerBaulDriverScreen" component={PickerBaulDriverScreen} />
     <Stack.Screen name="PickerBaulScanScreen" component={PickerBaulScanScreen} />
+    <Stack.Screen name="PickerChatScreen" component={PickerChatScreen} getId={({ params }) => String(params.conversationId)} />
+    <Stack.Screen name="PickerChatPeopleScreen" component={PickerChatPeopleScreen} />
   </Stack.Navigator>
-);
+  );
+};

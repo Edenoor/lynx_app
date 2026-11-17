@@ -17,6 +17,7 @@ import { fetchShelves, loadErrorMessage } from "./warehouseApi";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
 import { refreshUnreadCount } from "./notificationsApi";
 import { usePickerPush } from "./pickerPush";
+import { refreshChatUnread } from "../driver/chat/chatStore";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerHomeScreen">;
 
@@ -53,10 +54,16 @@ export default function PickerHomeScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       refreshUnreadCount();
+      void refreshChatUnread();
     }, []),
   );
 
-  usePickerPush(() => navigation.navigate("PickerNotificationsScreen", { warehouseId }));
+  usePickerPush(
+    () => navigation.navigate("PickerNotificationsScreen", { warehouseId }),
+    (conversationId) => conversationId
+      ? navigation.navigate("PickerChatScreen", { conversationId })
+      : navigation.navigate("PickerNotificationsScreen", { warehouseId, tab: "messages" }),
+  );
 
   return (
     <SafeScreen edges={["top", "left", "right"]}>
