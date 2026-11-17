@@ -18,7 +18,11 @@
     },
     "test": {
       "extends": "preview",
-      "channel": "test"
+      "channel": "test",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://32.197.148.77:5000",
+        "LYNX_ALLOW_CLEARTEXT": "true"
+      }
     },
     "production": {
       "channel": "production",
