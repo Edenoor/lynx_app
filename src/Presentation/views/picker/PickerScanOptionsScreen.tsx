@@ -4,22 +4,30 @@
 // Mover de estantería son reales; Consultar espera un endpoint de consulta y
 // las otras dos son maquetas sin guardado.
 
-import React from "react";
+import React, { useContext } from "react";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
-import { QrActionGrid } from "../../components/QrActionGrid";
+import { QrActionGrid, QrAction } from "../../components/QrActionGrid";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
+import { UserContext } from "../../context/UserContext";
+import { hasPermission, PERMISSION } from "../../navigator/appArea";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerScanOptionsScreen">;
 
 export default function PickerScanOptionsScreen({ navigation, route }: Props) {
   const { warehouseId } = route.params;
   const bottomSpace = usePickerBottomSpace();
+  const { user } = useContext(UserContext);
+  // Recibir, recibir una colecta y mover piden «recibir y ubicar»; el baúl,
+  // «operar baúl». Lo que no puede hacer no se le ofrece.
+  const puedeRecibir = hasPermission(user, PERMISSION.RECIBIR);
+  const puedeBaul = hasPermission(user, PERMISSION.BAUL_OPERAR);
+  const needs: Record<string, boolean> = { receive: puedeRecibir, receiveColecta: puedeRecibir, move: puedeRecibir, baul: puedeBaul };
 
   return (
     <ImageBackground
@@ -40,7 +48,7 @@ export default function PickerScanOptionsScreen({ navigation, route }: Props) {
           </View>
 
           <QrActionGrid
-            actions={[
+            actions={([
               {
                 key: "receive",
                 icon: "file-tray-stacked-outline",
@@ -94,7 +102,7 @@ export default function PickerScanOptionsScreen({ navigation, route }: Props) {
                 note: "Maqueta",
                 onPress: () => navigation.navigate("PickerReportMockScreen", { warehouseId }),
               },
-            ]}
+            ] as QrAction[]).filter((a) => needs[a.key] !== false)}
           />
         </ScrollView>
 

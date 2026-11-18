@@ -11,6 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
 import { UserContext } from "../../context/UserContext";
+import { hasPermission, PERMISSION } from "../../navigator/appArea";
 import { DriverActionCard } from "../../components/DriverActionCard";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { fetchShelves, loadErrorMessage } from "./warehouseApi";
@@ -86,24 +87,31 @@ export default function PickerHomeScreen({ navigation }: Props) {
             )}
           </View>
 
-          <DriverActionCard
-            icon="briefcase-outline"
-            title="Baúl de choferes"
-            subtitle="Recibir paquetes, cambios y cobranzas"
-            onPress={() => navigation.navigate("PickerBaulScreen")}
-          />
-          <DriverActionCard
-            icon="file-tray-stacked-outline"
-            title="Estanterías"
-            subtitle="Qué paquetes hay en cada una"
-            onPress={() => navigation.navigate("PickerShelvesScreen")}
-          />
-          <DriverActionCard
-            icon="swap-horizontal-outline"
-            title="Descolocados"
-            subtitle="Paquetes en una estantería que no les toca"
-            onPress={() => navigation.navigate("PickerMisplacedScreen")}
-          />
+          {/* Cada acceso aparece solo con su permiso (el servidor rechazaría el resto). */}
+          {hasPermission(user, PERMISSION.BAUL_VER, PERMISSION.BAUL_OPERAR) ? (
+            <DriverActionCard
+              icon="briefcase-outline"
+              title="Baúl de choferes"
+              subtitle="Recibir paquetes, cambios y cobranzas"
+              onPress={() => navigation.navigate("PickerBaulScreen")}
+            />
+          ) : null}
+          {hasPermission(user, PERMISSION.DEPOSITO_VER) ? (
+            <>
+              <DriverActionCard
+                icon="file-tray-stacked-outline"
+                title="Estanterías"
+                subtitle="Qué paquetes hay en cada una"
+                onPress={() => navigation.navigate("PickerShelvesScreen")}
+              />
+              <DriverActionCard
+                icon="swap-horizontal-outline"
+                title="Descolocados"
+                subtitle="Paquetes en una estantería que no les toca"
+                onPress={() => navigation.navigate("PickerMisplacedScreen")}
+              />
+            </>
+          ) : null}
 
           <Text style={styles.note}>La configuración de estanterías y los recorridos se gestionan desde la Web.</Text>
         </View>

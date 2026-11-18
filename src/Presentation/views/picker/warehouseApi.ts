@@ -217,9 +217,9 @@ export const moveToShelfById = async (deliveryId: number, shelfId: number) =>
     await putJsonWithTimeout(`/v2/warehouse/deliveries/${deliveryId}/shelf`, { shelf_id: shelfId }, MOVE_TIMEOUT_MS),
   );
 
-// Consultas: piden warehouse_access. Para un Picker el servidor resuelve
-// siempre SU Warehouse (el mismo donde recibe) y no deja ver estanterías de
-// otro.
+// Consultas: piden el permiso de ver el depósito. El servidor resuelve
+// siempre el depósito asignado al usuario (el mismo donde recibe) y no deja
+// ver estanterías de otro.
 export const fetchShelves = async () => unwrap<ShelvesResult>(await getJson("/v2/warehouse/shelves"));
 
 export const fetchShelfContents = async (shelfId: number) =>
@@ -233,7 +233,7 @@ export const fetchMisplaced = async () => unwrap<MisplacedResult>(await getJson(
 export const loadErrorMessage = (e: unknown) => {
   if (!(e instanceof WarehouseApiError)) return "Sin conexión con el servidor.";
   if (e.status === 403 && /requerido/i.test(e.message)) {
-    return "Tu usuario no tiene warehouse_access: pedíselo a un administrador.";
+    return "Tu usuario no tiene permiso para esto: pedíselo a quien administra los usuarios.";
   }
   return e.message;
 };

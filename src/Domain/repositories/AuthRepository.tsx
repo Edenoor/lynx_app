@@ -9,6 +9,8 @@ export type AdminCapabilities = {
     db_access?: boolean;
     user_access?: boolean;
     finance_access?: boolean;
+    // Lista efectiva de permisos. Un servidor anterior no la manda (null).
+    permissions?: string[] | null;
 };
 
 export interface AuthRepository {

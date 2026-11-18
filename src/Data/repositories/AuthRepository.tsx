@@ -74,6 +74,8 @@ export class AuthRepositoryImpl implements AuthRepository {
     const response = await ApiDelivery.get("/v2/auth/capabilities", {
       timeout: CAPABILITIES_TIMEOUT_MS,
     });
-    return response.data?.capabilities ?? {};
+    // Los permisos vienen al lado de las capacidades, no adentro.
+    const permissions = Array.isArray(response.data?.permissions) ? response.data.permissions : null;
+    return { ...(response.data?.capabilities ?? {}), permissions };
   }
 }

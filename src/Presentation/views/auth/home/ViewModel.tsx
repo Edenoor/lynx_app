@@ -140,12 +140,15 @@ const HomeViewModel = () => {
 
       const rol = normalizeRole(rawUser?.rol ?? authUser?.rol);
 
-      // El perfil de un ADMIN (por ejemplo PICKER) no viene en el token y
-      // decide a qué parte de la app entra: sin confirmarlo no se inicia sesión.
+      // El perfil y los permisos de un ADMIN no vienen en el token y deciden
+      // a qué parte de la app entra: sin confirmarlos no se inicia sesión.
       let profile: string | null = null;
+      let permissions: string[] | null = null;
       if (rol === "ADMIN") {
         try {
-          profile = (await GetAdminCapabilitiesUseCase()).profile ?? null;
+          const access = await GetAdminCapabilitiesUseCase();
+          profile = access.profile ?? null;
+          permissions = access.permissions ?? null;
         } catch {
           throw new Error("No se pudo verificar tu perfil. Revisá la conexión y volvé a intentar.");
         }
@@ -171,6 +174,7 @@ const HomeViewModel = () => {
         phone: rawUser?.phone ?? "",
         rol,
         profile,
+        permissions,
         token,
         legacyDriverName: buildFullName(firstName, lastName),
       };

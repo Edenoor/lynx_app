@@ -5,6 +5,7 @@ import { GetUserLocalUseCase } from "../../Domain/useCases/userLocal/GetUserLoca
 import { SaveUserLocalUseCase } from "../../Domain/useCases/userLocal/SaveUserLocal";
 import { RemoveUserLocalUseCase } from "../../Domain/useCases/userLocal/RemoveUserLocal";
 import { GetAdminCapabilitiesUseCase } from "../../Domain/useCases/auth/GetAdminCapabilities";
+import { sameAccess } from "../navigator/appArea";
 import {
   setAuthToken,
   setUnauthorizedHandler,
@@ -108,15 +109,17 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     };
   }, []);
 
-  // Al recuperar la sesión de un ADMIN se vuelve a pedir su perfil: lo pueden
-  // haber cambiado desde la Web. Sin red queda el último guardado. Un 401 ya
+  // Al recuperar la sesión de un ADMIN se vuelven a pedir su perfil y sus
+  // permisos: los pueden haber cambiado desde la Web (o venir de una versión
+  // de la app que no los guardaba). Sin red queda lo último guardado. Un 401 ya
   // cerró la sesión (manejador de ApiDelivery): no se la vuelve a abrir.
   const refreshAdminProfile = async (stored: User): Promise<User | null> => {
     if (stored.rol?.toUpperCase() !== "ADMIN") return stored;
     try {
-      const profile = (await GetAdminCapabilitiesUseCase()).profile ?? null;
-      if (profile === (stored.profile ?? null)) return stored;
-      const updated = { ...stored, profile };
+      const access = await GetAdminCapabilitiesUseCase();
+      const fresh = { profile: access.profile ?? null, permissions: access.permissions ?? null };
+      if (sameAccess(stored, fresh)) return stored;
+      const updated = { ...stored, ...fresh };
       await SaveUserLocalUseCase(updated).catch(() => undefined);
       return updated;
     } catch (error: any) {

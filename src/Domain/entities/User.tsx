@@ -32,6 +32,14 @@ export interface User {
   profile?: string | null;
 
   /**
+   * Permisos efectivos de un ADMIN (los que ya tiene por su ficha más los de
+   * sus roles), tal como los informa GET /v2/auth/capabilities. Deciden si
+   * entra al depósito y qué ve adentro (navigator/appArea.ts). Sin definir =
+   * servidor anterior a los permisos: vale el perfil.
+   */
+  permissions?: string[] | null;
+
+  /**
    * Nombre usado para consultar envíos legacy de driver.
    * Hoy legacy filtra por cadete, aunque el body se llame username.
    */
