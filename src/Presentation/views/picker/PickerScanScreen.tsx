@@ -16,6 +16,9 @@ import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
 import { PendingPackage, processScan, ScanOutcome } from "./pickerScan";
 import { OutcomeTone, OutcomeView, presentOutcome } from "./pickerOutcome";
+import { loadErrorMessage, fetchColectas, type Colecta } from "./warehouseApi";
+import { applyAttribution, findColecta } from "./colecta";
+import { ColectaProgress } from "./ColectaProgress";
 import { PickerHeader, warehouseLabel } from "./pickerUi";
 import { signalScan } from "../../config/ScanSound";
 
@@ -36,9 +39,33 @@ export default function PickerScanScreen({ navigation, route }: Props) {
   const [processing, setProcessing] = useState(false);
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [pending, setPending] = useState<PendingPackage | null>(null);
-  const { warehouseId, target } = route.params;
+  const { warehouseId, target, colecta: chosen } = route.params;
+  const colectaRouteId = chosen?.routeId ?? null;
   const warehouse = warehouseLabel(warehouseId);
-  const view = outcome ? presentOutcome(outcome, warehouse) : null;
+  const view = outcome ? presentOutcome(outcome, warehouse, !!chosen) : null;
+
+  // Con colecta: sus contadores, tal como los da el servidor al entrar, al
+  // tocar «actualizar» y en la respuesta de cada escaneo.
+  const [colecta, setColecta] = useState<Colecta | null>(null);
+  const [colectaError, setColectaError] = useState<string | null>(null);
+  const [colectaLoading, setColectaLoading] = useState(!!chosen);
+  const chosenDate = chosen?.date ?? null;
+  const loadColecta = useCallback(async () => {
+    if (!colectaRouteId || !chosenDate) return;
+    setColectaLoading(true);
+    try {
+      const found = findColecta(await fetchColectas(chosenDate), colectaRouteId);
+      setColecta(found);
+      setColectaError(found ? null : "la colecta ya no figura entre las del día");
+    } catch (e) {
+      setColectaError(loadErrorMessage(e));
+    } finally {
+      setColectaLoading(false);
+    }
+  }, [colectaRouteId, chosenDate]);
+  useEffect(() => {
+    loadColecta();
+  }, [loadColecta]);
 
   // processScan no tira errores (los devuelve como resultado); el finally
   // garantiza igual que la pantalla no quede en "Procesando…".
@@ -46,23 +73,34 @@ export default function PickerScanScreen({ navigation, route }: Props) {
     async (raw: string) => {
       setProcessing(true);
       try {
-        const r = await processScan(raw, pending);
+        const r = await processScan(raw, pending, colectaRouteId);
         setOutcome(r.outcome);
         setPending(r.pending);
+        if (colectaRouteId && r.outcome.kind === "received") {
+          const attribution = r.outcome.result.colecta;
+          setColecta((c) => (c ? applyAttribution(c, attribution) : c));
+        }
         // Éxito si se recibió o se movió; duplicado (sin bip de error) si ya
         // estaba; cualquier otro resultado, error.
-        const done = presentOutcome(r.outcome, warehouse);
+        const done = presentOutcome(r.outcome, warehouse, !!colectaRouteId);
         signalScan(done.tone, done.warnings.length > 0);
       } finally {
         setProcessing(false);
       }
     },
-    [pending, warehouse],
+    [pending, warehouse, colectaRouteId],
   );
 
   return (
     <SafeScreen>
-      <PickerHeader title="Recepción en planta" subtitle={warehouse} onBack={() => navigation.goBack()} />
+      <PickerHeader
+        title={chosen ? `Colecta ${colecta?.name ?? chosen.name}` : "Recepción en planta"}
+        subtitle={chosen ? `#${chosen.routeId} · ${warehouse}` : warehouse}
+        onBack={() => navigation.goBack()}
+      />
+      {chosen ? (
+        <ColectaProgress colecta={colecta} error={colectaError} loading={colectaLoading} onRefresh={loadColecta} />
+      ) : null}
       {target ? (
         <Text style={styles.target}>
           Reubicando {target.tracking ?? "el paquete"}: escaneá el paquete y después la estantería {target.expectedShelf}.

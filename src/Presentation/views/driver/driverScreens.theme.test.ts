@@ -1362,6 +1362,113 @@ const setDriverApi = () => {
       check("Baúl: lo recibido acá, otra vez: amarillo y sin bip de error", colorOf(tree, "Este paquete ya fue escaneado") === AppTheme.colors.warning && textOf(tree).includes("Ya recibiste lo pendiente de este envío.") && sounds.length === soundsBefore && signals[signals.length - 1] === "duplicate", `${sounds.join(",")} | ${signals.join(",")}`);
       check("Baúl: no se vuelve a confirmar nada", api.calls.filter((c) => c.startsWith("POST ")).length === 1, api.calls.join(", "));
     }
+
+    // Recepción por colecta: menú QR con las dos opciones, lista del día,
+    // detalle, y el mismo escáner con colecta_route_id. Los contadores son
+    // los del servidor; la atribución nunca cambia el color de la recepción.
+    {
+      const PickerOptions = L("src/Presentation/views/picker/PickerScanOptionsScreen.tsx").default;
+      const PickerColectas = L("src/Presentation/views/picker/PickerColectasScreen.tsx").default;
+      const PickerColectaDetail = L("src/Presentation/views/picker/PickerColectaDetailScreen.tsx").default;
+      const js = JSON.stringify;
+      const AR_TODAY = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      const LIST = `GET /v2/warehouse/colectas?date=${AR_TODAY}`;
+      const st = (id: number, name: string, declarado: number | null, recibido: number, reception_status = "PENDIENTE") =>
+        ({ route_stop_id: id, store_id: id * 10, store_name: name, declarado, recibido, reception_status });
+      const mananero = (fix = 0) => ({ route_id: 586, status: "IN_PROGRESS", qr_token: null, name: "MAÑANERO 02",
+        stops: [st(1, "Insuoffice", 47, 10), st(2, "Dress", 48, 0), st(3, "Fix Salud", 102, fix)] });
+      const cerrada = { route_id: 590, status: "COMPLETED", qr_token: null, name: "TARDE SUR", stops: [st(9, "Ropa Linda", 5, 5, "CORRECTA")] };
+      const list = (m = mananero()) => ({ ok: true, date: AR_TODAY, colectas: [m, cerrada] });
+
+      // Menú QR: Recepcionar sigue igual; Recepcionar colecta abre la lista.
+      nav.calls = [];
+      let tree = await mount(RealReact.createElement(PickerOptions, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      tree = await press(tree, "Recepcionar colecta");
+      check("Colecta: el menú QR abre la lista de colectas", same(lastNav(), ["navigate", "PickerColectasScreen", { warehouseId: 1 }]), js(lastNav()));
+      const recv = all(tree, (x) => typeof x.props?.onPress === "function" && textOf(x) === "Recepcionar")[0];
+      recv.props.onPress(); await settle();
+      check("Colecta: «Recepcionar» abre el escáner de siempre, sin colecta", same(lastNav(), ["navigate", "PickerScanScreen", { warehouseId: 1 }]), js(lastNav()));
+
+      // Lista del día (Argentina): abiertas y cerradas, con búsqueda local.
+      api.calls = []; api.replies = { [LIST]: list() };
+      tree = await mount(RealReact.createElement(PickerColectas, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      check("Colecta: pide las colectas del día de Argentina, una vez", same(api.calls, [LIST]), api.calls.join(", "));
+      check("Colecta: lista abiertas y cerradas con su estado", textOf(tree).includes("MAÑANERO 02") && textOf(tree).includes("Recepción abierta") && textOf(tree).includes("TARDE SUR") && textOf(tree).includes("Recepción cerrada"), textOf(tree));
+      check("Colecta: la fila dice declarados y atribuidos", textOf(tree).includes("Declarados 197 · Atribuidos 10"), textOf(tree));
+      all(tree, (x) => x.type === "TextInput")[0].props.onChangeText("fix"); tree = await settle();
+      check("Colecta: buscar por tienda deja solo la que la tiene", textOf(tree).includes("MAÑANERO 02") && !textOf(tree).includes("TARDE SUR"), textOf(tree));
+      check("Colecta: buscar no vuelve a pedir", api.calls.length === 1, api.calls.join(", "));
+      byLabel(tree, "Ver colecta MAÑANERO 02")[0].props.onPress(); await settle();
+      check("Colecta: tocarla abre el detalle", same(lastNav(), ["navigate", "PickerColectaDetailScreen", { warehouseId: 1, routeId: 586, date: AR_TODAY, name: "MAÑANERO 02" }]), js(lastNav()));
+      api.replies = { [LIST]: { ok: true, date: AR_TODAY, colectas: [] } };
+      tree = await mount(RealReact.createElement(PickerColectas, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      check("Colecta: día sin colectas lo dice", textOf(tree).includes("No hay colectas de tiendas para hoy."), textOf(tree));
+      api.replies = { [LIST]: new Error("sin red") };
+      tree = await mount(RealReact.createElement(PickerColectas, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      check("Colecta: sin red muestra el error y cómo reintentar", textOf(tree).includes("Sin conexión con el servidor.") && textOf(tree).includes("Deslizá hacia abajo para reintentar."), textOf(tree));
+
+      // Detalle: tiendas, declarados, atribuidos, estado y total.
+      api.calls = []; api.replies = { [LIST]: list() };
+      const detailParams = { warehouseId: 1, routeId: 586, date: AR_TODAY, name: "MAÑANERO 02" };
+      tree = await mount(RealReact.createElement(PickerColectaDetail, { navigation: nav, route: { params: detailParams } }));
+      const dt = textOf(tree);
+      check("Colecta: detalle con id, fecha, tiendas y declarados", ["#586", "Insuoffice", "47", "Dress", "48", "Fix Salud", "102"].every((t) => dt.includes(t)), dt);
+      check("Colecta: total declarado 197 y atribuidos aparte", dt.includes("Total declarado: 197") && dt.includes("Atribuidos a la colecta: 10") && dt.includes("Atribuidos 10"), dt);
+      check("Colecta: estado de la colecta y de la recepción", dt.includes("Recepción abierta") && dt.includes("En curso · 3 tiendas"), dt);
+      tree = await press(tree, "Continuar");
+      check("Colecta: «Continuar» abre el mismo escáner con la colecta", same(lastNav(), ["navigate", "PickerScanScreen", { warehouseId: 1, colecta: { routeId: 586, date: AR_TODAY, name: "MAÑANERO 02" } }]), js(lastNav()));
+      api.replies = { [LIST]: list() };
+      tree = await mount(RealReact.createElement(PickerColectaDetail, { navigation: nav, route: { params: { ...detailParams, routeId: 590, name: "TARDE SUR" } } }));
+      check("Colecta: una cerrada se ve como cerrada y avisa que no suma", textOf(tree).includes("Cerrada: correcta") && textOf(tree).includes("La recepción está cerrada"), textOf(tree));
+
+      // Escaneo con colecta: el mismo motor, el body lleva colecta_route_id.
+      const rec = (already: boolean, colecta?: any) => ({
+        ok: true, delivery: { id: 1, tracking: "T-A", store: "Fix Salud", receiver: "Ana", direccion: null, postal_code: "1000", tipo_envio: "flex", is_turbo: false },
+        shelf: { id: 3, code: "NORTE-1", name: null, unclassified: false, suggested: null },
+        ops: already ? { from: "SHELVED", to: "SHELVED", transitions: [], already_here: true } : { from: "ENTERED", to: "SHELVED", transitions: ["ARRIVED_WAREHOUSE", "SHELVED"], already_here: false },
+        alerts: [], ...(colecta === undefined ? {} : { colecta }),
+      });
+      const fixStop = (recibido: number) => ({ route_id: 586, route_stop_id: 3, store_id: 30, store_name: "Fix Salud", declarado: 102, recibido, reception_status: "PENDIENTE" });
+      api.calls = []; api.bodies = []; alerts.length = 0; sounds.length = 0; signals.length = 0;
+      api.replies = {
+        [LIST]: [list(), list(mananero(1))],
+        "POST /v2/warehouse/receive": [
+          rec(false, { status: "ATRIBUIDO", evidence: "ESCANEO_COLECTA", ...fixStop(1) }),
+          rec(true, { status: "YA_CONTADO", ...fixStop(1) }),
+          rec(false, { status: "RECHAZADO", reason: "OTRA_TIENDA", text: "no es de ninguna tienda de esta colecta", route_id: 586, route_stop_id: null }),
+          rec(false, { status: "ERROR", text: "no se pudo registrar a qué colecta pertenece: la recepción quedó hecha", route_id: 586 }),
+          rec(false),
+          { ok: false, status: 404, error: "la colecta elegida no existe" },
+        ],
+      };
+      const scanParams = { warehouseId: 1, colecta: { routeId: 586, date: AR_TODAY, name: "MAÑANERO 02" } };
+      tree = await mount(RealReact.createElement(PickerScan, { navigation: nav, route: { params: scanParams } }));
+      check("Colecta: el escáner muestra declarados y atribuidos del servidor", textOf(tree).includes("Declarados 197 · Atribuidos 10") && textOf(tree).includes("0 de 102"), textOf(tree));
+      tree = await read(tree, "46001");
+      check("Colecta: el body lleva colecta_route_id", same(api.bodies.filter(([k]) => k.startsWith("POST")).map(([, b]) => b), [{ qr: "46001", colecta_route_id: 586 }]), js(api.bodies));
+      check("Colecta ATRIBUIDO: verde, bip de éxito y la línea de la tienda", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && textOf(tree).includes("Atribuido a Fix Salud: 1 de 102") && same(sounds, ["success"]), `${sounds} | ${textOf(tree)}`);
+      check("Colecta ATRIBUIDO: el total sube con el dato del servidor", textOf(tree).includes("Declarados 197 · Atribuidos 11"), textOf(tree));
+      tree = await read(tree, "46001 ");
+      check("Colecta reescaneo: amarillo, sin bip de error, no suma", colorOf(tree, "Ya estaba en planta") === AppTheme.colors.warning && textOf(tree).includes("Ya estaba atribuido a Fix Salud (1 de 102)") && textOf(tree).includes("Atribuidos 11") && signals[signals.length - 1] === "duplicate" && !sounds.includes("error"), `${signals} | ${textOf(tree)}`);
+      tree = await read(tree, "46002");
+      check("Colecta otra tienda: se recibió (verde) y avisa que no se sumó", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && textOf(tree).includes("No se sumó a la colecta: no es de ninguna tienda de esta colecta.") && textOf(tree).includes("Atribuidos 11"), textOf(tree));
+      tree = await read(tree, "46003");
+      check("Colecta ERROR de atribución: la recepción física queda (verde) con aviso", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && textOf(tree).includes("la recepción quedó hecha"), textOf(tree));
+      tree = await read(tree, "46004");
+      check("Colecta sin campo colecta: recibido, pero no se da por atribuido", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && textOf(tree).includes("El servidor no confirmó la atribución"), textOf(tree));
+      tree = await read(tree, "46005");
+      check("Colecta 404: rojo, no se recibió, bip de error", colorOf(tree, "La colecta elegida no existe: no se recibió") === AppTheme.colors.danger && sounds[sounds.length - 1] === "error", `${sounds} | ${textOf(tree)}`);
+      check("Colecta: escaneos seguidos sin diálogos", alerts.length === 0 && api.calls.filter((c) => c.startsWith("POST")).length === 6, api.calls.join(", "));
+      byLabel(tree, "Actualizar contadores de la colecta")[0].props.onPress(); tree = await settle();
+      check("Colecta: actualizar vuelve a pedir y muestra lo del servidor (retomar)", api.calls.filter((c) => c === LIST).length === 2 && textOf(tree).includes("Declarados 197 · Atribuidos 11"), api.calls.join(", "));
+
+      // Sin colecta: el body es exactamente { qr } y no se piden colectas.
+      api.calls = []; api.bodies = []; api.replies = { "POST /v2/warehouse/receive": rec(false, { status: "ATRIBUIDO", evidence: "ESCANEO_TIENDA", ...fixStop(2) }) };
+      tree = await mount(RealReact.createElement(PickerScan, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      tree = await read(tree, "46009");
+      check("Recepción normal: body { qr }, sin pedir colectas", same(api.bodies.map(([, b]) => b), [{ qr: "46009" }]) && same(api.calls, ["POST /v2/warehouse/receive"]), `${js(api.bodies)} | ${api.calls}`);
+      check("Recepción normal: tarjeta de siempre, sin líneas de colecta", colorOf(tree, "Ingresó a planta") === AppTheme.colors.success && !textOf(tree).includes("Atribuido") && !textOf(tree).includes("Declarados"), textOf(tree));
+    }
   }
 
   // 9c) Escaneo continuo (Asignarme y Colecta): verde o rojo sin diálogos,

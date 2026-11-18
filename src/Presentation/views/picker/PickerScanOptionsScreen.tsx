@@ -1,9 +1,8 @@
 // src/Presentation/views/picker/PickerScanOptionsScreen.tsx
 // Qué operación de escaneo quiere hacer el Picker (misma pantalla que la del
-// chofer, con sus propias acciones). Recepcionar y Mover de estantería son
-// reales; Consultar espera un endpoint de consulta y las otras dos son
-// maquetas sin guardado.
-// Colectar se agrega cuando exista su contrato en el servidor.
+// chofer, con sus propias acciones). Recepcionar, Recepcionar colecta, Baúl y
+// Mover de estantería son reales; Consultar espera un endpoint de consulta y
+// las otras dos son maquetas sin guardado.
 
 import React from "react";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -47,6 +46,14 @@ export default function PickerScanOptionsScreen({ navigation, route }: Props) {
                 icon: "file-tray-stacked-outline",
                 label: "Recepcionar",
                 onPress: () => navigation.navigate("PickerScanScreen", { warehouseId }),
+              },
+              {
+                // Misma recepción, sumando cada paquete a la colecta elegida
+                // (Control 3). Recepcionar sigue sin colecta.
+                key: "receiveColecta",
+                icon: "albums-outline",
+                label: "Recepcionar colecta",
+                onPress: () => navigation.navigate("PickerColectasScreen", { warehouseId }),
               },
               {
                 // Etiqueta original de un envío que trae un chofer: paquete, cambio o cobranza.

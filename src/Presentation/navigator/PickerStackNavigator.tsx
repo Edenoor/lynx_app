@@ -15,6 +15,8 @@ import PickerMoveShelfScreen from "../views/picker/PickerMoveShelfScreen";
 import PickerBaulScreen from "../views/picker/PickerBaulScreen";
 import PickerBaulDriverScreen from "../views/picker/PickerBaulDriverScreen";
 import PickerBaulScanScreen from "../views/picker/PickerBaulScanScreen";
+import PickerColectasScreen from "../views/picker/PickerColectasScreen";
+import PickerColectaDetailScreen from "../views/picker/PickerColectaDetailScreen";
 
 export type PickerStackParamList = {
   PickerHomeScreen: undefined;
@@ -30,7 +32,13 @@ export type PickerStackParamList = {
   PickerScanScreen: {
     warehouseId: number | null;
     target?: { tracking: string | null; expectedShelf: string };
+    // Recepción por colecta: cada paquete viaja con colecta_route_id = routeId.
+    // date: el día de la lista de colectas (AAAA-MM-DD, Argentina).
+    colecta?: { routeId: number; date: string; name: string };
   };
+  // Recepción por colecta: lista del día y detalle de una.
+  PickerColectasScreen: { warehouseId: number | null };
+  PickerColectaDetailScreen: { warehouseId: number | null; routeId: number; date: string; name: string };
   PickerShelvesScreen: undefined;
   PickerShelfDetailScreen: { shelfId: number; code: string; warehouseId: number | null };
   PickerMisplacedScreen: undefined;
@@ -66,5 +74,7 @@ export const PickerStackNavigator = () => (
     <Stack.Screen name="PickerBaulScreen" component={PickerBaulScreen} />
     <Stack.Screen name="PickerBaulDriverScreen" component={PickerBaulDriverScreen} />
     <Stack.Screen name="PickerBaulScanScreen" component={PickerBaulScanScreen} />
+    <Stack.Screen name="PickerColectasScreen" component={PickerColectasScreen} />
+    <Stack.Screen name="PickerColectaDetailScreen" component={PickerColectaDetailScreen} />
   </Stack.Navigator>
 );
