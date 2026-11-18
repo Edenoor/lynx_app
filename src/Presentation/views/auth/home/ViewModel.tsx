@@ -8,10 +8,20 @@ import {
   setAuthToken,
 } from "../../../../Data/sources/remote/api/ApiDelivery";
 
+import { passwordProblem } from "../../../utils/passwordPolicy";
+
 type LoginResult = {
   ok: boolean;
   rol?: string;
   message?: string;
+};
+
+// Entró con la clave temporal de un reseteo: el servidor no le deja hacer
+// nada más que definir la propia, así que la sesión todavía no se guarda.
+type PendingPasswordChange = {
+  userId: string;
+  token: string;
+  temporary: string;
 };
 
 const buildFullName = (
@@ -34,6 +44,8 @@ const HomeViewModel = () => {
     username: "",
     password: "",
   });
+
+  const [pendingChange, setPendingChange] = useState<PendingPasswordChange | null>(null);
 
   const { user, saveUserSession, removeUserSession } = useContext(UserContext);
 
@@ -64,8 +76,12 @@ const HomeViewModel = () => {
 
   const clearError = () => setErrorMessage("");
 
-  const login = async (): Promise<LoginResult> => {
-    if (!isValidForm()) {
+  // `passwordOverride`: recién definida la contraseña propia se entra con
+  // ella sin esperar a que el estado del formulario se actualice.
+  const login = async (passwordOverride?: string): Promise<LoginResult> => {
+    const password = passwordOverride ?? values.password;
+
+    if (passwordOverride === undefined && !isValidForm()) {
       return {
         ok: false,
         message: "Completá usuario y contraseña",
@@ -75,7 +91,7 @@ const HomeViewModel = () => {
     try {
       const response: any = await LoginAuthUseCase(
         values.username.trim(),
-        values.password,
+        password,
       );
 
       // Sin loguear la respuesta: trae el token, y los logs quedan en logcat
@@ -96,6 +112,11 @@ const HomeViewModel = () => {
           ok: false,
           message: msg,
         };
+      }
+
+      if (authUser.password_temporary === true) {
+        setPendingChange({ userId: String(authUser.id), token, temporary: password });
+        return { ok: false };
       }
 
       setAuthToken(token);
@@ -179,12 +200,57 @@ const HomeViewModel = () => {
     }
   };
 
+  const cancelPasswordChange = () => setPendingChange(null);
+
+  // Define la contraseña propia con la sesión de la clave temporal y entra.
+  const changeTemporaryPassword = async (
+    newPassword: string,
+    confirmPassword: string,
+  ): Promise<LoginResult> => {
+    if (!pendingChange) return { ok: false };
+
+    const fail = (message: string): LoginResult => {
+      setErrorMessage(message);
+      return { ok: false, message };
+    };
+
+    const problem = passwordProblem(newPassword);
+    if (problem) return fail(problem);
+    if (newPassword !== confirmPassword) return fail("Las contraseñas no coinciden");
+    if (newPassword === pendingChange.temporary) {
+      return fail("La contraseña nueva no puede ser la clave temporal");
+    }
+
+    try {
+      await ApiDelivery.put(
+        `/v2/users/${pendingChange.userId}/change-password`,
+        { password: newPassword },
+        { headers: { Authorization: `Bearer ${pendingChange.token}` } },
+      );
+    } catch (error: any) {
+      return fail(
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "No se pudo guardar la contraseña. Revisá la conexión y volvé a intentar.",
+      );
+    }
+
+    // Cambiar la contraseña cierra la sesión de la clave temporal: se entra
+    // de nuevo, ya con la propia.
+    setPendingChange(null);
+    setValues((current) => ({ ...current, password: newPassword }));
+    return login(newPassword);
+  };
+
   return {
     values,
     ...values,
     user,
     onChange,
     login,
+    mustChangePassword: pendingChange !== null,
+    changeTemporaryPassword,
+    cancelPasswordChange,
     errorMessage,
     clearError,
     removeUserSession,

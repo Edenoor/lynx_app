@@ -26,10 +26,30 @@ const sleep = (ms: number) =>
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
-  const { values, onChange, login, errorMessage, clearError } = useViewModel();
+  const {
+    values,
+    onChange,
+    login,
+    errorMessage,
+    clearError,
+    mustChangePassword,
+    changeTemporaryPassword,
+    cancelPasswordChange,
+  } = useViewModel();
   const [loading, setLoading] = useState(false);
   // «Siguiente» en usuario pasa el foco a la contraseña.
   const passwordRef = useRef<TextInput>(null);
+  // Entró con una clave temporal: define la propia antes de pasar.
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const confirmRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!mustChangePassword) {
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  }, [mustChangePassword]);
 
   useEffect(() => {
     if (errorMessage) {
@@ -47,6 +67,18 @@ const onPressLogin = async () => {
     const [result] = await Promise.all([login(), sleep(850)]);
 
     if (!result.ok) return;
+  } finally {
+    setLoading(false);
+  }
+};
+
+const onPressSavePassword = async () => {
+  if (loading) return;
+
+  setLoading(true);
+
+  try {
+    await changeTemporaryPassword(newPassword, confirmPassword);
   } finally {
     setLoading(false);
   }
@@ -82,6 +114,75 @@ const onPressLogin = async () => {
           <Text style={styles.subtitle}>Preciso. Inteligente. Ágil.</Text>
         </View>
 
+        {mustChangePassword ? (
+        <View style={styles.formPanel}>
+          <Text style={styles.changeTitle}>Definí tu contraseña</Text>
+          <Text style={styles.changeText}>
+            Entraste con una clave temporal. Elegí una contraseña propia para
+            seguir: al menos 8 caracteres, con una mayúscula, una minúscula y
+            un número.
+          </Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Contraseña nueva</Text>
+            <TextInput
+              value={newPassword}
+              placeholder="Ingresá tu contraseña nueva"
+              placeholderTextColor={theme.colors.placeholder}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!loading}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => confirmRef.current?.focus()}
+              style={styles.input}
+              onChangeText={setNewPassword}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Repetila</Text>
+            <TextInput
+              ref={confirmRef}
+              value={confirmPassword}
+              placeholder="Repetí tu contraseña nueva"
+              placeholderTextColor={theme.colors.placeholder}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={onPressSavePassword}
+              style={styles.input}
+              onChangeText={setConfirmPassword}
+            />
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            style={[
+              styles.primaryButton,
+              loading && styles.primaryButtonDisabled,
+            ]}
+            onPress={onPressSavePassword}
+            disabled={loading}
+          >
+            <Text style={styles.primaryButtonText}>
+              {loading ? "Guardando..." : "Guardar y entrar"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.75}
+            disabled={loading}
+            onPress={cancelPasswordChange}
+            style={styles.changeBack}
+          >
+            <Text style={styles.secondaryLink}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+        ) : (
         <View style={styles.formPanel}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Usuario</Text>
@@ -132,6 +233,7 @@ const onPressLogin = async () => {
             </Text>
           </TouchableOpacity>
         </View>
+        )}
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -304,6 +406,23 @@ const makeStyles = (t: Theme) => StyleSheet.create({
 
   inputGroup: {
     gap: t.spacing.sm,
+  },
+
+  changeTitle: {
+    color: t.colors.text,
+    fontSize: t.font.size.lg,
+    fontWeight: "800",
+  },
+
+  changeText: {
+    color: t.colors.textMuted,
+    fontSize: t.font.size.md,
+    lineHeight: 21,
+  },
+
+  changeBack: {
+    alignItems: "center",
+    paddingVertical: t.spacing.sm,
   },
 
   label: {
