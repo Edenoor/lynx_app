@@ -20,6 +20,13 @@
       "extends": "preview",
       "channel": "test"
     },
+    "picker-preview": {
+      "extends": "preview",
+      "channel": "picker-preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.wynflex.com.ar"
+      }
+    },
     "production": {
       "channel": "production",
       "autoIncrement": true,
