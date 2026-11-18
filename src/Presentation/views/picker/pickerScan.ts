@@ -76,9 +76,11 @@ const failure = (e: unknown, operation: "receive" | "move", raw: string): ScanOu
 
 // Devuelve el resultado y cuál queda como "último paquete" para una estantería.
 // `raw` viaja al servidor tal cual lo leyó la cámara.
+// colectaRouteId: la colecta que se está recibiendo (solo para paquetes).
 export async function processScan(
   raw: string,
   pending: PendingPackage | null,
+  colectaRouteId?: number | null,
 ): Promise<{ outcome: ScanOutcome; pending: PendingPackage | null }> {
   if (isShelfQr(raw)) {
     if (!pending) return { outcome: { kind: "sequence", message: SHELF_FIRST }, pending: null };
@@ -93,7 +95,7 @@ export async function processScan(
   }
 
   try {
-    const result = await receivePackage(raw);
+    const result = await receivePackage(raw, colectaRouteId);
     const status = receiveStatus(result);
     // Solo lo que está en planta se puede mover a otra estantería.
     const movable = result.shelf && (status === "received" || status === "alreadyHere");

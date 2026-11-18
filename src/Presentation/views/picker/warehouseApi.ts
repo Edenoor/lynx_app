@@ -57,7 +57,36 @@ export type ReceiveResult = {
   shelf: { id: number; code: string; name: string | null; unclassified: boolean; suggested: string | null } | null;
   ops: { from: string; to: string; transitions: string[]; already_here: boolean };
   alerts: ReceiveAlert[];
+  // A qué colecta se sumó (Control 3). Falta en un servidor sin el contrato.
+  colecta?: ColectaAttribution | null;
 };
+
+// Resultado de sumar el paquete a la colecta elegida. Nunca cambia la
+// recepción física: RECHAZADO y ERROR dejan el paquete recibido igual.
+export type ColectaAttribution = {
+  status: "ATRIBUIDO" | "YA_CONTADO" | "RECHAZADO" | "ERROR";
+  reason?: string;
+  text?: string;
+  route_id?: number;
+  route_stop_id?: number | null;
+  store_name?: string | null;
+  declarado?: number | null;
+  // Atribuidos a esa parada, este incluido (no es el conteo físico).
+  recibido?: number;
+  reception_status?: string;
+};
+
+// GET /v2/warehouse/colectas?date=. `recibido` cuenta los paquetes
+// atribuidos a la parada, no los que entraron físicamente al depósito.
+export type ColectaStop = {
+  route_stop_id: number;
+  store_id: number;
+  store_name: string | null;
+  declarado: number | null;
+  recibido: number;
+  reception_status: string;
+};
+export type Colecta = { route_id: number; status: string; qr_token: string | null; name: string; stops: ColectaStop[] };
 
 export type MoveResult = { from: string | null; shelf: { id: number; code: string; name: string | null } };
 
@@ -162,8 +191,19 @@ const unwrap = <T,>(res: any): T => {
 // envío si hace falta y lo estantea según el código postal.
 // Sin respuesta (timeout o sin red) rechaza con un Error común: el servidor
 // pudo haberlo ejecutado igual.
-export const receivePackage = async (qr: string) =>
-  unwrap<ReceiveResult>(await postJsonWithTimeout("/v2/warehouse/receive", { qr }, RECEIVE_TIMEOUT_MS));
+// Con colecta elegida viaja colecta_route_id; sin ella el body es { qr }, como siempre.
+export const receivePackage = async (qr: string, colectaRouteId?: number | null) =>
+  unwrap<ReceiveResult>(
+    await postJsonWithTimeout(
+      "/v2/warehouse/receive",
+      colectaRouteId ? { qr, colecta_route_id: colectaRouteId } : { qr },
+      RECEIVE_TIMEOUT_MS,
+    ),
+  );
+
+// Colectas de un día (AAAA-MM-DD, día de Argentina), abiertas o cerradas.
+export const fetchColectas = async (date: string) =>
+  unwrap<{ date: string; colectas: Colecta[] }>(await getJson(`/v2/warehouse/colectas?date=${encodeURIComponent(date)}`)).colectas ?? [];
 
 export const moveToShelf = async (deliveryId: number, shelfQr: string) =>
   unwrap<MoveResult>(

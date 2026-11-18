@@ -62,5 +62,29 @@ for (const [o, want] of [
 ] as const) eq(`respuesta ${o.kind === "error" ? `${o.status} ${o.operation}` : ""} → ${want}`, short(o), want);
 eq("un 409 no es duplicado: muestra el motivo del servidor", presentOutcome(err("conflict", 409, "El envío está bajo custodia de otro Warehouse"), WH).lines, ["El envío está bajo custodia de otro Warehouse"]);
 
+// Recepción por colecta: la atribución agrega una línea o un aviso; el color
+// y el título son los de la recepción física, siempre.
+{
+  const colecta = (c: ReceiveResult["colecta"]) => result({ colecta: c });
+  const same = (status: ReceiveStatus, r: ReceiveResult) => {
+    const plain = presentOutcome(received(status, result()), WH);
+    const v = presentOutcome(received(status, r), WH, true);
+    return v.tone === plain.tone && v.title === plain.title;
+  };
+  const ok = colecta({ status: "ATRIBUIDO", route_id: 586, route_stop_id: 3, store_name: "Fix Salud", declarado: 102, recibido: 7 });
+  eq("colecta ATRIBUIDO: mismo verde y título, más la línea", [same("received", ok), presentOutcome(received("received", ok), WH, true).lines.includes("Atribuido a Fix Salud: 7 de 102")], [true, true]);
+  const dup = colecta({ status: "YA_CONTADO", route_id: 586, route_stop_id: 3, store_name: "Fix Salud", declarado: 102, recibido: 7 });
+  eq("colecta YA_CONTADO con física duplicada: amarillo, sin aviso", [same("alreadyHere", dup), presentOutcome(received("alreadyHere", dup), WH, true).warnings], [true, []]);
+  const other = colecta({ status: "RECHAZADO", reason: "OTRA_TIENDA", text: "no es de ninguna tienda de esta colecta", route_id: 586, route_stop_id: null });
+  const vo = presentOutcome(received("received", other), WH, true);
+  eq("colecta RECHAZADO: sigue verde (se recibió) con el aviso primero", [same("received", other), vo.warnings[0]], [true, "No se sumó a la colecta: no es de ninguna tienda de esta colecta."]);
+  const fail = colecta({ status: "ERROR", text: "no se pudo registrar a qué colecta pertenece: la recepción quedó hecha", route_id: 586 });
+  eq("colecta ERROR: sigue verde con aviso", [same("received", fail), presentOutcome(received("received", fail), WH, true).warnings.length], [true, 1]);
+  eq("colecta elegida y el servidor no la informa: aviso, sin atribuir", presentOutcome(received("received", result()), WH, true).warnings, ["El servidor no confirmó la atribución: no se sumó a la colecta."]);
+  eq("sin colecta elegida: se ignora el campo (tarjeta de siempre)", presentOutcome(received("received", ok), WH), presentOutcome(received("received", result()), WH));
+  eq("404 de colecta inexistente: no es «el envío no está en Lynx»", short(err("identification", 404, "la colecta elegida no existe")), "error: La colecta elegida no existe: no se recibió");
+  eq("400 colecta_route_id inválido: mismo título", short(err("identification", 400, "colecta_route_id inválido")), "error: La colecta elegida no existe: no se recibió");
+}
+
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

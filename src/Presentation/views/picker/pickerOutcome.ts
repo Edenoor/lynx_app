@@ -5,6 +5,7 @@
 import { OPS_LABEL } from "../driver/routes/stopView";
 import type { ScanKind } from "../../config/scanResult";
 import type { ReceiveStatus, ScanOutcome } from "./pickerScan";
+import { attributionNotice } from "./colecta";
 
 // Verde, amarillo o rojo (scanResult): lo mismo en Picker y en Planta del chofer.
 export type OutcomeTone = ScanKind;
@@ -41,6 +42,10 @@ function errorTitle(o: Extract<ScanOutcome, { kind: "error" }>): string {
   switch (o.category) {
     case "identification":
       if (!receive) return "No reconocemos esa estantería";
+      // 404 «la colecta elegida no existe» / 400 «colecta_route_id inválido»:
+      // el servidor no recibió el paquete. Sin un code propio, el texto es lo
+      // único que lo distingue de un envío desconocido.
+      if (/colecta/i.test(o.message)) return "La colecta elegida no existe: no se recibió";
       if (o.status === 404) return "El envío no está en Lynx";
       if (o.status === 422) return "No se pudo dar de alta el envío";
       return "No reconocemos esta etiqueta";
@@ -55,7 +60,9 @@ function errorTitle(o: Extract<ScanOutcome, { kind: "error" }>): string {
   }
 }
 
-export function presentOutcome(outcome: ScanOutcome, warehouse: string): OutcomeView {
+// withColecta: se está recibiendo una colecta; la atribución suma una línea o
+// un aviso. Sin colecta, la tarjeta es la de siempre.
+export function presentOutcome(outcome: ScanOutcome, warehouse: string, withColecta = false): OutcomeView {
   const base = { shelf: null, lines: [], warnings: [], raw: null };
 
   switch (outcome.kind) {
@@ -116,6 +123,11 @@ export function presentOutcome(outcome: ScanOutcome, warehouse: string): Outcome
         warnings.push(`Está en ${shelf.code}; por su CP le corresponde ${shelf.suggested}.`);
       }
       for (const a of alerts) if (!EXPLAINED_ALERTS.has(a.code)) warnings.push(a.text);
+      if (withColecta) {
+        const notice = attributionNotice(result.colecta);
+        if (notice.line) lines.push(notice.line);
+        if (notice.warning) warnings.unshift(notice.warning);
+      }
       lines.push(warehouse);
 
       // La estantería en grande solo cuando el paquete queda en planta.
