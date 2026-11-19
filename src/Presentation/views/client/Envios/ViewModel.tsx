@@ -28,8 +28,10 @@ const useEnviosViewModel = () => {
 
     setLoading(true);
     try {
-      // ✅ FIX: tu server lo sirve bajo /v1/data
-      const r = await postJson("/v1/data/client/me", { username });
+      // Ruta nueva: el servidor da los envíos de las tiendas del vendedor según
+      // la sesión. Si todavía no la tiene (404), la vieja por nombre.
+      let r = await postJson("/v2/legacy/client/me", {});
+      if (r?.status === 404) r = await postJson("/v1/data/client/me", { username });
 
       const ok =
         r?.ok === true || r?.success === true || r?.status === "ok" || r?.statusCode === 200;

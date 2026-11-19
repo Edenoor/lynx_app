@@ -332,6 +332,22 @@ const useEnviosViewModel = ({ legacy = true }: { legacy?: boolean } = {}) => {
   }, [list]);
 
   const loadLegacy = async (sessionUser: any) => {
+    // Ruta nueva: el servidor arma los nombres desde la sesión (usuario de
+    // LightData y alias); el chofer ya no elige qué nombre consultar. Si el
+    // servidor todavía no la tiene (404), se sigue con la vieja de abajo.
+    try {
+      const r = (await ApiDelivery.post("/v2/legacy/driver/me", {})).data;
+      if (r?.status === "ok") {
+        const rows = r?.result ?? [];
+        setList(rows);
+        setTotales(r?.totales ?? null);
+        setDiscount(r?.discount ?? null);
+        return rows.length === 0 ? "No se encontraron envíos Flex a tu nombre" : "";
+      }
+    } catch (e: any) {
+      if (e?.response?.status !== 404) throw e;
+    }
+
     const candidates = buildLegacyDriverNameCandidates(sessionUser);
 
     if (candidates.length === 0) {
