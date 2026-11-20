@@ -3,7 +3,7 @@
 // depósito (lo filtra el servidor). Se abre un chofer para recibir lo suyo, o
 // se escanea la etiqueta original de un envío para ir directo a lo que trae.
 
-import React, { useCallback } from "react";
+import React, { useCallback, useContext } from "react";
 import { FlatList, Pressable, RefreshControl, Text } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -13,6 +13,8 @@ import { driverName, fetchBaulDrivers, BaulDriverRow } from "./baulApi";
 import { pesos } from "./baulPicker";
 import { ListMessage, listStyles, PickerHeader, StaleBanner, useFocusQuery } from "./pickerUi";
 import AppTheme from "../../theme/AppTheme";
+import { UserContext } from "../../context/UserContext";
+import { baulSoloConsulta } from "../../navigator/appArea";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerBaulScreen">;
 
@@ -31,6 +33,8 @@ export default function PickerBaulScreen({ navigation }: Props) {
   const fetcher = useCallback(fetchBaulDrivers, []);
   const { data, error, loading, refreshing, refresh } = useFocusQuery(fetcher);
   const drivers = data?.drivers ?? [];
+  const { user } = useContext(UserContext);
+  const soloConsulta = baulSoloConsulta(user);
 
   return (
     <SafeScreen>
@@ -38,8 +42,9 @@ export default function PickerBaulScreen({ navigation }: Props) {
         title="Baúl de choferes"
         subtitle="Lo que tienen que entregar en tu depósito"
         onBack={() => navigation.goBack()}
-        onScan={() => navigation.navigate("PickerBaulScanScreen", {})}
+        onScan={soloConsulta ? undefined : () => navigation.navigate("PickerBaulScanScreen", {})}
       />
+      {soloConsulta ? <Text style={[listStyles.rowMeta, { paddingHorizontal: AppTheme.spacing.md, paddingTop: 8 }]}>Solo consulta: cobrar y recibir lo hace quien opera el baúl.</Text> : null}
       {data ? <StaleBanner error={error} /> : null}
       <FlatList
         data={drivers}

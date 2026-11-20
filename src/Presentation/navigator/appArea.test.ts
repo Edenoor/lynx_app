@@ -3,7 +3,7 @@
 //     --esModuleInterop --jsx react-jsx src/Presentation/navigator/appArea.test.ts
 //   node /tmp/app-area/Presentation/navigator/appArea.test.js
 
-import { hasPermission, PERMISSION, resolveAppArea, sameAccess } from "./appArea";
+import { baulSoloConsulta, hasPermission, PERMISSION, resolveAppArea, sameAccess } from "./appArea";
 import { User } from "../../Domain/entities/User";
 
 let failed = 0;
@@ -34,6 +34,10 @@ eq("permiso puntual: tiene uno de los pedidos", hasPermission(u({ permissions: [
 eq("permiso puntual: no lo tiene", hasPermission(u({ profile: "PICKER", permissions: [PERMISSION.RECIBIR] }), PERMISSION.BAUL_OPERAR), false);
 eq("un chofer nunca tiene permisos de depósito", hasPermission(u({ rol: "DRIVER" as User["rol"], permissions: [PERMISSION.RECIBIR] }), PERMISSION.RECIBIR), false);
 eq("sin usuario", hasPermission(null, PERMISSION.RECIBIR), false);
+
+eq("Baúl: solo consultarlo es solo consulta", baulSoloConsulta(u({ permissions: [PERMISSION.BAUL_VER, PERMISSION.RECIBIR] })), true);
+eq("Baúl: con operarlo, opera", baulSoloConsulta(u({ permissions: [PERMISSION.BAUL_VER, PERMISSION.BAUL_OPERAR] })), false);
+eq("Baúl: servidor viejo, Picker opera", baulSoloConsulta(u({ profile: "PICKER" })), false);
 
 eq("mismo acceso aunque cambie el orden", sameAccess({ profile: "PICKER", permissions: ["a", "b"] }, { profile: "PICKER", permissions: ["b", "a"] }), true);
 eq("cambió un permiso", sameAccess({ profile: "PICKER", permissions: ["a"] }, { profile: "PICKER", permissions: ["a", "b"] }), false);

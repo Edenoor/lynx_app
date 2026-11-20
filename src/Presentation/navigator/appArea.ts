@@ -30,6 +30,10 @@ export const hasPermission = (user: WithAccess, ...keys: string[]): boolean => {
   return user.profile?.toUpperCase() === "PICKER";
 };
 
+// El Baúl se ve con permiso de consultarlo; escanear, cobrar y recibir piden
+// el de operarlo (auditoría 19-nov, APP-02).
+export const baulSoloConsulta = (user: WithAccess): boolean => !hasPermission(user, PERMISSION.BAUL_OPERAR);
+
 export const resolveAppArea = (user: User | null): AppArea => {
   if (!user) return "auth";
   const rol = user.rol?.toUpperCase();

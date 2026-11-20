@@ -18,9 +18,11 @@ type Props = {
   // ok: texto del resultado. reload: la lista se vuelve a pedir (también ante
   // un «ya estaba registrado» o una respuesta que no llegó).
   onResult: (r: { ok: boolean; text: string; reload: boolean }) => void;
+  // Sin permiso de operar el baúl: se ve qué hay, sin cargar ni confirmar.
+  soloConsulta?: boolean;
 };
 
-export function BaulObligationCard({ obligation: o, onResult }: Props) {
+export function BaulObligationCard({ obligation: o, onResult, soloConsulta = false }: Props) {
   const [busy, setBusy] = useState(false);
   const sending = useRef(false);
   const [method, setMethod] = useState<Method>(o.kind === "cash" ? o.declaredMethod ?? "CASH" : "CASH");
@@ -71,7 +73,7 @@ export function BaulObligationCard({ obligation: o, onResult }: Props) {
       <Text style={styles.ref}>{o.ref}{o.store ? ` · ${o.store}` : ""}</Text>
       {o.detail ? <Text style={styles.detail}>{o.detail}</Text> : null}
 
-      {o.kind === "cash" ? (
+      {o.kind === "cash" && !soloConsulta ? (
         <View style={styles.cash}>
           <View style={styles.methods}>
             {(["CASH", "TRANSFER"] as const).map((m) => (
@@ -99,9 +101,11 @@ export function BaulObligationCard({ obligation: o, onResult }: Props) {
       ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={[styles.button, busy && styles.buttonBusy]} onPress={confirm} disabled={busy} accessibilityRole="button">
-        {busy ? <ActivityIndicator color={AppTheme.colors.white} /> : <Text style={styles.buttonText}>{action}</Text>}
-      </Pressable>
+      {soloConsulta ? null : (
+        <Pressable style={[styles.button, busy && styles.buttonBusy]} onPress={confirm} disabled={busy} accessibilityRole="button">
+          {busy ? <ActivityIndicator color={AppTheme.colors.white} /> : <Text style={styles.buttonText}>{action}</Text>}
+        </Pressable>
+      )}
     </View>
   );
 }
