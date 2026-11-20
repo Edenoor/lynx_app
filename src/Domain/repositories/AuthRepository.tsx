@@ -11,6 +11,9 @@ export type AdminCapabilities = {
     finance_access?: boolean;
     // Lista efectiva de permisos. Un servidor anterior no la manda (null).
     permissions?: string[] | null;
+    // Depósito asignado en la ficha: null = no tiene; undefined = servidor
+    // anterior que no lo informa (auditoría 19-nov, APP-04).
+    assignedWarehouse?: { id: number; name: string | null; active: boolean } | null;
 };
 
 export interface AuthRepository {

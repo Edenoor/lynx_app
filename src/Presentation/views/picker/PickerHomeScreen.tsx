@@ -18,6 +18,8 @@ import { fetchShelves, loadErrorMessage } from "./warehouseApi";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
 import { refreshUnreadCount } from "./notificationsApi";
 import { usePickerPush } from "./pickerPush";
+import { GetAdminCapabilitiesUseCase } from "../../../Domain/useCases/auth/GetAdminCapabilities";
+import { assignedWarehouseProblem, AssignedWarehouse } from "./assignedWarehouse";
 
 type Props = NativeStackScreenProps<PickerStackParamList, "PickerHomeScreen">;
 
@@ -32,6 +34,17 @@ export default function PickerHomeScreen({ navigation }: Props) {
   const { user, removeUserSession } = useContext(UserContext);
   const [warehouse, setWarehouse] = useState<WarehouseState>({ status: "loading" });
   const bottomSpace = usePickerBottomSpace();
+  // Depósito asignado según el servidor (undefined: todavía no se sabe o el
+  // servidor no lo informa; ahí queda lo de siempre).
+  const [assigned, setAssigned] = useState<AssignedWarehouse | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    GetAdminCapabilitiesUseCase()
+      .then((c) => { if (alive) setAssigned(c.assignedWarehouse); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+  const problem = assignedWarehouseProblem(assigned);
 
   useEffect(() => {
     let alive = true;
@@ -68,27 +81,32 @@ export default function PickerHomeScreen({ navigation }: Props) {
 
           <View style={styles.warehouse}>
             <Text style={styles.label}>Depósito operativo</Text>
-            {warehouse.status === "loading" ? (
+            {problem ? (
+              <>
+                <Text style={styles.warehouseId}>Sin depósito para operar</Text>
+                <Text style={styles.meta}>{problem}</Text>
+              </>
+            ) : warehouse.status === "loading" ? (
               <Text style={styles.meta}>Identificando tu warehouse…</Text>
             ) : warehouse.status === "ok" ? (
               <>
-                <Text style={styles.warehouseId}>Warehouse #{warehouse.id}</Text>
+                <Text style={styles.warehouseId}>{assigned?.name ?? `Warehouse #${warehouse.id}`}</Text>
                 <Text style={styles.meta}>
                   {warehouse.shelves} {warehouse.shelves === 1 ? "estantería activa" : "estanterías activas"}
                 </Text>
               </>
             ) : (
               <>
-                <Text style={styles.warehouseId}>Warehouse asignado</Text>
+                <Text style={styles.warehouseId}>{assigned?.name ?? "Depósito asignado"}</Text>
                 <Text style={styles.meta}>
-                  No pudimos ver cuál es. {warehouse.reason} La recepción usa igual el warehouse asignado a tu usuario.
+                  {assigned ? "No podés ver sus estanterías, pero lo que recibas va a este depósito." : `No pudimos ver cuál es. ${warehouse.reason}`}
                 </Text>
               </>
             )}
           </View>
 
           {/* Cada acceso aparece solo con su permiso (el servidor rechazaría el resto). */}
-          {hasPermission(user, PERMISSION.BAUL_VER, PERMISSION.BAUL_OPERAR) ? (
+          {!problem && hasPermission(user, PERMISSION.BAUL_VER, PERMISSION.BAUL_OPERAR) ? (
             <DriverActionCard
               icon="briefcase-outline"
               title="Baúl de choferes"
@@ -96,7 +114,7 @@ export default function PickerHomeScreen({ navigation }: Props) {
               onPress={() => navigation.navigate("PickerBaulScreen")}
             />
           ) : null}
-          {hasPermission(user, PERMISSION.DEPOSITO_VER) ? (
+          {!problem && hasPermission(user, PERMISSION.DEPOSITO_VER) ? (
             <>
               <DriverActionCard
                 icon="file-tray-stacked-outline"
@@ -121,7 +139,7 @@ export default function PickerHomeScreen({ navigation }: Props) {
         </Pressable>
       </ScrollView>
 
-      <PickerBottomNavigation activeTab="home" warehouseId={warehouseId} />
+      {problem ? null : <PickerBottomNavigation activeTab="home" warehouseId={warehouseId} />}
     </SafeScreen>
   );
 }

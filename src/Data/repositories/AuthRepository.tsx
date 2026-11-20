@@ -76,6 +76,7 @@ export class AuthRepositoryImpl implements AuthRepository {
     });
     // Los permisos vienen al lado de las capacidades, no adentro.
     const permissions = Array.isArray(response.data?.permissions) ? response.data.permissions : null;
-    return { ...(response.data?.capabilities ?? {}), permissions };
+    const assignedWarehouse = response.data && "assigned_warehouse" in response.data ? response.data.assigned_warehouse ?? null : undefined;
+    return { ...(response.data?.capabilities ?? {}), permissions, assignedWarehouse };
   }
 }
