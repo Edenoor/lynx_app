@@ -5,7 +5,7 @@ import { GetUserLocalUseCase } from "../../Domain/useCases/userLocal/GetUserLoca
 import { SaveUserLocalUseCase } from "../../Domain/useCases/userLocal/SaveUserLocal";
 import { RemoveUserLocalUseCase } from "../../Domain/useCases/userLocal/RemoveUserLocal";
 import { GetAdminCapabilitiesUseCase } from "../../Domain/useCases/auth/GetAdminCapabilities";
-import { sameAccess } from "../navigator/appArea";
+import { sameAccess, shouldRefreshAccess } from "../navigator/appArea";
 import {
   setAuthToken,
   setUnauthorizedHandler,
@@ -113,9 +113,13 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
   // permisos: los pueden haber cambiado desde la Web (o venir de una versión
   // de la app que no los guardaba). Sin red queda lo último guardado. Un 401 ya
   // cerró la sesión (manejador de ApiDelivery): no se la vuelve a abrir.
+  const lastAccessRefresh = useRef<number | null>(null);
+  const userRef = useRef<User | null>(null);
+  useEffect(() => { userRef.current = user; }, [user]);
   const refreshAdminProfile = async (stored: User): Promise<User | null> => {
     if (stored.rol?.toUpperCase() !== "ADMIN") return stored;
     try {
+      lastAccessRefresh.current = Date.now();
       const access = await GetAdminCapabilitiesUseCase();
       const fresh = { profile: access.profile ?? null, permissions: access.permissions ?? null };
       if (sameAccess(stored, fresh)) return stored;
@@ -163,7 +167,15 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     });
     renewSessionIfNeeded();
     const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active") renewSessionIfNeeded();
+      if (state !== "active") return;
+      renewSessionIfNeeded();
+      // También los permisos (APP-05): un cambio desde la Web se ve al volver.
+      const current = userRef.current;
+      if (current && shouldRefreshAccess(lastAccessRefresh.current, Date.now())) {
+        refreshAdminProfile(current).then((fresh) => {
+          if (fresh && fresh !== current) setUser((prev) => (prev && prev.id === current.id ? { ...prev, profile: fresh.profile, permissions: fresh.permissions } : prev));
+        });
+      }
     });
     const timer = setInterval(renewSessionIfNeeded, RENEW_CHECK_MS);
 

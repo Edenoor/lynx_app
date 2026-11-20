@@ -40,6 +40,7 @@ const AREA_THEME: Record<AppArea, Theme | null> = {
   picker: DEFAULT_THEME,
   seller: DEFAULT_THEME,
   adminWeb: DEFAULT_THEME,
+  unsupported: DEFAULT_THEME,
 };
 
 function Navigation() {

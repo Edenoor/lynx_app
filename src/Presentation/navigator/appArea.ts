@@ -6,7 +6,7 @@ import { User } from "../../Domain/entities/User";
 // Coordinador con un rol que incluya «recibir y ubicar» opera el depósito sin
 // ser Picker. La autoridad sigue siendo el servidor en cada pedido; esto solo
 // evita mostrar algo que el servidor rechazaría.
-export type AppArea = "auth" | "driver" | "picker" | "adminWeb" | "seller";
+export type AppArea = "auth" | "driver" | "picker" | "adminWeb" | "seller" | "unsupported";
 
 // Permisos del depósito que usa la app (claves del catálogo del servidor).
 export const PERMISSION = {
@@ -39,8 +39,18 @@ export const resolveAppArea = (user: User | null): AppArea => {
   const rol = user.rol?.toUpperCase();
   if (rol === "DRIVER") return "driver";
   if (rol === "ADMIN") return hasPermission(user, ...DEPOSITO_ENTRY) ? "picker" : "adminWeb";
-  return "seller";
+  // Solo el vendedor entra a las pantallas de vendedor; un proveedor o un tipo
+  // desconocido ve un aviso (auditoría 19-nov, APP-06).
+  if (rol === "SELLER") return "seller";
+  return "unsupported";
 };
+
+// Al volver a la app se vuelven a pedir los permisos, como mucho cada tanto
+// (auditoría 19-nov, APP-05: si no, un cambio desde la Web no se veía hasta
+// cerrar la app del todo).
+export const ACCESS_REFRESH_MS = 5 * 60 * 1000;
+export const shouldRefreshAccess = (lastAt: number | null, now: number, minMs = ACCESS_REFRESH_MS): boolean =>
+  lastAt === null || now - lastAt >= minMs;
 
 // Para saber si lo guardado quedó viejo (misma lista, en cualquier orden).
 export const sameAccess = (

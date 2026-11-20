@@ -3,7 +3,7 @@
 //     --esModuleInterop --jsx react-jsx src/Presentation/navigator/appArea.test.ts
 //   node /tmp/app-area/Presentation/navigator/appArea.test.js
 
-import { baulSoloConsulta, hasPermission, PERMISSION, resolveAppArea, sameAccess } from "./appArea";
+import { baulSoloConsulta, hasPermission, PERMISSION, resolveAppArea, sameAccess, shouldRefreshAccess } from "./appArea";
 import { User } from "../../Domain/entities/User";
 
 let failed = 0;
@@ -44,6 +44,14 @@ eq("cambió un permiso", sameAccess({ profile: "PICKER", permissions: ["a"] }, {
 eq("cambió el perfil", sameAccess({ profile: "PICKER", permissions: ["a"] }, { profile: null, permissions: ["a"] }), false);
 eq("lo guardado no tenía lista y ahora sí", sameAccess({ profile: "PICKER" }, { profile: "PICKER", permissions: [] }), false);
 eq("ninguno tiene lista (servidor viejo)", sameAccess({ profile: "PICKER" }, { profile: "PICKER", permissions: null }), true);
+
+eq("permisos: nunca se pidieron", shouldRefreshAccess(null, 1000), true);
+eq("permisos: recién pedidos, no", shouldRefreshAccess(1000, 1000 + 60 * 1000), false);
+eq("permisos: pasaron 5 minutos, sí", shouldRefreshAccess(1000, 1000 + 5 * 60 * 1000), true);
+
+eq("vendedor: área de vendedor", resolveAppArea(u({ rol: "SELLER" as User["rol"] })), "seller");
+eq("proveedor: aviso", resolveAppArea(u({ rol: "PROVIDER" as User["rol"] })), "unsupported");
+eq("sin tipo: aviso", resolveAppArea(u({ rol: "" as User["rol"] })), "unsupported");
 
 if (failed) { console.log(`\n${failed} fallaron`); process.exit(1); }
 console.log("\ntodo ok");

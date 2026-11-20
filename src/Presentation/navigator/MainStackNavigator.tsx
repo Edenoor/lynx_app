@@ -12,6 +12,7 @@ import { DriverStackNavigator } from "./DriverStackNavigator";
 import { SellerStackNavigator } from "./SellerStackNavigator";
 import { PickerStackNavigator } from "./PickerStackNavigator";
 import { AdminWebScreen } from "../views/admin/AdminWebScreen";
+import { UnsupportedUserScreen } from "../views/admin/UnsupportedUserScreen";
 import { resolveAppArea } from "./appArea";
 
 export type RootStackParamList = {
@@ -22,6 +23,7 @@ export type RootStackParamList = {
   SellerStackNavigator: undefined;
   PickerStackNavigator: undefined;
   AdminWebScreen: undefined;
+  UnsupportedUserScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -83,6 +85,8 @@ export const MainStackNavigator = () => {
         />
       ) : area === "adminWeb" ? (
         <Stack.Screen name="AdminWebScreen" component={AdminWebScreen} />
+      ) : area === "unsupported" ? (
+        <Stack.Screen name="UnsupportedUserScreen" component={UnsupportedUserScreen} />
       ) : (
         <Stack.Screen
           name="SellerStackNavigator"

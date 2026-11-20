@@ -33,10 +33,9 @@ const buildFullName = (
   return fullName || fallback || "";
 };
 
-const normalizeRole = (value?: string | null) => {
-  if (!value) return "SELLER";
-  return value.toUpperCase();
-};
+// Sin tipo no se asume vendedor: la app muestra que no tiene operación
+// para ese usuario (auditoría 19-nov, APP-06).
+const normalizeRole = (value?: string | null) => (value ? value.toUpperCase() : "");
 
 const HomeViewModel = () => {
   const [errorMessage, setErrorMessage] = useState("");
