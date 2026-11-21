@@ -1381,13 +1381,41 @@ const setDriverApi = () => {
       const list = (m = mananero()) => ({ ok: true, date: AR_TODAY, colectas: [m, cerrada] });
 
       // Menú QR: Recepcionar sigue igual; Recepcionar colecta abre la lista.
+      // Las opciones salen de los permisos del usuario (navigator/appArea.ts):
+      // un Picker de un servidor sin lista de permisos ve todo, como siempre.
+      const picker = { id: 7, rol: "ADMIN", profile: "PICKER", username: "p" };
+      const asUser = (u: any) => contextOverride.set(UserContext, { user: u, isAuthLoading: false });
+      const options = (t: any) => all(t, (x) => typeof x.props?.onPress === "function").map(textOf);
+      const DEPOSITO = ["Recepcionar", "Recepcionar colecta", "Mover de estantería", "Baúl del chofer"];
+      const shown = (t: any) => DEPOSITO.filter((label) => options(t).includes(label));
+      const openMenu = (u: any) => { asUser(u); return mount(RealReact.createElement(PickerOptions, { navigation: nav, route: { params: { warehouseId: 1 } } })); };
+
       nav.calls = [];
-      let tree = await mount(RealReact.createElement(PickerOptions, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+      let tree = await openMenu(picker);
+      check("Permisos: Picker sin lista de permisos (servidor anterior) ve todo el depósito", same(shown(tree), DEPOSITO), js(shown(tree)));
       tree = await press(tree, "Recepcionar colecta");
       check("Colecta: el menú QR abre la lista de colectas", same(lastNav(), ["navigate", "PickerColectasScreen", { warehouseId: 1 }]), js(lastNav()));
       const recv = all(tree, (x) => typeof x.props?.onPress === "function" && textOf(x) === "Recepcionar")[0];
       recv.props.onPress(); await settle();
       check("Colecta: «Recepcionar» abre el escáner de siempre, sin colecta", same(lastNav(), ["navigate", "PickerScanScreen", { warehouseId: 1 }]), js(lastNav()));
+
+      tree = await openMenu({ ...picker, permissions: ["deposito.recibir"] });
+      check("Permisos: con deposito.recibir, recibir, recibir colecta y mover; sin Baúl", same(shown(tree), ["Recepcionar", "Recepcionar colecta", "Mover de estantería"]), js(shown(tree)));
+      nav.calls = [];
+      tree = await press(tree, "Recepcionar colecta");
+      check("Permisos: con deposito.recibir, «Recepcionar colecta» abre la lista", same(lastNav(), ["navigate", "PickerColectasScreen", { warehouseId: 1 }]), js(lastNav()));
+      all(tree, (x) => typeof x.props?.onPress === "function" && textOf(x) === "Recepcionar")[0].props.onPress(); await settle();
+      check("Permisos: con deposito.recibir, «Recepcionar» abre el escáner sin colecta", same(lastNav(), ["navigate", "PickerScanScreen", { warehouseId: 1 }]), js(lastNav()));
+
+      tree = await openMenu({ ...picker, permissions: ["deposito.baul_operar"] });
+      check("Permisos: con deposito.baul_operar, solo el Baúl (sin recibir ni colecta)", same(shown(tree), ["Baúl del chofer"]), js(shown(tree)));
+
+      tree = await openMenu({ ...picker, permissions: ["deposito.recibir", "deposito.baul_operar"] });
+      check("Permisos: con los dos, todo el depósito", same(shown(tree), DEPOSITO), js(shown(tree)));
+
+      tree = await openMenu({ ...picker, permissions: [] });
+      check("Permisos: lista vacía, no se ofrece operar", same(shown(tree), []), js(shown(tree)));
+      contextOverride.delete(UserContext);
 
       // Lista del día (Argentina): abiertas y cerradas, con búsqueda local.
       api.calls = []; api.replies = { [LIST]: list() };
