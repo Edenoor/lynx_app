@@ -2456,6 +2456,47 @@ const setDriverApi = () => {
       tree = await press(tree, "Completar recorrido");
       alerts[0][2][1].onPress(); await settle();
       check("Completar con un cancelado: cierra esa parada y después completa", js(api.calls.filter((c) => c.startsWith("PUT"))) === js(["PUT /v2/routes/158/stops/2/done", "PUT /v2/routes/158/complete"]), js(api.calls));
+
+      // Envíos Flex: «Nadie en domicilio» y «Reprogramado» resuelven la visita
+      // (estados de producción del 22-nov, anonimizados). Van a «Finalizados»
+      // y al completar la app cierra esas paradas sin escribir un resultado.
+      // Si un cierre falla, el recorrido no se completa y se puede reintentar.
+      const flex = (id: number, sub: string, text: string) =>
+        dlv(id, "OUT_FOR_DELIVERY", null, { provider: "mercadolibre", status_ml: "shipped", substatus_ml: sub, substatus: text });
+      const mixed = (doneIds: number[]) => ({ ...r158, id: 161, stops: [
+        stopOf(11, 1, "DELIVERY", "PENDING", { route_id: 161, address: "Mitre 11", deliveries: [dlv(11, "DELIVERED", "DELIVERED", { provider: "mercadolibre", status_ml: "delivered" })] }),
+        stopOf(12, 2, "DELIVERY", doneIds.includes(12) ? "DONE" : "PENDING", { route_id: 161, address: "Mitre 12", deliveries: [flex(12, "receiver_absent", "Destinatario ausente")] }),
+        stopOf(13, 3, "DELIVERY", doneIds.includes(13) ? "DONE" : "PENDING", { route_id: 161, address: "Mitre 13", deliveries: [flex(13, "buyer_rescheduled", "Reprogramado por el comprador")] }),
+      ] });
+      api.calls = []; alerts.length = 0;
+      api.replies = { "GET /v2/routes/161": { ok: true, route: mixed([]) } };
+      tree = await mount(RealReact.createElement(Detail, { navigation: nav, route: { params: { routeId: 161 } } }));
+      check("Envíos Flex: Entregado + Nadie + Reprogramado, todo finalizado y «Completar» habilitado",
+        textOf(tree).includes("3 envíos · 0 pendientes · 3 finalizados") && textOf(tree).includes("Finalizados (3)") && !pressable(tree, "Completar recorrido").props.disabled);
+      tree = await press(tree, "Finalizados (3)");
+      check("Envíos Flex: cada parada con su resultado de Mercado Libre",
+        textOf(head(tree, "Mitre 11")).includes("Entregado") && textOf(head(tree, "Mitre 12")).includes("Nadie en domicilio") && textOf(head(tree, "Mitre 13")).includes("Reprogramado por el comprador"));
+      tree = await press(tree, "Mitre 12");
+      check("Envíos Flex: aclara que lo informó Mercado Libre y no ofrece registrar nada",
+        textOf(tree).includes("Informado por Mercado Libre en Envíos Flex") && !textOf(tree).includes("No pude entregar") && !textOf(tree).includes("Cerrar parada"));
+      // La parada 13 falla sin red; al releer, la 12 ya figura cerrada.
+      api.replies["PUT /v2/routes/161/stops/13/done"] = [new Error("sin red"), { ok: true, stop: {} }];
+      api.replies["GET /v2/routes/161"] = { ok: true, route: mixed([12]) };
+      api.calls = []; alerts.length = 0;
+      tree = await press(tree, "Completar recorrido");
+      alerts[0][2][1].onPress(); tree = await settle();
+      check("Cierre automático que falla: no completa y avisa qué parada y que se puede reintentar",
+        js(api.calls.filter((c) => c.startsWith("PUT"))) === js(["PUT /v2/routes/161/stops/12/done", "PUT /v2/routes/161/stops/13/done"])
+        && textOf(tree).includes("No se pudo cerrar la parada 3: Sin conexión. Revisá la señal y probá de nuevo. El recorrido no se completó: probá de nuevo.")
+        && !textOf(tree).includes("Recorrido completado"), js(api.calls));
+      check("Cierre automático que falla: relee el recorrido y «Completar» sigue habilitado",
+        api.calls.includes("GET /v2/routes/161") && !pressable(tree, "Completar recorrido").props.disabled);
+      api.calls = []; alerts.length = 0;
+      api.replies["PUT /v2/routes/161/complete"] = { ok: true, route: { ...mixed([12, 13]), status: "COMPLETED" } };
+      tree = await press(tree, "Completar recorrido");
+      alerts[0][2][1].onPress(); tree = await settle();
+      check("Reintento: cierra solo la que faltaba (no repite la 12) y completa, sin registrar resultados",
+        js(api.calls.filter((c) => /^(PUT|POST|PATCH|DELETE)/.test(c))) === js(["PUT /v2/routes/161/stops/13/done", "PUT /v2/routes/161/complete"]), js(api.calls));
       // Recorrido grande: 100 paradas, 30 terminadas. Lo terminado no se dibuja
       // hasta abrir «Finalizados»; los pendientes, por sequence.
       const big = { ...r158, id: 160, stops: Array.from({ length: 100 }, (_, i) => stopOf(1000 + i, 100 - i, "DELIVERY", "PENDING", { route_id: 160, address: `Calle ${100 - i}`,

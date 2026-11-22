@@ -158,14 +158,28 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
 
   // Antes de completar, la app cierra las paradas terminadas que el servidor no
   // cierra solo (stopsToCloseOnFinish), una por una, como haría el chofer.
+  // Si algo falla el recorrido no se completa: se relee (las paradas que sí se
+  // cerraron no se vuelven a pedir, el servidor rechaza cerrarlas dos veces) y
+  // se avisa para reintentar.
   const onComplete = () =>
     Alert.alert("Completar recorrido", "¿Terminaste todas las paradas?", [
       { text: "No", style: "cancel" },
       {
         text: "Sí, completar",
         onPress: () => act(async () => {
-          for (const s of stopsToCloseOnFinish(route?.stops ?? [], route?.type ?? "")) await stopAction(routeId, s.id, "done");
-          await completeRoute(routeId);
+          try {
+            for (const s of stopsToCloseOnFinish(route?.stops ?? [], route?.type ?? "")) {
+              try { await stopAction(routeId, s.id, "done"); }
+              catch (e) {
+                const why = errorMessage(e, "sin respuesta del servidor").replace(/\.?$/, ".");
+                throw new Error(`No se pudo cerrar la parada ${s.sequence}: ${why} El recorrido no se completó: probá de nuevo.`);
+              }
+            }
+            await completeRoute(routeId);
+          } catch (e) {
+            await load();
+            throw e;
+          }
         }, undefined, "Recorrido completado"),
       },
     ]);
@@ -657,6 +671,7 @@ function StopCardView({ routeId, stop, stops, routeType, routeStatus, inProgress
                 <View style={{ flex: 1 }}>
                   <DeliveryHead d={d} />
                   <Text style={[styles.stopMeta, view.tone === "delivered" ? styles.deliveryDone : view.final ? styles.stopStatusClosed : null]}>{view.label}</Text>
+                  {view.note ? <Text style={styles.stopMeta}>{view.note}</Text> : null}
                   {!view.final && d.reverse_kind ? <Text style={styles.reverseRequest}>{reverseRequestText(d.reverse_kind, d.reverse_note)}</Text> : null}
                 </View>
                 {canAct ? (

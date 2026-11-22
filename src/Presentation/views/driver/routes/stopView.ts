@@ -57,18 +57,61 @@ const ML_STATE: Record<string, "delivered" | "not_delivered" | "cancelled" | "sh
   shipped: "shipped", "En camino": "shipped",
 };
 
+// Intentos que el chofer marca en Envíos Flex y que resuelven la visita: ML
+// deja el envío en camino (shipped) con uno de estos subestados. Son los
+// códigos de server/utils/ml/statusMap.js; las etiquetas, las de la WebApp
+// (deliveryStatus.ts). delivery_failed, not_visited y demás no cuentan: no
+// confirman que se visitó el domicilio.
+const ML_ATTEMPT: Record<string, string> = {
+  receiver_absent: "Nadie en domicilio",
+  rescheduled_by_meli: "Reprogramado por Mercado Libre",
+  buyer_rescheduled: "Reprogramado por el comprador",
+};
+// `substatus` de filas anteriores a substatus_ml: el código crudo o la
+// traducción del servidor (statusMap.js).
+const ATTEMPT_TEXT: Record<string, string> = {
+  "destinatario ausente": "receiver_absent",
+  "reprogramado por mercado libre": "rescheduled_by_meli",
+  "reprogramado por el comprador": "buyer_rescheduled",
+};
+const cleanText = (v: unknown) => {
+  const s = v == null ? "" : String(v).trim().toLowerCase();
+  return s === "null" ? "" : s;
+};
+
+// El intento vigente que informó Mercado Libre, o null. Solo con el envío en
+// camino en ML: un entregado, cancelado o no entregado manda sobre un
+// subestado que quedó de antes. substatus_ml (el código crudo que el poller
+// pisa en cada lectura) va primero; substatus, solo si aquel falta. Los textos
+// de LightData (`status`) no cuentan: no se puede saber si siguen vigentes.
+export function mlAttempt(d: Pick<StopDelivery, "status_ml" | "substatus" | "substatus_ml">): string | null {
+  if (!d.status_ml || ML_STATE[d.status_ml] !== "shipped") return null;
+  const raw = cleanText(d.substatus_ml) || cleanText(d.substatus);
+  if (ML_ATTEMPT[raw]) return raw;
+  return ATTEMPT_TEXT[raw] ?? null;
+}
+
 export type DeliveryTone = "delivered" | "failed" | "cancelled" | "transit" | "pending";
-export type DeliveryView = { label: string; final: boolean; tone: DeliveryTone };
+// note: aclaración debajo del estado (de dónde salió el resultado).
+export type DeliveryView = { label: string; final: boolean; tone: DeliveryTone; note?: string };
 
 // El estado real de un envío, para la lista: nunca el de la parada. Lo
 // desconocido queda «Pendiente» y no se da por terminado.
-export function deliveryView(d: Pick<StopDelivery, "outcome" | "ops_status" | "status_ml">): DeliveryView {
+export function deliveryView(d: Pick<StopDelivery, "outcome" | "ops_status" | "status_ml" | "substatus" | "substatus_ml">): DeliveryView {
   const ops = String(d.ops_status ?? "").toUpperCase();
   const ml = d.status_ml ? ML_STATE[d.status_ml] : undefined;
   if (ops === "DELIVERED" || d.outcome === "DELIVERED" || ml === "delivered") return { label: "Entregado", final: true, tone: "delivered" };
   if (ops === "CANCELLED" || ml === "cancelled") return { label: "Cancelado", final: true, tone: "cancelled" };
   if (d.outcome === "RETURNED") return { label: "Devuelto", final: true, tone: "failed" };
   if (d.outcome === "NOT_DELIVERED" || ml === "not_delivered") return { label: "No entregado", final: true, tone: "failed" };
+  // Intento informado en Envíos Flex: la visita está resuelta, pero el envío
+  // no tiene resultado en Lynx. La custodia la decide el servidor al finalizar
+  // (queda NOT_DELIVERED, en el Baúl).
+  const attempt = mlAttempt(d);
+  if (attempt) {
+    const note = ops === "NOT_DELIVERED" ? "Informado por Mercado Libre · en tu Baúl" : "Informado por Mercado Libre en Envíos Flex";
+    return { label: ML_ATTEMPT[attempt], final: true, tone: "failed", note };
+  }
   // ops NOT_DELIVERED sin resultado ni ML: quedó con el chofer sin intento (custodia).
   if (ops === "NOT_DELIVERED") return { label: "Sin entregar · en tu Baúl", final: true, tone: "pending" };
   if (ops === "OUT_FOR_DELIVERY" || ml === "shipped") return { label: "En camino", final: false, tone: "transit" };
@@ -109,8 +152,9 @@ export function stopStateLabel(s: Pick<Stop, "status" | "deliveries">): string {
   return prefix ? `${prefix} · ${deliveries}` : deliveries;
 }
 
-// Paradas terminadas que el servidor no cierra solo al finalizar (un cancelado
-// o un no entregado de Mercado Libre, sin resultado cargado): la app las
+// Paradas terminadas que el servidor no cierra solo al finalizar (un cancelado,
+// un no entregado o un intento informado por Mercado Libre, sin resultado
+// cargado): la app las
 // cierra antes de completar, como haría el chofer con «Cerrar parada».
 export function stopsToCloseOnFinish<S extends Pick<Stop, "type" | "status" | "deliveries">>(stops: S[], routeType: string): S[] {
   if (routeType !== "DELIVERY") return [];

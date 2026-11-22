@@ -40,6 +40,12 @@ export type StopDelivery = {
   // not_delivered, o traducido). Un servidor anterior no lo manda: sin él, un
   // «no entregado» de ML se ve por ops_status/outcome.
   status_ml?: string | null;
+  // Subestado de Mercado Libre vigente (el poller lo pisa en cada lectura):
+  // substatus_ml crudo (receiver_absent…) y substatus traducido, o crudo en
+  // filas viejas. Los manda produ desde 608a9b7; sin ellos el envío se ve
+  // como antes.
+  substatus?: string | null;
+  substatus_ml?: string | null;
   // Logística inversa pedida por coordinación (CAMBIO, RECUPERO, VA_Y_VUELVE,
   // OTRO): una solicitud, no algo que el chofer ya tenga. Un servidor anterior no la manda.
   reverse_kind?: string | null;

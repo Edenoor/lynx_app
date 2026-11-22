@@ -132,5 +132,64 @@ eq("Mercado Libre se reconoce por el proveedor (no solo Flex)",
   eq("envíos de ML que ML todavía no cerró", awaitingProvider(stop("PENDING", [d(1, "OUT_FOR_DELIVERY", null, { provider: "mercadolibre" }), d(2, "DELIVERED", "DELIVERED"), d(3, "OUT_FOR_DELIVERY", null, { tipo_envio: "propio" })])).map((x) => x.delivery_id), [1]);
 }
 
+// Intentos que el chofer marca en Envíos Flex. Combinaciones reales de
+// producción (22-nov, GET /v2/routes/:id y /v2/deliveries), sin datos
+// personales: status_ml | substatus_ml | substatus.
+{
+  const ml = (ops: string, status_ml: string | null, substatus_ml: string | null, substatus: string | null, extra: Partial<StopDelivery> = {}) =>
+    d(1, ops, null, { provider: "mercadolibre", status_ml, substatus_ml, substatus, ...extra });
+  const full = (x: StopDelivery) => [deliveryView(x).label, deliveryView(x).final, deliveryView(x).note ?? null];
+  const ABSENT = ml("OUT_FOR_DELIVERY", "shipped", "receiver_absent", "Destinatario ausente");
+  const BY_MELI = ml("OUT_FOR_DELIVERY", "shipped", "rescheduled_by_meli", "Reprogramado por Mercado Libre");
+  const BY_BUYER = ml("OUT_FOR_DELIVERY", "shipped", "buyer_rescheduled", "Reprogramado por el comprador");
+
+  eq("Nadie en domicilio: resuelto, informado por ML", full(ABSENT), ["Nadie en domicilio", true, "Informado por Mercado Libre en Envíos Flex"]);
+  eq("Reprogramado por Mercado Libre: resuelto", full(BY_MELI), ["Reprogramado por Mercado Libre", true, "Informado por Mercado Libre en Envíos Flex"]);
+  eq("Reprogramado por el comprador: resuelto", full(BY_BUYER), ["Reprogramado por el comprador", true, "Informado por Mercado Libre en Envíos Flex"]);
+  eq("el intento es una falla, no un entregado", [deliveryView(ABSENT).tone, deliveryDelivered(ABSENT), deliveryResolved(ABSENT)], ["failed", false, false]);
+  eq("status_ml traducido («En camino») también cuenta", deliveryView(ml("OUT_FOR_DELIVERY", "En camino", "receiver_absent", "Destinatario ausente")).label, "Nadie en domicilio");
+  eq("fila anterior a substatus_ml: substatus crudo o traducido",
+    [deliveryView(ml("OUT_FOR_DELIVERY", "shipped", null, "receiver_absent")).label, deliveryView(ml("OUT_FOR_DELIVERY", "shipped", "null", "Reprogramado por Mercado Libre")).label],
+    ["Nadie en domicilio", "Reprogramado por Mercado Libre"]);
+  eq("substatus_ml manda sobre substatus", full(ml("OUT_FOR_DELIVERY", "shipped", "soon_deliver", "Destinatario ausente")), ["En camino", false, null]);
+  eq("Entregado: igual que antes, aunque quede un subestado de un intento anterior",
+    [full(ml("DELIVERED", "delivered", null, null)), full(ml("OUT_FOR_DELIVERY", "delivered", "receiver_absent", "")), full(ml("DELIVERED", "delivered", "buyer_rescheduled", ""))],
+    [["Entregado", true, null], ["Entregado", true, null], ["Entregado", true, null]]);
+  eq("cancelado o no entregado en ML mandan sobre un subestado residual",
+    [deliveryView(ml("OUT_FOR_DELIVERY", "cancelled", "receiver_absent", null)).label, deliveryView(ml("OUT_FOR_DELIVERY", "not_delivered", "rescheduled_by_meli", null)).label],
+    ["Cancelado", "No entregado"]);
+  eq("en camino sin subestado: pendiente", full(ml("OUT_FOR_DELIVERY", "shipped", null, null)), ["En camino", false, null]);
+  eq("subestados que no confirman la visita (entrega fallida, no visitado, próximo a entregar, esperando confirmación): pendiente",
+    [ml("OUT_FOR_DELIVERY", "shipped", "delivery_failed", "Entrega fallida"), ml("OUT_FOR_DELIVERY", "shipped", "not_visited", "No Visitado"),
+      ml("OUT_FOR_DELIVERY", "shipped", "soon_deliver", "Próximo a entregar"), ml("OUT_FOR_DELIVERY", "shipped", "waiting_for_confirmation", "Esperando confirmación")].map((x) => deliveryView(x).final),
+    [false, false, false, false]);
+  eq("subestado desconocido o vacío: pendiente",
+    [ml("OUT_FOR_DELIVERY", "shipped", "algo_nuevo", null), ml("OUT_FOR_DELIVERY", "shipped", "", ""), ml("OUT_FOR_DELIVERY", "shipped", "null", "null")].map((x) => deliveryView(x).final),
+    [false, false, false]);
+  eq("sin status_ml (no es de ML o servidor viejo) un subestado no resuelve nada",
+    [deliveryView(ml("OUT_FOR_DELIVERY", null, "receiver_absent", "Destinatario ausente")).final, deliveryView(d(2, "OUT_FOR_DELIVERY", null, { tipo_envio: "propio", substatus: "Destinatario ausente" })).final],
+    [false, false]);
+  eq("servidor sin los campos nuevos: en camino, pendiente, como antes", full(d(1, "OUT_FOR_DELIVERY", null, { provider: "mercadolibre", status_ml: "shipped" })), ["En camino", false, null]);
+  eq("#832782: texto de LightData («reprogramado por meli») sin subestado de ML no cuenta como intento; al cerrarse quedó en el Baúl",
+    [full(ml("OUT_FOR_DELIVERY", "shipped", null, null, { status: "reprogramado por meli" } as any)), full(ml("NOT_DELIVERED", "shipped", null, null, { status: "reprogramado por meli" } as any))],
+    [["En camino", false, null], ["Sin entregar · en tu Baúl", true, null]]);
+  eq("el resultado que cargó el chofer en Lynx manda sobre el intento de ML", deliveryView({ ...ABSENT, outcome: "NOT_DELIVERED" }).label, "No entregado");
+  eq("después de completar (ops NOT_DELIVERED) sigue el intento, con el Baúl", full({ ...ABSENT, ops_status: "NOT_DELIVERED" }), ["Nadie en domicilio", true, "Informado por Mercado Libre · en tu Baúl"]);
+
+  // Recorrido mixto: Entregado + Nadie + Reprogramado (+ uno en camino).
+  const sDelivered = stop("PENDING", [ml("DELIVERED", "delivered", null, null, { outcome: "DELIVERED" })], { id: 21, sequence: 1 });
+  const sAbsent = stop("PENDING", [{ ...ABSENT, delivery_id: 22 }], { id: 22, sequence: 2 });
+  const sResched = stop("ARRIVED", [{ ...BY_MELI, delivery_id: 23 }, { ...BY_BUYER, delivery_id: 24 }], { id: 23, sequence: 3 });
+  const sTransit = stop("PENDING", [ml("OUT_FOR_DELIVERY", "shipped", null, null, { delivery_id: 25 })], { id: 24, sequence: 4 });
+  eq("mixto: las paradas con intento están terminadas", [sDelivered, sAbsent, sResched, sTransit].map(stopFinished), [true, true, true, false]);
+  eq("mixto: con una en camino no se finaliza; sin ella sí", [routeCanFinish({ type: "DELIVERY", stops: [sDelivered, sAbsent, sResched, sTransit] }), routeCanFinish({ type: "DELIVERY", stops: [sDelivered, sAbsent, sResched] })], [false, true]);
+  eq("mixto: el servidor cierra solo la entregada; la app cierra las de intento", [closesOnFinish(sDelivered, "DELIVERY"), stopsToCloseOnFinish([sDelivered, sAbsent, sResched], "DELIVERY").map((s) => s.id)], [true, [22, 23]]);
+  eq("mixto: ya cerradas no se vuelven a pedir", stopsToCloseOnFinish([sDelivered, { ...sAbsent, status: "DONE" }, sResched], "DELIVERY").map((s) => s.id), [23]);
+  eq("mixto: el intento no figura como «ML todavía no lo cerró»", [awaitingProvider(sAbsent).length, awaitingProvider(sTransit).length], [0, 1]);
+  eq("mixto: estado de la parada con dos reprogramados", stopStateLabel(sResched), "Llegaste · Reprogramado por Mercado Libre: 1 · Reprogramado por el comprador: 1");
+  eq("mixto: progreso por envío", routeProgress([sDelivered, sAbsent, sResched, sTransit]), { total: 5, pending: 1, finished: 4 });
+  eq("mixto: en Turbo nada se cierra solo", stopsToCloseOnFinish([sAbsent], "TURBO"), []);
+}
+
 console.log(failed ? `\n${failed} FALLAS` : "\nOK");
 if (failed) process.exit(1);
