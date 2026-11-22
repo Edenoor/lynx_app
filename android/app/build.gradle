@@ -94,6 +94,11 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0.0"
+        // HTTP sin cifrar solo en el APK de prueba contra la API de TEST: el perfil EAS
+        // «mvp-test» define LYNX_ALLOW_CLEARTEXT=true. Sin esa variable (preview,
+        // production y builds locales de release) queda en false, igual que antes. Nombre
+        // propio: el plugin de React Native fija «usesCleartextTraffic» por buildType.
+        manifestPlaceholders += [lynxCleartextTraffic: (System.getenv("LYNX_ALLOW_CLEARTEXT") == "true").toString()]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

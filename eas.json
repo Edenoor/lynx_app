@@ -27,6 +27,14 @@
         "EXPO_PUBLIC_API_URL": "https://api.wynflex.com.ar"
       }
     },
+    "mvp-test": {
+      "extends": "preview",
+      "channel": "mvp-test",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://32.197.148.77:5000",
+        "LYNX_ALLOW_CLEARTEXT": "true"
+      }
+    },
     "production": {
       "channel": "production",
       "autoIncrement": true,
