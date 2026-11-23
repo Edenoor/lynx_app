@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 
 import { getJson, putJson } from "../../config/Api";
+import { isChatMessage } from "../../config/pushKind";
 // Mismo error con status que el resto de los clientes del Picker.
 import { WarehouseApiError } from "./warehouseApi";
 
@@ -30,6 +31,14 @@ const unwrap = <T,>(res: any): T => {
 
 export const fetchMyNotifications = async () =>
   unwrap<{ notifications: InboxNotification[] }>(await getJson("/v2/notifications/my")).notifications;
+
+// Los mensajes del chat no son notificaciones: se leen en Mensajes. El
+// servidor igual los anota en esta bandeja (NotifyUser no respeta log:false),
+// así que se separan; sus ids se marcan vistos para que no ocupen los 20.
+export const splitChatRows = (list: InboxNotification[]) => ({
+  notifications: list.filter((n) => !isChatMessage(n)),
+  chatIds: list.filter((n) => isChatMessage(n)).map((n) => n.id),
+});
 
 // Siempre con ids explícitos: sin ids el servidor marca TODAS las del usuario,
 // incluidas las que no llegaron a mostrarse por el límite de 20.
@@ -66,7 +75,7 @@ export const setUnreadCount = (n: number | null) => {
 export const refreshUnreadCount = () => {
   if (!inflight) {
     inflight = fetchMyNotifications()
-      .then((list) => setUnreadCount(list.length))
+      .then((list) => setUnreadCount(splitChatRows(list).notifications.length))
       .catch(() => undefined)
       .finally(() => {
         inflight = null;

@@ -13,7 +13,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AppTheme from "../../theme/AppTheme";
 import { SafeScreen } from "../../components/SafeScreen";
 import type { PickerStackParamList } from "../../navigator/PickerStackNavigator";
-import { fetchMyNotifications, InboxNotification, INBOX_LIMIT, markNotificationsSeen, setUnreadCount } from "./notificationsApi";
+import { fetchMyNotifications, InboxNotification, INBOX_LIMIT, markNotificationsSeen, setUnreadCount, splitChatRows } from "./notificationsApi";
 import { loadErrorMessage } from "./warehouseApi";
 import { ListMessage, listStyles, shortDate } from "./pickerUi";
 import { PickerBottomNavigation, usePickerBottomSpace } from "./PickerBottomNavigation";
@@ -43,11 +43,12 @@ export default function PickerNotificationsScreen({ route, navigation }: Props) 
   const load = useCallback(async (manual: boolean) => {
     if (manual) setRefreshing(true);
     try {
-      const list = await fetchMyNotifications();
+      const { notifications: list, chatIds } = splitChatRows(await fetchMyNotifications());
       setItems(list);
       setSeen(new Set());
       setUnreadCount(list.length);
       setError(null);
+      if (chatIds.length) markNotificationsSeen(chatIds).catch(() => undefined);
     } catch (e) {
       setError(loadErrorMessage(e));
     } finally {

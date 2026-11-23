@@ -230,6 +230,12 @@ const MOCKS: Record<string, any> = {
   "expo-location": { requestForegroundPermissionsAsync: async () => ({ status: "denied", canAskAgain: true }), Accuracy: { High: 4 } },
   "expo-camera": { CameraView: "CameraView", useCameraPermissions: () => [camera.permission, camera.request] },
   "expo-clipboard": { setStringAsync: async () => true },
+  // Push del Picker (pickerPush.ts): los manejadores quedan en `notif` para simular un aviso que llega o se toca.
+  "expo-notifications": {
+    addNotificationReceivedListener: (cb: any) => (notif.received.push(cb), { remove: () => {} }),
+    addNotificationResponseReceivedListener: (cb: any) => (notif.tapped.push(cb), { remove: () => {} }),
+    getLastNotificationResponseAsync: async () => null,
+  },
   "react-native-safe-area-context": { SafeAreaView: "SafeAreaView", useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
   "expo-splash-screen": { preventAutoHideAsync: () => Promise.resolve(), hideAsync: () => Promise.resolve() },
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker", Polyline: "Polyline" },
@@ -258,6 +264,9 @@ const UserContext = RealReact.createContext({ user: null, isAuthLoading: false }
 const storage = { stored: { version: 1, colorMode: "system", style: "marble", radius: "rounded" } as any, saved: [] as any[] };
 const gpsPolicy = { refreshes: 0 };
 const push: { handlers: any } = { handlers: null };
+const notif = { received: [] as any[], tapped: [] as any[] };
+// Los toques ya atendidos (Push.claimNotificationResponse): uno por notificación.
+const claimed = new Set<string>();
 // La charla abierta que informa ChatScreen (silencia sus push).
 const openChats: (number | null)[] = [];
 const RELATIVE_MOCKS: [string, any][] = [
@@ -272,7 +281,8 @@ const RELATIVE_MOCKS: [string, any][] = [
   ["Envios/ViewModel", { __esModule: true, default: () => envios }],
   ["client/Landing/ViewModel", { __esModule: true, default: () => ({ user: { id: 7, username: "vendedor", rol: "SELLER" }, removeUserSession: () => { session.removed++; return Promise.resolve(); } }) }],
   // Los manejadores de push que registra Inicio, para simular una oferta que llega.
-  ["config/Push", { setupPushAndRegisterDevice: async () => null, attachNotificationListeners: (h: any) => { push.handlers = h; return () => {}; }, setOpenConversation: (id: number | null) => { openChats.push(id); } }],
+  ["config/Push", { setupPushAndRegisterDevice: async () => null, attachNotificationListeners: (h: any) => { push.handlers = h; return () => {}; }, setOpenConversation: (id: number | null) => { openChats.push(id); },
+    claimNotificationResponse: (id?: string | null) => (!id || claimed.has(id) ? false : (claimed.add(id), true)) }],
   // Cuántas veces una pantalla pidió la política del GPS (franja horaria).
   ["config/DriverLocation", {
     refreshTrackingPolicy: () => { gpsPolicy.refreshes++; return Promise.resolve(); },
@@ -3101,6 +3111,132 @@ const setDriverApi = () => {
     push.handlers.onChatMessage({ conversationId: null, source: "response" });
     check("Push de chat sin charla: abre la lista", js(lastNav()) === js(["popTo", "NotificationsScreen", { tab: "messages" }]));
     alertsParams.current = {};
+  }
+
+  // 23) Chat del Picker (Chat V2, solo TEST): Alertas › Mensajes, la charla
+  // con «<<» a su lista, el push CHAT_MESSAGE y lo que el servidor no deja.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    const PickerAlerts = L("src/Presentation/views/picker/PickerNotificationsScreen.tsx").default;
+    const PickerHome = L("src/Presentation/views/picker/PickerHomeScreen.tsx").default;
+    const Chat = L("src/Presentation/views/driver/chat/ChatScreen.tsx").default;
+    const People = L("src/Presentation/views/driver/chat/ChatPeopleScreen.tsx").default;
+    const { backToPickerChatList } = L("src/Presentation/views/driver/chat/chatStore.ts");
+    const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+    const picker = { id: 7, rol: "ADMIN", profile: "PICKER", username: "p" };
+    contextOverride.set(UserContext, { user: picker, isAuthLoading: false });
+    const tab = (tree: any, label: string) => all(tree, (x) => x.props?.accessibilityRole === "tab" && textOf(x).startsWith(label))[0];
+    const body = (key: string) => api.bodies.filter(([k]) => k === key).map(([, b]) => b);
+    const INBOX = { ok: true, unread_total: 2, conversations: [{
+      id: 31, kind: "direct", role: "member", title: "Ana", can_write: true, other: { id: 401, name: "Ana", online: true },
+      last_message: { id: 310, body: "¿Llegó la colecta de Mitre?", author_name: "Ana", created_at: ago(3) }, unread: 2,
+    }] };
+    // El servidor de TEST anota los mensajes del chat también en la bandeja.
+    const MY = { ok: true, notifications: [
+      { id: 91, delivery_id: null, type: "CHAT_MESSAGE", title: "Ana", body: "Ana: ¿Llegó la colecta de Mitre?", data: { conversationId: 31, kind: "direct" }, created_at: ago(3) },
+      { id: 92, delivery_id: 5, type: "ASIGNACION_RESPUESTA", title: "Envío aceptado por el driver", body: "Juan aceptó el envío 4600", data: {}, created_at: ago(9) },
+    ] };
+    const setPickerChatApi = (over: Record<string, any> = {}) => {
+      api.replies = { "GET /v2/chat/inbox": INBOX, "GET /v2/chat/unread": { ok: true, unread_total: 2 }, "GET /v2/notifications/my": MY, ...over };
+      api.calls = []; api.bodies = [];
+    };
+
+    // Mensajes desde Alertas: sus charlas de a uno, sin el asistente del chofer.
+    setPickerChatApi(); nav.calls = [];
+    let tree = await mount(RealReact.createElement(PickerAlerts, { navigation: nav, route: { params: { warehouseId: 1, tab: "messages" } } }));
+    let txt = textOf(tree);
+    check("Picker chat: Alertas tiene Notificaciones · Mensajes y abre en Mensajes", !!tab(tree, "Notificaciones") && tab(tree, "Mensajes")?.props.accessibilityState?.selected === true);
+    check("Picker chat: lista sus charlas desde /v2/chat/inbox, con el último mensaje y sin el asistente",
+      api.calls.includes("GET /v2/chat/inbox") && txt.includes("¿Llegó la colecta de Mitre?") && byLabel(tree, "Ana, en línea: 2 sin leer").length === 1 && !txt.includes("Dudas de uso de la app"), txt.slice(0, 300));
+    byLabel(tree, "Ana, en línea: 2 sin leer")[0].props.onPress();
+    check("Picker chat: tocar la charla abre PickerChatScreen", js(lastNav()) === js(["navigate", "PickerChatScreen", { conversationId: 31, title: "Ana" }]), js(lastNav()));
+    byLabel(tree, "Nueva charla")[0].props.onPress();
+    check("Picker chat: «Nueva charla» abre el directorio", js(lastNav()) === js(["navigate", "PickerChatPeopleScreen"]), js(lastNav()));
+
+    // Notificaciones: el mensaje de chat no aparece ni cuenta; se marca visto para no ocupar los 20.
+    tab(tree, "Notificaciones").props.onPress(); tree = await settle();
+    txt = textOf(tree);
+    check("Picker chat: en Notificaciones no se repite el mensaje del chat",
+      txt.includes("Envío aceptado por el driver") && !txt.includes("Ana: ¿Llegó la colecta de Mitre?") && textOf(tab(tree, "Notificaciones")).includes("1"), txt.slice(0, 400));
+    check("Picker chat: el aviso de chat de la bandeja se marca visto (solo ese)", js(body("PUT /v2/notifications/seen")) === js([{ ids: [91] }]), js(api.bodies));
+
+    // La lista no carga (sin permiso): se dice por qué.
+    setPickerChatApi({ "GET /v2/chat/inbox": { ok: false, error: "No autorizado", status: 403 } });
+    tree = await mount(RealReact.createElement(PickerAlerts, { navigation: nav, route: { params: { warehouseId: 1, tab: "messages" } } }));
+    check("Picker chat: si el servidor no deja ver la lista, lo dice", textOf(tree).includes("No autorizado"));
+
+    // La charla: leer, responder y «<<» a la lista del Picker.
+    const CONV = { id: 31, kind: "direct", role: "member", can_write: true, title: "Ana" };
+    const msg = (id: number, text: string, extra: any = {}) => ({ id, kind: "text", body: text, created_at: ago(3), author: { id: 401, name: "Ana" }, mine: false, from_team: false, ...extra });
+    setPickerChatApi({
+      "GET /v2/chat/conversations/31/messages": { ok: true, conversation: CONV, has_more: false, messages: [msg(309, "Hola"), msg(310, "¿Llegó la colecta de Mitre?")] },
+      "POST /v2/chat/conversations/31/read": { ok: true, last_read_message_id: 310 },
+      "POST /v2/chat/conversations/31/messages": { ok: true, message: msg(311, "Sí, ya la recibimos", { author: { id: 7, name: "Picker" }, mine: true, created_at: new Date().toISOString() }) },
+    });
+    nav.calls = [];
+    alertsParams.current = { conversationId: 31, title: "Ana" };
+    tree = await mount(RealReact.createElement(Chat, { onBack: backToPickerChatList }));
+    check("Picker chat: la charla muestra los mensajes anteriores y marca leído", textOf(tree).includes("Hola") && textOf(tree).includes("¿Llegó la colecta de Mitre?") && js(body("POST /v2/chat/conversations/31/read")) === js([{ message_id: 310 }]));
+    all(tree, (x) => x.type === "TextInput")[0].props.onChangeText("Sí, ya la recibimos");
+    tree = await settle();
+    byLabel(tree, "Enviar mensaje")[0].props.onPress(); tree = await settle();
+    check("Picker chat: responder manda el texto y lo muestra", js(body("POST /v2/chat/conversations/31/messages")) === js([{ body: "Sí, ya la recibimos" }]) && textOf(tree).includes("Sí, ya la recibimos"));
+    nav.routes = [{ name: "PickerHomeScreen" }, { name: "PickerNotificationsScreen", params: { warehouseId: 1, tab: "notifications" } } as any, { name: "PickerChatScreen" }];
+    byLabel(tree, "Volver a los chats")[0].props.onPress();
+    check("Picker chat: «<<» vuelve a sus Alertas › Mensajes, conservando el depósito", js(lastNav()) === js(["popTo", "PickerNotificationsScreen", { warehouseId: 1, tab: "messages" }]), js(lastNav()));
+    nav.routes = [{ name: "PickerHomeScreen" }, { name: "PickerChatScreen" }];
+    byLabel(tree, "Volver a los chats")[0].props.onPress();
+    check("Picker chat: «<<» desde un push (sin la lista atrás) la pone en su lugar, en el área Picker", js(lastNav()) === js(["replace", "PickerNotificationsScreen", { warehouseId: null, tab: "messages" }]), js(lastNav()));
+    nav.routes = [];
+
+    // Una charla ajena (p. ej. un push que era de otro usuario): el servidor responde 404.
+    setPickerChatApi({ "GET /v2/chat/conversations/77/messages": { ok: false, error: "charla inexistente", status: 404 } });
+    alertsParams.current = { conversationId: 77 };
+    tree = await mount(RealReact.createElement(Chat, { onBack: backToPickerChatList }));
+    check("Picker chat: una charla que el servidor no le deja ver no muestra nada ni deja escribir",
+      textOf(tree).includes("Esta charla ya no está disponible.") && !all(tree, (x) => x.type === "TextInput").length && !api.calls.some((c) => c.startsWith("POST")), textOf(tree).slice(0, 200));
+
+    // Nueva charla: el directorio de usuarios internos abre la charla de a uno.
+    setPickerChatApi({
+      "GET /v2/chat/people": { ok: true, people: [{ id: 402, name: "Bruno", profile: "COORDINADOR", online: false, conversation_id: null }] },
+      "POST /v2/chat/direct": { ok: true, conversation_id: 32 },
+    });
+    nav.calls = [];
+    tree = await mount(RealReact.createElement(People, { chatRoute: "PickerChatScreen", onBack: backToPickerChatList })); await new Promise((r) => setTimeout(r, 5)); tree = await settle();
+    pressable(tree, "Bruno").props.onPress(); tree = await settle();
+    const opened = lastNav();
+    check("Picker chat: elegir a alguien del directorio abre esa charla de a uno",
+      js(body("POST /v2/chat/direct")) === js([{ user_id: 402 }]) && opened?.[1] === "PickerChatScreen" && opened?.[2]?.conversationId === 32, js(nav.calls));
+
+    // Push CHAT_MESSAGE en el Inicio del Picker (usuario con push habilitado).
+    const prevUsers = process.env.EXPO_PUBLIC_PICKER_PUSH_USERS;
+    process.env.EXPO_PUBLIC_PICKER_PUSH_USERS = "p";
+    notif.received.length = 0; notif.tapped.length = 0;
+    setPickerChatApi({ "GET /v2/warehouse/shelves": { ok: true, warehouse_id: 1, shelves: [] } });
+    nav.calls = [];
+    tree = await mount(RealReact.createElement(PickerHome, { navigation: nav, route: { params: {} } }));
+    check("Picker push: el Inicio escucha avisos y toques", notif.received.length > 0 && notif.tapped.length > 0);
+    const tap = (id: string, data: any) => notif.tapped.at(-1)({ notification: { request: { identifier: id, content: { data } } } });
+    api.calls = [];
+    notif.received.at(-1)({ request: { content: { data: { type: "CHAT_MESSAGE", conversationId: 31 } } } }); await settle();
+    check("Picker push: un mensaje con la app abierta no cambia de pantalla y relee los no leídos", !nav.calls.length && api.calls.includes("GET /v2/chat/unread"), js(nav.calls) + js(api.calls));
+    tap("n1", { type: "CHAT_MESSAGE", conversationId: 31, kind: "direct" });
+    check("Picker push: tocar un mensaje abre esa charla", js(lastNav()) === js(["navigate", "PickerChatScreen", { conversationId: 31 }]), js(lastNav()));
+    nav.calls = [];
+    tap("n1", { type: "CHAT_MESSAGE", conversationId: 31 });
+    check("Picker push: el mismo toque no se atiende dos veces", !nav.calls.length);
+    tap("n2", { type: "CHAT_MESSAGE" });
+    check("Picker push: un mensaje sin charla abre Alertas › Mensajes", lastNav()?.[1] === "PickerNotificationsScreen" && lastNav()?.[2]?.tab === "messages", js(lastNav()));
+    tap("n3", { type: "ASIGNACION_RESPUESTA" });
+    check("Picker push: otro aviso abre la bandeja de notificaciones", lastNav()?.[1] === "PickerNotificationsScreen" && lastNav()?.[2]?.tab === undefined, js(lastNav()));
+    if (prevUsers === undefined) delete process.env.EXPO_PUBLIC_PICKER_PUSH_USERS; else process.env.EXPO_PUBLIC_PICKER_PUSH_USERS = prevUsers;
+
+    // Sin push habilitado no se registra el teléfono ni se escuchan toques.
+    notif.received.length = 0; notif.tapped.length = 0;
+    tree = await mount(RealReact.createElement(PickerHome, { navigation: nav, route: { params: {} } }));
+    check("Picker push: un Picker sin push habilitado no escucha avisos", notif.received.length === 0 && notif.tapped.length === 0);
+    alertsParams.current = {};
+    contextOverride.delete(UserContext);
   }
 
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
