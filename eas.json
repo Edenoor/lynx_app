@@ -32,7 +32,8 @@
       "channel": "mvp-test",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://32.197.148.77:5000",
-        "LYNX_ALLOW_CLEARTEXT": "true"
+        "LYNX_ALLOW_CLEARTEXT": "true",
+        "EXPO_PUBLIC_PICKER_PUSH_USERS": "picker"
       }
     },
     "production": {
