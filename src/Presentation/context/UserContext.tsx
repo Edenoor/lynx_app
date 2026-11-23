@@ -15,6 +15,7 @@ import { NotificationsProvider } from "./NotificationContext";
 import { clearDriverPositionsBuffer, stopDriverTracking } from "../config/DriverLocation";
 import { onSessionRenewed, renewSessionIfNeeded } from "../config/SessionRenewal";
 import {
+  releasePushTokenOfOthers,
   retryPendingPushUnregister,
   unregisterPushOnLogout,
 } from "../config/PushUnregister";
@@ -138,6 +139,7 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
 
         if (isValidSession(storedUser)) {
           setAuthToken(storedUser.token);
+          await releasePushTokenOfOthers(storedUser.id, { trustUnknownOwner: true });
           setUser(await refreshAdminProfile(storedUser));
         } else {
           setAuthToken(null);
@@ -186,9 +188,12 @@ export const UserProvider: React.FC<React.PropsWithChildren> = ({
     };
   }, [loggedIn]);
 
+  // El push del usuario anterior se da de baja antes de mostrar la app del que
+  // entra (PushUnregister.releasePushTokenOfOthers).
   const saveUserSession = async (u: User) => {
     await SaveUserLocalUseCase(u);
     setAuthToken(u.token);
+    await releasePushTokenOfOthers(u.id);
     setUser(u);
   };
 

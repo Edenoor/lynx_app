@@ -14,11 +14,13 @@ import { API_URL } from "./Api";
 
 const TOKEN_KEY = "lynx.push.token";
 const PENDING_KEY = "lynx.push.unregisterPending";
+// Usuario al que se registró el token (el servidor lo tiene a su nombre).
+const OWNER_KEY = "lynx.push.owner";
 const UNREGISTER_TIMEOUT_MS = 5000;
 
-export async function rememberPushToken(token: string) {
+export async function rememberPushToken(token: string, ownerId: number | string) {
   try {
-    await AsyncStorage.setItem(TOKEN_KEY, token);
+    await AsyncStorage.multiSet([[TOKEN_KEY, token], [OWNER_KEY, String(ownerId)]]);
     await AsyncStorage.removeItem(PENDING_KEY);
   } catch {}
 }
@@ -54,8 +56,37 @@ export async function unregisterPushOnLogout() {
 
   const ok = await postUnregister(token);
   try {
-    if (ok) await AsyncStorage.multiRemove([TOKEN_KEY, PENDING_KEY]);
+    if (ok) await AsyncStorage.multiRemove([TOKEN_KEY, PENDING_KEY, OWNER_KEY]);
     else await AsyncStorage.setItem(PENDING_KEY, token);
+  } catch {}
+}
+
+// Al entrar un usuario: si el token de este teléfono quedó a nombre de otro
+// (su sesión venció sin cerrar sesión, o la baja quedó pendiente), se da de
+// baja antes de seguir. Si no, el que entra ve los avisos del anterior —sus
+// mensajes de chat incluidos— cuando no registra su propio push (un Picker
+// sin push habilitado). El que sí lo registra lo vuelve a pedir enseguida a su
+// nombre. Hay que esperarla ANTES de mostrar la app: la baja borra el token
+// en el servidor sea de quien sea, y no puede pisar el registro nuevo.
+// Sin dueño anotado (token de una versión anterior) y sesión recuperada
+// (`trustUnknownOwner`) se deja: lo más probable es que sea de ese usuario.
+export async function releasePushTokenOfOthers(userId: number | string | null | undefined, { trustUnknownOwner = false } = {}) {
+  if (userId == null || userId === "") return;
+  let token: string | null = null;
+  let owner: string | null = null;
+  let pending: string | null = null;
+  try {
+    [token, owner, pending] = (await AsyncStorage.multiGet([TOKEN_KEY, OWNER_KEY, PENDING_KEY])).map(([, v]) => v);
+  } catch {
+    return;
+  }
+  const stale = token && (owner ? owner !== String(userId) : !trustUnknownOwner) ? token : pending;
+  if (!stale) return;
+
+  const ok = await postUnregister(stale);
+  try {
+    if (ok) await AsyncStorage.multiRemove([TOKEN_KEY, PENDING_KEY, OWNER_KEY]);
+    else await AsyncStorage.setItem(PENDING_KEY, stale);
   } catch {}
 }
 

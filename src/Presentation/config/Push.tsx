@@ -95,7 +95,7 @@ export async function setupPushAndRegisterDevice(params: {
     });
 
     token = response.data;
-    await rememberPushToken(token);
+    await rememberPushToken(token, params.userId);
 
     if (__DEV__) console.log("[Lynx Push Mobile] Expo Push Token:", token);
   } catch (error) {
