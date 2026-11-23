@@ -5,6 +5,8 @@
 // registra nadie. Ese usuario recibe los avisos generales de administradores
 // (NotifyAllAdmins / por perfil del servidor): pueden traer información
 // administrativa, por eso no se habilita para todos los Pickers.
+// El chat del Picker funciona sin push (Alertas › Mensajes); el push de sus
+// mensajes queda pendiente de habilitación general: docs/chat-v2.md.
 //
 // La bandeja sale siempre del servidor (/notifications/my): el push solo
 // actualiza la campana y, al tocarlo, abre la bandeja. No se guarda nada en el
