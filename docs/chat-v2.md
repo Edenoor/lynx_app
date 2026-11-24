@@ -1,7 +1,9 @@
-# Chat V2 en Mobile (estado al 23-nov-2026)
+# Chat V2 en Mobile (estado al 24-nov-2026)
 
-Integrado en `integracion-mvp-test` (commits de `feat/chat-v2` más `881a965` y `4170dc4`).
-Solo funciona contra el backend de **TEST**: `/v2/chat` no está desplegado en producción.
+Integrado en `integracion-mvp-test` (commits de `feat/chat-v2` más `881a965` y `4170dc4`)
+y publicado en el APK oficial 1.1.0 (`main`). Funciona en TEST y en
+**producción**: `/v2/chat` está desplegado y su base responde (verificado el
+24-nov con GET a `/v2/chat/inbox` y `/v2/chat/unread`).
 
 ## Qué funciona
 
@@ -20,10 +22,11 @@ servidor no deja ver (404) muestra «Esta charla ya no está disponible.».
 ## Push de mensajes en Picker: pendiente de habilitación general
 
 El Picker registra su push solo si su usuario figura en
-`EXPO_PUBLIC_PICKER_PUSH_USERS` (`views/picker/pickerPush.ts`). Hoy esa
-variable no está definida ni en `.env` ni en EAS: **ningún Picker recibe
-avisos de mensajes**. El chat se usa igual desde Alertas › Mensajes, que se
-actualiza al abrirlo.
+`EXPO_PUBLIC_PICKER_PUSH_USERS` (`views/picker/pickerPush.ts`). Solo la
+define el perfil de prueba `mvp-test` (usuario `picker` de TEST); en
+producción no está definida: **ningún Picker recibe avisos de mensajes**. El
+chat se usa igual desde Alertas › Mensajes, que se actualiza al abrirlo.
+Habilitarlo más adelante es un cambio de JS: se entrega por OTA.
 
 Se mantiene la lista a propósito (decisión del 23-nov): registrar a todos los
 Pickers les haría llegar también los avisos de `NotifyAllAdmins` (respuesta de
@@ -40,7 +43,9 @@ general, backend tiene que mandar esos avisos por perfil o permiso
 2. `NotifyAllAdmins` llega a los Pickers (ver arriba).
 3. Opcional: el id del destinatario en el `data` del push, para que la app
    descarte un aviso que no es del usuario actual.
-4. Desplegar Chat V2 en producción antes de un APK de producción con chat.
+4. ~~Desplegar Chat V2 en producción~~: hecho (24-nov). Verificar en la WebApp
+   que alguien tenga el rol de equipo para atender la charla «Lynx» de los
+   choferes.
 
 ## Seguridad del token de push
 

@@ -39,6 +39,9 @@
     "production": {
       "channel": "production",
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.wynflex.com.ar"
+      },
       "android": {
         "buildType": "app-bundle"
       }
