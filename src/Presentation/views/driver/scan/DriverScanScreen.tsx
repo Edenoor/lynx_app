@@ -259,7 +259,7 @@ export default function DriverScanScreen({ navigation, route }: Props) {
           // cámara. La barra de abajo, afuera, sigue el tema del chofer.
           <FixedTheme theme={DEFAULT_THEME}>
             <View style={styles.cameraWrap}>
-              <QrScanner active={focused && open && !blocked} onScan={onScan} />
+              <QrScanner active={focused && open && !blocked} onScan={onScan} torchStyle={styles.torch} />
 
               <View pointerEvents="box-none" style={styles.topLayer}>
                 <Pressable onPress={close} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
@@ -357,6 +357,8 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   backButton: { width: 44, height: 44, borderRadius: AppTheme.radius.full, alignItems: "center", justifyContent: "center" },
+  // Linterna debajo de «Volver»: arriba a la derecha está el resumen de la sesión.
+  torch: { top: AppTheme.layout.headerTopPadding + 44 + AppTheme.spacing.sm, left: AppTheme.spacing.lg - 2, right: undefined },
   summaryBox: { alignItems: "flex-end", gap: AppTheme.spacing.sm, maxWidth: "75%" },
   summaryPill: {
     minHeight: 44,

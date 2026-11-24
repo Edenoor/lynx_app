@@ -3239,6 +3239,95 @@ const setDriverApi = () => {
     contextOverride.delete(UserContext);
   }
 
+  // 24) Linterna de los escáneres (QrScanner): manual, apagada al entrar, en
+  // los seis escáneres; se apaga al desactivar la cámara o pasar a segundo
+  // plano; en el chofer va debajo de «Volver» (arriba a la derecha está el
+  // resumen de la sesión).
+  {
+    const AppTheme = L("src/Presentation/theme/AppTheme.tsx").default;
+    const { QrScanner } = L("src/Presentation/components/QrScanner.tsx");
+    const PickerScan = L("src/Presentation/views/picker/PickerScanScreen.tsx").default;
+    const PickerBaulScan = L("src/Presentation/views/picker/PickerBaulScanScreen.tsx").default;
+    const PickerShelfScan = L("src/Presentation/views/picker/PickerShelfScanScreen.tsx").default;
+    const torchOf = (tree: any) => byLabel(tree, "Linterna").find((x) => x.props.accessibilityRole === "switch");
+    const camOf = (tree: any) => all(tree, (x) => x.type === "CameraView")[0];
+    const iconOf = (btn: any) => all(btn, (x) => x.type === "Ionicons")[0]?.props.name;
+    const appStateCbs: any[] = [];
+    const prevAdd = RN.AppState.addEventListener;
+    let removed = 0;
+    (RN.AppState as any).addEventListener = (_: string, cb: any) => { appStateCbs.push(cb); return { remove: () => { removed++; } }; };
+    camera.permission = { granted: true };
+    api.calls = [];
+
+    // Los seis escáneres la muestran, apagada.
+    const screens: [string, any, any][] = [
+      ["Chofer · Asignar envío", Scan, { mode: "asignarme" }],
+      ["Chofer · Ingresar envío", Scan, { mode: "colecta" }],
+      ["Chofer · Recepción en planta", Scan, { mode: "planta" }],
+      ["Picker · Recepción", PickerScan, { warehouseId: 1 }],
+      ["Picker · Baúl", PickerBaulScan, {}],
+      ["Picker · Estantería", PickerShelfScan, { warehouseId: 1 }],
+    ];
+    api.replies = { "GET /v2/warehouse/shelves": { ok: true, warehouse_id: 1, shelves: [] } };
+    for (const [name, Screen, params] of screens) {
+      const tree = await mount(RealReact.createElement(Screen, { navigation: nav, route: { params } }));
+      const btn = torchOf(tree);
+      const st = flat(btn?.props.style);
+      check(`Linterna: ${name}, botón de 48 dp y apagada al entrar`, !!btn && st.width === 48 && st.height === 48 && btn.props.accessibilityState?.checked === false && camOf(tree)?.props.enableTorch === false, JSON.stringify(st));
+    }
+
+    // Encender y apagar a mano, con indicador visual y estado accesible.
+    let tree = await mount(RealReact.createElement(Scan, { navigation: nav, route: { params: { mode: "asignarme" } } }));
+    const off = torchOf(tree);
+    check("Linterna: apagada, ícono de contorno sobre fondo oscuro", iconOf(off) === "flashlight-outline" && flat(off.props.style).backgroundColor !== AppTheme.status.pending.solid);
+    off.props.onPress(); tree = await settle();
+    let on = torchOf(tree);
+    check("Linterna: al tocar se enciende (cámara y botón)", camOf(tree).props.enableTorch === true && on.props.accessibilityState?.checked === true);
+    check("Linterna: encendida se distingue (fondo de acento e ícono lleno)", iconOf(on) === "flashlight" && flat(on.props.style).backgroundColor === AppTheme.status.pending.solid);
+    on.props.onPress(); tree = await settle();
+    check("Linterna: al tocar de nuevo se apaga", camOf(tree).props.enableTorch === false && torchOf(tree).props.accessibilityState?.checked === false);
+    check("Linterna: leer un QR sigue igual (solo QR, mismo manejador)", same(camOf(tree).props.barcodeScannerSettings, { barcodeTypes: ["qr"] }) && typeof camOf(tree).props.onBarcodeScanned === "function");
+
+    // Chofer: debajo de «Volver», no arriba a la derecha (resumen de la sesión).
+    const pos = flat(torchOf(tree).props.style);
+    check("Linterna: en el chofer va debajo de «Volver», a la izquierda", pos.right === undefined && typeof pos.left === "number" && pos.top >= AppTheme.layout.headerTopPadding + 44, JSON.stringify(pos));
+    tree = await mount(RealReact.createElement(PickerScan, { navigation: nav, route: { params: { warehouseId: 1 } } }));
+    const pickerPos = flat(torchOf(tree).props.style);
+    check("Linterna: en el Picker, arriba a la derecha de la cámara", pickerPos.top === AppTheme.spacing.md && pickerPos.right === AppTheme.spacing.md, JSON.stringify(pickerPos));
+
+    // Segundo plano: se apaga y al volver queda apagada.
+    tree = await mount(RealReact.createElement(Scan, { navigation: nav, route: { params: { mode: "planta" } } }));
+    torchOf(tree).props.onPress(); tree = await settle();
+    appStateCbs.forEach((cb) => cb("background")); tree = await settle();
+    check("Linterna: al pasar a segundo plano se apaga", camOf(tree).props.enableTorch === false && torchOf(tree).props.accessibilityState?.checked === false);
+    appStateCbs.forEach((cb) => cb("active")); tree = await settle();
+    check("Linterna: al volver a la app sigue apagada", camOf(tree).props.enableTorch === false);
+
+    // Cámara desactivada (sin foco, resultado abierto): se apaga y no queda el botón.
+    const onScan = async () => {};
+    tree = await mount(RealReact.createElement(QrScanner, { active: true, onScan }));
+    torchOf(tree).props.onPress(); tree = await settle();
+    check("Linterna: encendida en el escáner activo", camOf(tree).props.enableTorch === true);
+    rootEl = RealReact.createElement(QrScanner, { active: false, onScan }); tree = await settle();
+    check("Linterna: con la cámara desactivada no hay cámara ni botón", !camOf(tree) && !torchOf(tree));
+    rootEl = RealReact.createElement(QrScanner, { active: true, onScan }); tree = await settle();
+    check("Linterna: al reactivar la cámara vuelve apagada", camOf(tree).props.enableTorch === false && torchOf(tree).props.accessibilityState?.checked === false);
+
+    // Desmontar suelta la suscripción a AppState.
+    removed = 0;
+    await mount(RealReact.createElement("View", null));
+    check("Linterna: al salir de la pantalla se suelta la escucha de segundo plano", removed >= 1, String(removed));
+
+    // Sin permiso de cámara no hay linterna.
+    camera.permission = { granted: false, canAskAgain: false };
+    tree = await mount(RealReact.createElement(QrScanner, { active: true, onScan }));
+    check("Linterna: sin permiso de cámara no aparece", !torchOf(tree));
+
+    camera.permission = { granted: true };
+    (RN.AppState as any).addEventListener = prevAdd;
+    api.replies = {};
+  }
+
   if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
   console.log("\nTodas las pruebas pasaron");
   process.exit(0);
