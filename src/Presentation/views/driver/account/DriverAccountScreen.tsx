@@ -202,6 +202,13 @@ export default function DriverAccountScreen() {
           />
 
           <AccountItem
+            icon="chatbox-ellipses-outline"
+            title="Sugerencias y errores"
+            description="Reportá un problema o proponé una mejora"
+            onPress={() => navigation.navigate("FeedbackScreen", { area: "driver" })}
+          />
+
+          <AccountItem
             icon="settings-outline"
             title="Configuración"
             description="Apariencia: tema, estilo y bordes"

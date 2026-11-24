@@ -22,6 +22,8 @@ import TurboGroupScreen from "../views/driver/turbo/TurboGroupScreen";
 import TurboTomorrowScreen from "../views/driver/turbo/TurboTomorrowScreen";
 import DriverHelpScreen from "../views/driver/help/DriverHelpScreen";
 import ChatScreen from "../views/driver/chat/ChatScreen";
+import FeedbackScreen, { type FeedbackParams } from "../views/common/feedback/FeedbackScreen";
+import FeedbackPhotoScreen from "../views/common/feedback/FeedbackPhotoScreen";
 import OfferNoticeBanner from "../components/driver/OfferNoticeBanner";
 import CollectInLightDataModal from "../components/driver/CollectInLightDataModal";
 import { hideCollectInLightData } from "../views/driver/collectionMode";
@@ -62,6 +64,9 @@ export type DriverStackParamList = {
   DriverHelpScreen: undefined;
   // Una charla del chat interno. title: el de la lista, mientras carga.
   ChatScreen: { conversationId: number; title?: string };
+  // Sugerencias y errores (Mi cuenta) y la foto que se adjunta.
+  FeedbackScreen: FeedbackParams;
+  FeedbackPhotoScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<DriverStackParamList>();
@@ -108,6 +113,8 @@ export const DriverStackNavigator = () => {
           <Stack.Screen name="TurboGroupScreen" component={TurboGroupScreen} />
           <Stack.Screen name="TurboTomorrowScreen" component={TurboTomorrowScreen} />
           <Stack.Screen name="DriverHelpScreen" component={DriverHelpScreen} />
+          <Stack.Screen name="FeedbackScreen" component={FeedbackScreen} />
+          <Stack.Screen name="FeedbackPhotoScreen" component={FeedbackPhotoScreen} />
           {/* Una pantalla por charla: abrir otra (un push, una derivación) no le cambia los datos a la que está abierta. */}
           <Stack.Screen name="ChatScreen" component={ChatScreen} getId={({ params }) => String(params.conversationId)} />
         </>

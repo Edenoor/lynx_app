@@ -10,6 +10,7 @@ import { AppVersionGate } from "./src/Presentation/components/AppVersionGate";
 import { ThemeProvider } from "./src/Presentation/theme/ThemeProvider";
 import { DEFAULT_THEME, FixedTheme, PUBLIC_THEME } from "./src/Presentation/theme/FixedTheme";
 import { useAppTheme } from "./src/Presentation/theme/ThemeContext";
+import { rememberScreen } from "./src/Presentation/views/common/feedback/feedbackContext";
 import type { Theme } from "./src/Presentation/theme/createTheme";
 
 // Fondo de las transiciones y headers nativos con los colores de Lynx: sin
@@ -48,7 +49,8 @@ function Navigation() {
   const navTheme = useMemo(() => navigationTheme(theme), [theme]);
 
   return (
-    <NavigationContainer theme={navTheme}>
+    // onStateChange: la última pantalla de trabajo, para el reporte de Sugerencias y errores.
+    <NavigationContainer theme={navTheme} onStateChange={rememberScreen}>
       <MainStackNavigator />
     </NavigationContainer>
   );

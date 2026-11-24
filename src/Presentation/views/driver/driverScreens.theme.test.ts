@@ -202,6 +202,8 @@ const RN = {
   StatusBar: { currentHeight: 24 },
 };
 const envios: any = { list: [], currentDeliveries: [], loading: false, error: null, currentError: null, reload: () => {}, username: "driver1" };
+// Archivos que lee expo-file-system (la foto de Sugerencias y errores): un Error rechaza.
+const fsFiles: Record<string, string | Error> = {};
 const MOCKS: Record<string, any> = {
   "react-native": RN,
   "@expo/vector-icons": { Ionicons: "Ionicons", MaterialCommunityIcons: "MaterialCommunityIcons" },
@@ -226,7 +228,10 @@ const MOCKS: Record<string, any> = {
   },
   "@react-native-community/datetimepicker": host("DateTimePicker"),
   "expo-file-system/next": { File: class {}, Paths: {} },
-  "expo-file-system/legacy": {},
+  "expo-file-system/legacy": {
+    EncodingType: { Base64: "base64" },
+    readAsStringAsync: async (uri: string) => { const f = fsFiles[uri]; if (f instanceof Error) throw f; return f ?? ""; },
+  },
   "expo-location": { requestForegroundPermissionsAsync: async () => ({ status: "denied", canAskAgain: true }), Accuracy: { High: 4 } },
   "expo-camera": { CameraView: "CameraView", useCameraPermissions: () => [camera.permission, camera.request] },
   "expo-clipboard": { setStringAsync: async () => true },
@@ -241,6 +246,7 @@ const MOCKS: Record<string, any> = {
   "react-native-maps": { __esModule: true, default: "MapView", Marker: "Marker", Polyline: "Polyline" },
   "react-native-svg": { __esModule: true, default: "Svg", Circle: "Circle" },
   "expo-constants": { __esModule: true, default: { expoConfig: { version: "1.0.0" } } },
+  "expo-device": { osVersion: "14", manufacturer: "samsung", modelName: "SM-A155M", deviceName: "Teléfono de Ana", isDevice: true },
   "expo-updates": { isEnabled: true, channel: "preview", updateId: "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d", isEmbeddedLaunch: false, isEmergencyLaunch: false, runtimeVersion: "0ffd0b43565ee42cd72d1aeaec6be1a6c4f2a6e8" },
 };
 // Lo que se anunció al lector de pantalla (confirmaciones breves).
@@ -3111,6 +3117,132 @@ const setDriverApi = () => {
     push.handlers.onChatMessage({ conversationId: null, source: "response" });
     check("Push de chat sin charla: abre la lista", js(lastNav()) === js(["popTo", "NotificationsScreen", { tab: "messages" }]));
     alertsParams.current = {};
+  }
+
+  // 22b) Sugerencias y errores (POST /v2/feedback, el de la WebApp): accesos
+  // en Mi cuenta (chofer) e Inicio (Picker), el formulario, la foto opcional y
+  // lo técnico en `page`; un envío a la vez y, si falla, no se pierde el texto.
+  {
+    const js = (x: any) => JSON.stringify(x);
+    const files = fsFiles;
+    const Feedback = L("src/Presentation/views/common/feedback/FeedbackScreen.tsx").default;
+    const FeedbackPhoto = L("src/Presentation/views/common/feedback/FeedbackPhotoScreen.tsx").default;
+    const Account = L("src/Presentation/views/driver/account/DriverAccountScreen.tsx").default;
+    const PickerHome = L("src/Presentation/views/picker/PickerHomeScreen.tsx").default;
+    const { rememberScreen } = L("src/Presentation/views/common/feedback/feedbackContext.ts");
+    const sendBtn = (tree: any) => all(tree, (x) => x.type === "TouchableOpacity" && /^(Enviar|Enviando…)/.test(textOf(x)))[0];
+    const input = (tree: any) => all(tree, (x) => x.type === "TextInput")[0];
+    const posts = () => api.bodies.filter(([k]) => k === "POST /v2/feedback").map(([, b]) => b);
+    const open = async (params: any) => { alertsParams.current = params; nav.calls = []; return mount(RealReact.createElement(Feedback, { navigation: nav, route: { params } })); };
+    const fill = async (tree: any, kind: string, text: string) => {
+      byLabel(tree, kind)[0].props.onPress(); tree = await settle();
+      input(tree).props.onChangeText(text); return settle();
+    };
+
+    // Accesos: Mi cuenta del chofer (después de Ayuda) e Inicio del Picker (antes de Cerrar sesión).
+    let tree = await mount(RealReact.createElement(Account, { navigation: nav, route: { params: {} } }));
+    const accountText = textOf(tree);
+    check("Sugerencias: en Mi cuenta, después de Ayuda", accountText.includes("Sugerencias y errores") && accountText.indexOf("Ayuda") < accountText.indexOf("Sugerencias y errores"));
+    nav.calls = [];
+    tree = await press(tree, "Sugerencias y errores");
+    check("Sugerencias: Mi cuenta abre el formulario del chofer", js(lastNav()) === js(["navigate", "FeedbackScreen", { area: "driver" }]), js(lastNav()));
+    contextOverride.set(UserContext, { user: { id: 7, rol: "ADMIN", profile: "PICKER", username: "p", permissions: [] }, isAuthLoading: false });
+    api.replies = { "GET /v2/warehouse/shelves": { ok: true, warehouse_id: 1, shelves: [] } };
+    tree = await mount(RealReact.createElement(PickerHome, { navigation: nav, route: { params: {} } }));
+    const homeText = textOf(tree);
+    check("Sugerencias: en el Inicio del Picker, antes de Cerrar sesión", homeText.includes("Sugerencias y errores") && homeText.indexOf("Sugerencias y errores") < homeText.indexOf("Cerrar sesión"));
+    nav.calls = [];
+    tree = await press(tree, "Sugerencias y errores");
+    check("Sugerencias: el Inicio abre el formulario del Picker", js(lastNav()) === js(["navigate", "FeedbackScreen", { area: "picker" }]), js(lastNav()));
+    contextOverride.delete(UserContext);
+    api.replies = {};
+
+    // Formulario: sin tipo ni texto no se puede mandar.
+    rememberScreen({ index: 0, routes: [{ name: "DriverStack", state: { index: 1, routes: [{ name: "DriverScreen" }, { name: "DriverScanScreen" }] } }] });
+    tree = await open({ area: "driver" });
+    check("Sugerencias: «Enviar» deshabilitado sin tipo ni descripción", sendBtn(tree)?.props.disabled === true);
+    check("Sugerencias: dice qué datos técnicos se adjuntan", /versión de Lynx/.test(textOf(tree)) && /modelo del teléfono/.test(textOf(tree)) && /No se envían tus datos de contacto/.test(textOf(tree)));
+    tree = await fill(tree, "Error", "ab");
+    check("Sugerencias: con menos de 3 caracteres sigue deshabilitado", sendBtn(tree).props.disabled === true && /Mínimo 3 caracteres/.test(textOf(tree)));
+    check("Sugerencias: el texto de ayuda es el de la WebApp", input(tree).props.placeholder === "Qué estabas haciendo, qué esperabas que pasara y qué pasó." && input(tree).props.maxLength === 2000);
+    input(tree).props.onChangeText("  La cámara no lee el QR con poca luz  "); tree = await settle();
+    check("Sugerencias: contador de caracteres", /\d+ \/ 2000/.test(textOf(tree)));
+    check("Sugerencias: con tipo y descripción se habilita", sendBtn(tree).props.disabled === false);
+
+    // Envío: un solo POST con el contrato del servidor y lo técnico en page.
+    api.bodies = []; api.calls = [];
+    api.replies = { "POST /v2/feedback": { ok: true, report: { id: 41, created_at: "2026-11-24T12:00:00Z" } } };
+    sendBtn(tree).props.onPress(); sendBtn(tree).props.onPress();
+    tree = await settle();
+    const sent = posts();
+    check("Sugerencias: dos toques seguidos mandan un solo reporte", sent.length === 1, String(sent.length));
+    const b = sent[0] ?? {};
+    check("Sugerencias: manda tipo y descripción sin espacios de más", b.kind === "ERROR" && b.message === "La cámara no lee el QR con poca luz", js(b));
+    check("Sugerencias: page con origen, área, pantalla, versión, Android y modelo", /^Mobile · Driver · pantalla DriverScanScreen · Lynx 1\.0\.0 · preview · actualización 1a2b3c4d · runtime 0ffd0b43 · Android 14 · samsung SM-A155M$/.test(b.page), b.page);
+    check("Sugerencias: sin token, email, teléfono ni nombre del dispositivo", !/eyJ|@|Bearer|Teléfono de Ana/.test(js(b)), js(b));
+    check("Sugerencias: viewport de la pantalla y sin foto", b.viewport === "360x800" && !("screenshot" in b), js(b));
+    check("Sugerencias: confirma el envío", /¡Gracias! Lo recibimos y lo vamos a revisar\./.test(textOf(tree)));
+    nav.calls = [];
+    tree = await press(tree, "Volver");
+    check("Sugerencias: «Volver» después de mandar", js(lastNav()) === js(["goBack"]), js(lastNav()));
+
+    // Errores: el mensaje del servidor (429) o la falta de red, sin perder lo escrito.
+    for (const [name, replyWith, expected] of [
+      ["límite por hora (429)", { ok: false, status: 429, error: "Ya mandaste muchos reportes en la última hora. Probá de nuevo más tarde." }, "Ya mandaste muchos reportes en la última hora."],
+      ["sin red", new Error("sin red"), "Sin conexión. Revisá la señal y probá de nuevo."],
+      ["sin respuesta a tiempo", new Error("sin respuesta en 60000 ms"), "Puede que el reporte haya llegado"],
+    ] as [string, any, string][]) {
+      tree = await open({ area: "driver" });
+      tree = await fill(tree, "Sugerencia", "Que muestre el total de paquetes");
+      api.replies = { "POST /v2/feedback": replyWith };
+      sendBtn(tree).props.onPress(); tree = await settle();
+      check(`Sugerencias: ${name}, avisa y no pierde el texto`, textOf(tree).includes(expected) && input(tree).props.value === "Que muestre el total de paquetes" && sendBtn(tree).props.disabled === false, textOf(tree).slice(0, 300));
+    }
+
+    // Foto: «Sacar foto» abre la cámara; la que vuelve se muestra, se manda y se puede quitar.
+    tree = await open({ area: "picker" });
+    nav.calls = [];
+    byLabel(tree, "Sacar foto")[0].props.onPress();
+    check("Sugerencias: «Sacar foto» abre la cámara", js(lastNav()) === js(["navigate", "FeedbackPhotoScreen"]), js(lastNav()));
+    files["file:///foto1.jpg"] = "/9j/4AAQSkZJRg==";
+    tree = await open({ area: "picker", photoUri: "file:///foto1.jpg" });
+    const thumb = all(tree, (x) => x.type === "Image" && x.props.accessibilityLabel === "Foto adjunta")[0];
+    check("Sugerencias: muestra la miniatura de la foto", thumb?.props.source?.uri === "file:///foto1.jpg");
+    tree = await fill(tree, "Error", "La etiqueta salió cortada");
+    api.bodies = []; api.replies = { "POST /v2/feedback": { ok: true, report: { id: 42 } } };
+    sendBtn(tree).props.onPress(); tree = await settle();
+    const withPhoto = posts()[0] ?? {};
+    check("Sugerencias: la foto viaja como JPEG en base64", withPhoto.screenshot === "data:image/jpeg;base64,/9j/4AAQSkZJRg==", String(withPhoto.screenshot).slice(0, 60));
+    check("Sugerencias: page del Picker", /^Mobile · Picker · /.test(withPhoto.page), withPhoto.page);
+
+    tree = await open({ area: "picker", photoUri: "file:///foto1.jpg" });
+    tree = await press(tree, "Quitar foto");
+    check("Sugerencias: «Quitar foto» la saca", !all(tree, (x) => x.type === "Image" && x.props.accessibilityLabel === "Foto adjunta").length && byLabel(tree, "Sacar foto").length === 1);
+    tree = await fill(tree, "Error", "Sin foto esta vez");
+    api.bodies = [];
+    sendBtn(tree).props.onPress(); tree = await settle();
+    check("Sugerencias: sin foto se manda sin screenshot", posts().length === 1 && !("screenshot" in posts()[0]));
+
+    files["file:///grande.jpg"] = "A".repeat(2_900_000);
+    tree = await open({ area: "driver", photoUri: "file:///grande.jpg" });
+    check("Sugerencias: una foto de más de 2 MB no se adjunta y se avisa", /pesa más de 2 MB/.test(textOf(tree)) && !all(tree, (x) => x.type === "Image" && x.props.accessibilityLabel === "Foto adjunta").length);
+    tree = await fill(tree, "Error", "Igual lo mando");
+    check("Sugerencias: sin la foto se puede mandar igual", sendBtn(tree).props.disabled === false);
+    files["file:///rota.jpg"] = new Error("ENOENT");
+    tree = await open({ area: "driver", photoUri: "file:///rota.jpg" });
+    check("Sugerencias: una foto que no se puede leer se avisa", /No se pudo leer la foto/.test(textOf(tree)));
+
+    // La cámara de la foto pide una resolución liviana; la del alta, la de siempre.
+    tree = await mount(RealReact.createElement(FeedbackPhoto, { navigation: nav, route: { params: {} } }));
+    const cam = all(tree, (x) => x.type === "CameraView")[0];
+    check("Sugerencias: la cámara del reporte elige una resolución liviana", typeof cam?.props.onCameraReady === "function" && "pictureSize" in (cam?.props ?? {}));
+    const { CameraCaptureView } = L("src/Presentation/ui/CameraCaptureView.tsx");
+    tree = await mount(RealReact.createElement(CameraCaptureView, { title: "Frente del DNI", overlayMode: "document", onCaptured: () => {} }));
+    const docCam = all(tree, (x) => x.type === "CameraView")[0];
+    check("Sugerencias: la cámara del alta y los documentos no cambia", !!docCam && (!("onCameraReady" in docCam.props) && !("pictureSize" in docCam.props)), js(Object.keys(docCam?.props ?? {})));
+
+    alertsParams.current = {};
+    api.replies = {}; api.bodies = [];
   }
 
   // 23) Chat del Picker (Chat V2, solo TEST): Alertas › Mensajes, la charla
