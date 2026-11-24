@@ -1,6 +1,18 @@
 # Release de producción y OTA (Lynx Mobile)
 
-Primer APK oficial: **1.1.0**, tag `mobile-v1.1.0`, rama `main`.
+## APK vigente
+
+| | |
+|---|---|
+| Versión | **1.1.1** (versionCode 13), tag `mobile-v1.1.1`, rama `main` |
+| Build EAS | `c209f838-8a12-4049-a276-7d11062a5e4d` |
+| Runtime | `7416ebafa5fa3618bbcb0ed54b9f2e8249c6bd45` |
+| Canal | `production` |
+| Incluye | linterna en los escáneres y Sugerencias y errores |
+
+Las OTA del canal `production` solo llegan a teléfonos con este APK (mismo
+runtime). Respaldo: 1.1.0 (tag `mobile-v1.1.0`, build `308536a0`, runtime
+`aae3475b`), que no se distribuyó.
 
 ## Ramas
 
@@ -76,7 +88,7 @@ git status            # sin cambios salvo strings.xml (saltos de línea)
 
 # 1. El runtime local tiene que coincidir con el del APK vigente.
 EXPO_PUBLIC_API_URL=https://api.wynflex.com.ar \
-  npx eas-cli@20.1.0 fingerprint:compare --build-id <BUILD_ID_DEL_APK_VIGENTE>
+  npx eas-cli@20.1.0 fingerprint:compare --build-id c209f838-8a12-4049-a276-7d11062a5e4d
 
 # 2. Revisar el bundle: tiene que traer solo la API de producción.
 rm -rf /tmp/lynx-ota && EXPO_PUBLIC_API_URL=https://api.wynflex.com.ar \
@@ -113,10 +125,12 @@ versionCode menor: el oficial se instala encima como actualización.
   Se conserva la sesión.
 - APK de TEST (`test` v8, `mvp-test` v10/v11): **cerrar sesión antes** de
   instalar (o borrar los datos de la app). La sesión guardada es de TEST.
+- APK 1.1.0 (versionCode 12, piloto): instalar encima.
 
 Los APK anteriores están en otros canales (`test`, `preview`,
 `picker-preview`, `mvp-test`) y no reciben las OTA de `production`: cada
 teléfono necesita instalar el APK oficial una vez.
 
 Versión mínima obligatoria (`APP_MIN_VERSION` en el backend): todavía sin
-configurar. Con `1.1.0` bloquearía los APK anteriores (todos `1.0.0`).
+configurar. Con `1.1.1` bloquearía los APK anteriores (`1.0.0` y el piloto
+`1.1.0`).
