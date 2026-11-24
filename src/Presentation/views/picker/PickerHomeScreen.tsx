@@ -139,6 +139,14 @@ export default function PickerHomeScreen({ navigation }: Props) {
           ) : null}
 
           <Text style={styles.note}>La configuración de estanterías y los recorridos se gestionan desde la Web.</Text>
+
+          {/* Siempre, aunque no haya depósito: también sirve para avisar eso. */}
+          <DriverActionCard
+            icon="chatbox-ellipses-outline"
+            title="Sugerencias y errores"
+            subtitle="Reportá un problema o proponé una mejora"
+            onPress={() => navigation.navigate("FeedbackScreen", { area: "picker" })}
+          />
         </View>
 
         <Pressable style={styles.logout} onPress={removeUserSession}>

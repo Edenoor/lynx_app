@@ -20,6 +20,8 @@ import PickerColectaDetailScreen from "../views/picker/PickerColectaDetailScreen
 import ChatScreen from "../views/driver/chat/ChatScreen";
 import ChatPeopleScreen from "../views/driver/chat/ChatPeopleScreen";
 import { backToPickerChatList, resetChatStore } from "../views/driver/chat/chatStore";
+import FeedbackScreen, { type FeedbackParams } from "../views/common/feedback/FeedbackScreen";
+import FeedbackPhotoScreen from "../views/common/feedback/FeedbackPhotoScreen";
 
 // El chat interno del picker: la misma charla que el chofer y el directorio,
 // volviendo a la pestaña Mensajes de sus Alertas.
@@ -66,6 +68,9 @@ export type PickerStackParamList = {
   PickerBaulDriverScreen: { driverId: number; name: string };
   // driverId: abierto desde un chofer, solo se confirma lo suyo.
   PickerBaulScanScreen: { driverId?: number; name?: string };
+  // Sugerencias y errores (Inicio) y la foto que se adjunta.
+  FeedbackScreen: FeedbackParams;
+  FeedbackPhotoScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<PickerStackParamList>();
@@ -93,6 +98,8 @@ export const PickerStackNavigator = () => {
     <Stack.Screen name="PickerColectaDetailScreen" component={PickerColectaDetailScreen} />
     <Stack.Screen name="PickerChatScreen" component={PickerChatScreen} getId={({ params }) => String(params.conversationId)} />
     <Stack.Screen name="PickerChatPeopleScreen" component={PickerChatPeopleScreen} />
+    <Stack.Screen name="FeedbackScreen" component={FeedbackScreen} />
+    <Stack.Screen name="FeedbackPhotoScreen" component={FeedbackPhotoScreen} />
   </Stack.Navigator>
   );
 };

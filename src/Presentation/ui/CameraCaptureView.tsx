@@ -15,6 +15,7 @@ import { DEFAULT_THEME, FixedTheme } from "../theme/FixedTheme";
 import { useThemedStyles } from "../theme/ThemeContext";
 import type { Theme } from "../theme/createTheme";
 import { ThemedStatusBar } from "../theme/ThemedStatusBar";
+import { pickPictureSize } from "./pictureSize";
 
 type OverlayMode = "none" | "selfie" | "document";
 
@@ -33,6 +34,11 @@ type Props = {
   kicker?: string;
   permissionText?: string;
   onCaptured: (tmpUri: string, w?: number, h?: number) => Promise<void> | void;
+  // Foto más liviana (adjunto de Sugerencias y errores): lado mayor máximo y
+  // calidad JPEG. Sin estos, la cámara de siempre (resolución propia y 0.85),
+  // la del alta y los documentos.
+  maxPictureSide?: number;
+  quality?: number;
 };
 
 export function CameraCaptureView({
@@ -44,9 +50,12 @@ export function CameraCaptureView({
   kicker = "VALIDACIÓN",
   permissionText = "Necesitamos acceso a la cámara para validar tu documentación y continuar con el alta.",
   onCaptured,
+  maxPictureSide,
+  quality = 0.85,
 }: Props) {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [pictureSize, setPictureSize] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
@@ -79,7 +88,7 @@ export function CameraCaptureView({
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.85,
+        quality,
         skipProcessing: false,
       });
 
@@ -128,6 +137,17 @@ export function CameraCaptureView({
             ref={cameraRef}
             style={cameraStyles.camera}
             facing={currentFacing}
+            {...(maxPictureSide
+              ? {
+                  pictureSize: pictureSize ?? undefined,
+                  onCameraReady: () => {
+                    cameraRef.current
+                      ?.getAvailablePictureSizesAsync()
+                      .then((sizes) => setPictureSize(pickPictureSize(sizes, maxPictureSide)))
+                      .catch(() => undefined);
+                  },
+                }
+              : {})}
           />
 
           {overlayMode !== "none" && !previewUri && cameraLayout && !busy && (
