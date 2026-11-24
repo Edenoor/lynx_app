@@ -78,13 +78,26 @@ git status            # sin cambios salvo strings.xml (saltos de línea)
 EXPO_PUBLIC_API_URL=https://api.wynflex.com.ar \
   npx eas-cli@20.1.0 fingerprint:compare --build-id <BUILD_ID_DEL_APK_VIGENTE>
 
-# 2. Publicar.
+# 2. Revisar el bundle: tiene que traer solo la API de producción.
+rm -rf /tmp/lynx-ota && EXPO_PUBLIC_API_URL=https://api.wynflex.com.ar \
+  npx expo export --platform android --no-bytecode --clear --output-dir /tmp/lynx-ota
+grep -ohE "https?://(32\.197\.[0-9.:]+|api\.wynflex\.com\.ar)" /tmp/lynx-ota/_expo/static/js/android/*.js | sort | uniq -c
+#    esperado: solo https://api.wynflex.com.ar
+
+# 3. Publicar (siempre con --clear-cache).
 EXPO_PUBLIC_API_URL=https://api.wynflex.com.ar \
-  npx eas-cli@20.1.0 update --channel production --message "<qué cambia>"
+  npx eas-cli@20.1.0 update --channel production -p android --clear-cache --message "<qué cambia>"
 ```
 
 Si el paso 1 no coincide, **no publicar**: el cambio necesita un APK nuevo (o
-el entorno local no es el de producción).
+el entorno local no es el de producción). Si el paso 2 muestra la IP de TEST,
+**no publicar**.
+
+**Por qué `--clear-cache`:** la OTA se arma en esta máquina, y Metro guarda en
+caché el código ya transformado con las variables `EXPO_PUBLIC_*` adentro.
+Después de un export o una OTA de TEST, un export de producción sin limpiar el
+caché salió con `http://32.197.148.77:5000` (comprobado el 24-nov). El APK no
+tiene este problema, porque EAS Build compila desde cero.
 
 La app busca la OTA al abrir y la aplica en el siguiente arranque.
 
