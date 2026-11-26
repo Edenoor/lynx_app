@@ -9,6 +9,7 @@
 
 import type { RouteSummary } from "./routesApi";
 import { pickupAnswer, PickupAnswer } from "./pickupConfirmation";
+import { executionDayLabel } from "./collectionLabels";
 
 export type HabitualCard = {
   kind: "habitual";
@@ -91,4 +92,43 @@ export function tomorrowPrompt(card: HabitualCard): TomorrowPrompt {
   if (answer === "ACCEPTED") return { answer, text: "Asistencia confirmada para mañana.", canAccept: false, canDecline: false };
   if (answer === "DECLINED") return { answer, text: "Avisaste que mañana no podés. Si podés, confirmala.", canAccept: true, canDecline: false };
   return { answer, text: "¿Confirmás tu asistencia para mañana?", canAccept: true, canDecline: true };
+}
+
+// Lo que la tarjeta pregunta, día por día (26-nov). Antes los botones de la
+// tarjeta eran solo para MAÑANA: con la colecta de hoy sin aceptar, el chofer
+// tocaba ✓, quedaba aceptada la de mañana y la de hoy seguía sin poder
+// comenzarse. Ahora la de hoy va primero, con su día escrito, y la de mañana
+// después. Cada renglón dice a qué recorrido responde.
+export type DayPrompt = {
+  day: "today" | "tomorrow"; route: RouteSummary; label: string;
+  answer: PickupAnswer; text: string; canAccept: boolean; canDecline: boolean;
+};
+export function dayPrompts(card: HabitualCard, todayIso: string): DayPrompt[] {
+  const out: DayPrompt[] = [];
+  const todayAnswer = card.today ? pickupAnswer(card.today) : null;
+  if (card.today && todayAnswer) {
+    const label = executionDayLabel(card.today.scheduled_date, todayIso).toUpperCase() || "HOY";
+    out.push(
+      todayAnswer === "ACCEPTED" ? { day: "today", route: card.today, label, answer: todayAnswer, text: "Aceptada. Abrila para comenzarla.", canAccept: false, canDecline: false }
+      : todayAnswer === "DECLINED" ? { day: "today", route: card.today, label, answer: todayAnswer, text: "Avisaste que hoy no podés. Si podés, confirmala.", canAccept: true, canDecline: false }
+      : { day: "today", route: card.today, label, answer: todayAnswer, text: "¿Podés hacer la colecta de hoy?", canAccept: true, canDecline: true },
+    );
+  }
+  const t = tomorrowPrompt(card);
+  if (t && card.tomorrow) {
+    const label = executionDayLabel(card.tomorrow.scheduled_date, todayIso).toUpperCase() || "MAÑANA";
+    out.push({ day: "tomorrow", route: card.tomorrow, label, ...t });
+  }
+  return out;
+}
+
+// Desde el detalle de una colecta de otro día: la ejecución de HOY del mismo
+// horario, si existe y todavía se puede operar. Sirve para ofrecer «Abrir la
+// de hoy» cuando el chofer entró a la de mañana (por el aviso, por ejemplo).
+export function todaySibling(route: RouteSummary, sameDay: RouteSummary[], todayIso: string): RouteSummary | null {
+  if (!route.template_id || route.scheduled_date.slice(0, 10) === todayIso) return null;
+  const same = (r: RouteSummary) =>
+    route.template_departure_id ? r.template_departure_id === route.template_departure_id
+      : r.template_id === route.template_id && (r.departure_time ?? "").slice(0, 5) === (route.departure_time ?? "").slice(0, 5);
+  return sameDay.find((r) => r.type === "PICKUP" && r.id !== route.id && r.scheduled_date.slice(0, 10) === todayIso && !FINISHED.has(r.status) && same(r)) ?? null;
 }

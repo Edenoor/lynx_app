@@ -31,7 +31,7 @@ import {
   todayIso,
 } from "./routesApi";
 import { pickupAnswer } from "./pickupConfirmation";
-import { collectionCards, HabitualCard, tomorrowPrompt } from "./collectionCards";
+import { collectionCards, dayPrompts, HabitualCard } from "./collectionCards";
 import {
   COLLECTION_STATUS_LABEL,
   collectionKindLabel,
@@ -212,6 +212,7 @@ export default function CollectionsScreen({ navigation }: Props) {
                 <HabitualCollectionCard
                   key={card.key}
                   card={card}
+                  today={today}
                   busy={respondiendo !== null}
                   onOpen={(route) =>
                     navigation.navigate("RouteDetailScreen", {
@@ -266,12 +267,14 @@ export default function CollectionsScreen({ navigation }: Props) {
 // próxima. Abajo, solo la asistencia de mañana.
 function HabitualCollectionCard({
   card,
+  today,
   busy,
   onOpen,
   onAccept,
   onReject,
 }: {
   card: HabitualCard;
+  today: string;
   busy: boolean;
   onOpen: (route: RouteSummary) => void;
   onAccept: (route: RouteSummary) => void;
@@ -279,14 +282,13 @@ function HabitualCollectionCard({
 }) {
   const theme = useAppTheme();
   const styles = useThemedStyles(makeStyles);
-  const prompt = tomorrowPrompt(card);
+  // Un renglón por día que pide respuesta: primero HOY, después mañana.
+  const prompts = dayPrompts(card, today);
   const todayAnswer = card.today ? pickupAnswer(card.today) : null;
-  const todayLabel = card.today
-    ? todayAnswer === "PENDING"
-      ? "pendiente de confirmar: abrila para confirmarla y comenzar"
-      : todayAnswer === "DECLINED"
-        ? "avisaste que no podés"
-        : (COLLECTION_STATUS_LABEL[card.today.status] ?? card.today.status).toLowerCase()
+  // Si hoy pide respuesta, lo dice su renglón; acá queda solo el estado de
+  // una colecta de hoy que ya salió.
+  const todayLabel = card.today && !todayAnswer
+    ? (COLLECTION_STATUS_LABEL[card.today.status] ?? card.today.status).toLowerCase()
     : null;
 
   return (
@@ -333,37 +335,41 @@ function HabitualCollectionCard({
         {todayLabel ? <Text style={styles.cardHint}>Hoy: {todayLabel}</Text> : null}
       </Pressable>
 
-      {prompt ? (
-        prompt.canAccept ? (
-          <View style={styles.cardActions}>
-            <Text style={styles.actionHint}>{prompt.text}</Text>
+      {prompts.map((prompt) => (
+        <View key={prompt.day} style={styles.cardActions}>
+          <View style={styles.actionText}>
+            <Text style={[styles.dayTag, prompt.day === "today" ? styles.dayTagToday : null]}>{prompt.label}</Text>
+            <Text style={prompt.canAccept ? styles.actionHint : styles.actionDone}>{prompt.text}</Text>
+            {prompt.day === "today" && prompt.answer === "PENDING" && prompt.route.confirmation_state === "OVERDUE" ? (
+              <Text style={styles.cardWarn}>Se pasó la hora de confirmar, pero todavía podés aceptarla.</Text>
+            ) : null}
+          </View>
+          {prompt.canAccept ? (
             <View style={styles.actionButtons}>
               {prompt.canDecline ? (
                 <Pressable
                   style={[styles.iconButton, styles.rejectButton]}
-                  onPress={() => card.tomorrow && onReject(card.tomorrow)}
+                  onPress={() => onReject(prompt.route)}
                   disabled={busy}
                   accessibilityRole="button"
-                  accessibilityLabel="No puedo mañana"
+                  accessibilityLabel={prompt.day === "today" ? "No puedo hoy" : "No puedo mañana"}
                 >
                   <Ionicons name="close" size={22} color={theme.status.rejected.icon} />
                 </Pressable>
               ) : null}
               <Pressable
                 style={[styles.iconButton, styles.acceptButton]}
-                onPress={() => card.tomorrow && onAccept(card.tomorrow)}
+                onPress={() => onAccept(prompt.route)}
                 disabled={busy}
                 accessibilityRole="button"
-                accessibilityLabel="Confirmar asistencia para mañana"
+                accessibilityLabel={prompt.day === "today" ? "Aceptar la colecta de hoy" : "Confirmar asistencia para mañana"}
               >
                 <Ionicons name="checkmark" size={23} color={theme.status.confirmed.icon} />
               </Pressable>
             </View>
-          </View>
-        ) : (
-          <Text style={styles.cardConfirmed}>{prompt.text}</Text>
-        )
-      ) : null}
+          ) : null}
+        </View>
+      ))}
     </ThemedCard>
   );
 }
@@ -606,6 +612,25 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   actionHint: {
     color: t.text.secondary,
     fontSize: 12,
+  },
+  actionText: {
+    flex: 1,
+    gap: 2,
+    paddingRight: 10,
+  },
+  actionDone: {
+    color: t.status.confirmed.text,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  dayTag: {
+    color: t.text.secondary,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  dayTagToday: {
+    color: t.text.accent,
   },
   actionButtons: {
     flexDirection: "row",

@@ -3,7 +3,7 @@
 //     --esModuleInterop --jsx react-jsx src/Presentation/views/driver/routes/collectionCards.test.ts
 //   node /tmp/collection-cards/collectionCards.test.js
 
-import { collectionCards, HabitualCard, tomorrowPrompt, weekdaysLabel } from "./collectionCards";
+import { collectionCards, dayPrompts, HabitualCard, todaySibling, tomorrowPrompt, weekdaysLabel } from "./collectionCards";
 import type { RouteSummary } from "./routesApi";
 
 let failed = 0;
@@ -83,6 +83,32 @@ eq("servidor anterior: una tarjeta igual", [cards.length, cards[0].days], [1, "L
 
 eq("días", [weekdaysLabel([0, 1, 2, 3, 4, 5, 6]), weekdaysLabel([1, 2, 3, 4, 5, 6]), weekdaysLabel([6, 0]), weekdaysLabel([3]), weekdaysLabel([0, 1, 5]), weekdaysLabel([])],
   ["Todos los días", "Lunes a sábado", "Fin de semana", "Solo mié", "Lun, Vie y Dom", null]);
+
+// 13) Hoy y mañana sin aceptar: la tarjeta pregunta primero por HOY, y cada
+// renglón responde a SU recorrido (26-nov: el ✓ aceptaba siempre la de mañana).
+const dos = semana();
+card = habituales(dos)[0];
+let ps = dayPrompts(card, HOY);
+eq("dos renglones: hoy primero", ps.map((p) => [p.day, p.route.id, p.label]), [["today", dos[0].id, "HOY, MARTES 10/11"], ["tomorrow", dos[1].id, "MAÑANA, MIÉRCOLES 11/11"]]);
+eq("hoy: se puede aceptar o rechazar", [ps[0].text, ps[0].canAccept, ps[0].canDecline], ["¿Podés hacer la colecta de hoy?", true, true]);
+// Hoy aceptada: sin botones, invita a abrirla; mañana sigue preguntando.
+card = habituales(semana().map((r) => (r.scheduled_date === HOY ? { ...r, driver_confirmation: "ACCEPTED" as const } : r)))[0];
+ps = dayPrompts(card, HOY);
+eq("hoy aceptada", [ps[0].text, ps[0].canAccept, ps[1].day, ps[1].canAccept], ["Aceptada. Abrila para comenzarla.", false, "tomorrow", true]);
+// Hoy en curso: ya no se pregunta por hoy.
+card = habituales(semana().map((r) => (r.scheduled_date === HOY ? { ...r, status: "IN_PROGRESS" as const, driver_confirmation: "ACCEPTED" as const } : r)))[0];
+eq("hoy en curso → solo mañana", dayPrompts(card, HOY).map((p) => p.day), ["tomorrow"]);
+// Sin colecta mañana: solo hoy.
+card = habituales([run(HOY)])[0];
+eq("solo hoy", dayPrompts(card, HOY).map((p) => p.day), ["today"]);
+
+// 14) Desde la colecta de mañana se encuentra la de hoy del mismo horario.
+const par = semana();
+eq("la de hoy del mismo horario", todaySibling(par[1], [par[0]], HOY)?.id, par[0].id);
+eq("estando en la de hoy → nada", todaySibling(par[0], [par[0]], HOY), null);
+eq("otro horario → nada", todaySibling(par[1], [{ ...par[0], template_departure_id: 99 }], HOY), null);
+eq("la de hoy terminada → nada", todaySibling(par[1], [{ ...par[0], status: "COMPLETED" }], HOY), null);
+eq("eventual → nada", todaySibling({ ...par[1], template_id: null }, [par[0]], HOY), null);
 
 if (failed) { console.log(`\n${failed} pruebas fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas pasaron");

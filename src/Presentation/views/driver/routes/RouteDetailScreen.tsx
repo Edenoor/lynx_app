@@ -15,7 +15,7 @@ import { KeyboardScreen } from "../../../components/KeyboardScreen";
 import { EDGES_ABOVE_BOTTOM_BAR, SafeScreen } from "../../../components/SafeScreen";
 import type { DriverStackParamList } from "../../../navigator/DriverStackNavigator";
 import {
-  completeRoute, confirmLoad, declareStopCount, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, saveStopNotes, startRoute, todayIso,
+  completeRoute, confirmLoad, declareStopCount, fetchMyRoutes, fetchPendingAtStore, fetchRoute, OPS_LABEL, PendingDelivery, recordOutcome, respondConfirmation, RouteDetail, RouteSummary, saveStopNotes, startRoute, todayIso,
   STATUS_LABEL, Stop, STOP_STATUS_LABEL, stopAction, TYPE_LABEL,
 } from "./routesApi";
 import { fetchDispatch, hhmm } from "../turbo/turboApi";
@@ -27,6 +27,7 @@ import { canStartRoute, PICKUP_ANSWER_LABEL, pickupAnswer, startsLater } from ".
 import { capitalize, COLLECTION_STATUS_LABEL, collectionComposition, collectionName, directionsUrl, executionDayLabel } from "./collectionLabels";
 import { LYNX_COLLECT_ENABLED, showCollectInLightData } from "../collectionMode";
 import DeclaredCountForm from "./DeclaredCountForm";
+import { todaySibling } from "./collectionCards";
 import RouteMapModal from "../../../components/driver/RouteMapModal";
 import SuccessFlash, { FlashMessage, takeFlash } from "../../../components/driver/SuccessFlash";
 import { declarationLabel, declarationSummary, placeStatLabel, supportsDeclaration } from "./stopDeclaration";
@@ -132,6 +133,19 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
   const toggleStop = useCallback((id: number) => setOpenStop((cur) => (cur === id ? null : id)), []);
   // La parada que devuelve la declaración se muestra ya, aunque falle la recarga.
   const replaceStop = useCallback((stop: Stop) => setRoute((r) => (r ? { ...r, stops: r.stops.map((s) => (s.id === stop.id ? stop : s)) } : r)), []);
+  // Colecta habitual de otro día (se entra por el aviso de mañana, por
+  // ejemplo): si el mismo horario tiene una ejecución de HOY sin terminar, se
+  // ofrece abrirla. El 26-nov se aceptaba la de mañana creyendo que era la de hoy.
+  const [todayRoute, setTodayRoute] = useState<RouteSummary | null>(null);
+  const routeKey = route ? `${route.id}|${route.scheduled_date}` : "";
+  useEffect(() => {
+    let alive = true;
+    setTodayRoute(null);
+    const t = todayIso();
+    if (!route || route.type !== "PICKUP" || !route.template_id || route.scheduled_date.slice(0, 10) <= t) return;
+    fetchMyRoutes(t).then((list) => { if (alive) setTodayRoute(todaySibling(route, list, t)); }).catch(() => {});
+    return () => { alive = false; };
+  }, [routeKey]);
   // Con el recorrido cargado o en curso el GPS sigue fuera del horario: si
   // estaba en pausa (antes de las 07:00, después de las 22:00) se pregunta en
   // el acto, sin esperar al sondeo ni a volver a primer plano.
@@ -297,6 +311,7 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
           ) : null}
           {answer ? (
             <ThemedCard style={[styles.panel, answer === "DECLINED" && styles.panelDanger]}>
+              <Text style={[styles.dayTag, later ? styles.dayTagLater : null]}>{later ? `${day.toUpperCase()} · todavía no se puede comenzar` : day.toUpperCase()}</Text>
               <Text style={styles.panelTitle}>Confirmación · {PICKUP_ANSWER_LABEL[answer]}</Text>
               <Text style={styles.panelText}>
                 {answer === "ACCEPTED"
@@ -305,7 +320,15 @@ export default function RouteDetailScreen({ navigation, route: nav }: Props) {
                   ? "Dijiste que no podés hacerla: el coordinador ya fue avisado. Si cambiaste de idea, aceptala."
                   : "Confirmá si podés hacer esta colecta. Sin aceptarla no se puede comenzar."}
               </Text>
-              {answer === "PENDING" && route.confirmation_state === "OVERDUE" ? <Text style={styles.warn}>Venció el plazo para confirmar.</Text> : null}
+              {answer === "PENDING" && route.confirmation_state === "OVERDUE" ? <Text style={styles.warn}>Se pasó la hora de confirmar, pero todavía podés aceptarla y comenzar.</Text> : null}
+              {later && todayRoute ? (
+                <Pressable
+                  onPress={() => navigation.replace("RouteDetailScreen", { routeId: todayRoute.id, name: collectionName(todayRoute) })}
+                  style={styles.todayLink} accessibilityRole="button" accessibilityLabel="Abrir la colecta de hoy">
+                  <Ionicons name="arrow-forward-circle" size={18} color={theme.text.accent} />
+                  <Text style={styles.todayLinkText}>Esta es la de {day}. También tenés esta colecta HOY: tocá acá para abrirla.</Text>
+                </Pressable>
+              ) : null}
               {answer !== "ACCEPTED" ? (
                 <View style={styles.row}>
                   <Pressable onPress={() => act(() => respondConfirmation(routeId, "ACCEPTED"))} disabled={busy} style={[styles.btn, busy && styles.btnDisabled]}>
@@ -854,6 +877,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   panelTitle: { color: t.text.primary, fontWeight: "700", fontSize: 15 },
   panelText: { color: t.text.secondary, fontSize: 13, lineHeight: 18 },
   warn: { color: t.status.pending.text, fontSize: 13 },
+  dayTag: { color: t.text.accent, fontWeight: "800", fontSize: 13, letterSpacing: 0.4 },
+  dayTagLater: { color: t.status.pending.text },
+  todayLink: { flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 6 },
+  todayLinkText: { color: t.text.accent, fontSize: 13, fontWeight: "600", flex: 1 },
   panelDanger: { borderWidth: 1, borderColor: t.status.rejected.border },
   row: { flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" },
   input: { flex: 1, minWidth: 120, minHeight: 44, borderRadius: t.radius.md, borderWidth: 1, borderColor: t.borders.default, backgroundColor: t.surfaces.input, color: t.text.primary, paddingHorizontal: 12 },
