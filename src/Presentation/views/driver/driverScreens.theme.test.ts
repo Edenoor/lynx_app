@@ -2953,9 +2953,11 @@ const setDriverApi = () => {
     const names = all(ct, (x) => x.type === "Text" && textOf(x) === "MAÑANERO 02").length;
     check("Colectas: un horario de lunes a domingo es UNA tarjeta (no una por fecha)", names === 2, `${names} tarjetas MAÑANERO 02`);
     check("Colectas: la tarjeta dice días, hora y tiendas", ctext.includes("Todos los días") && ctext.includes("Comienza a las 09:00") && ctext.includes("3 tiendas") && ctext.includes("Lun y Mié"));
-    check("Colectas: pregunta solo por mañana", ctext.includes("¿Confirmás tu asistencia para mañana?") && !ctext.includes("¿Podés realizarla?Lunes"));
+    check("Colectas: pregunta por mañana con el texto de siempre",ctext.includes("¿Confirmás tu asistencia para mañana?") && !ctext.includes("¿Podés realizarla?Lunes"));
     check("Colectas: la extraordinaria va aparte, con su propia tarjeta", ctext.includes("Extraordinarias") && ctext.includes("Colecta #521"));
-    check("Colectas: la de hoy se ve en la tarjeta para operarla", ctext.includes("Hoy: pendiente de confirmar"));
+    // 26-nov: la de hoy sin aceptar tiene su propio renglón, antes que el de mañana.
+    check("Colectas: la de hoy pregunta en su renglón, antes que mañana", /HOY, .*¿Podés hacer la colecta de hoy\?.*MAÑANA, .*¿Confirmás tu asistencia para mañana\?/.test(ctext), ctext.slice(0, 400));
+    check("Colectas: el ✓ de hoy es para la de hoy", byLabel(ct, "Aceptar la colecta de hoy").length === 1 && byLabel(ct, "No puedo hoy").length === 1);
     api.replies["PUT /v2/routes/502/confirmation"] = { ok: true, route: col(502, 1, { driver_confirmation: "ACCEPTED" }) };
     api.replies["GET /v2/routes/mine"] = { ok: true, routes: week("ACCEPTED") };
     byLabel(ct, "Confirmar asistencia para mañana")[0].props.onPress(); ct = await settle();
